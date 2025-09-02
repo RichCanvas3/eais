@@ -8,13 +8,23 @@ This monorepo gives you a tiny TypeScript indexer (SQLite) and a Next.js UI for 
 # 1) Set env
 cp .env.example .env
 
-# 2) Install deps
-pnpm i
+# ensure correct pnpm version (optional but recommended)
+corepack enable
+corepack prepare pnpm@9.7.0 --activate
 
-# 3) Run the indexer
+# remove potentially broken installs and caches
+rm -rf node_modules apps/*/node_modules apps/*/.next
+rm -f pnpm-lock.yaml
+
+# fresh install at the workspace root
+pnpm install
+
+
+
+
 pnpm dev:indexer
 
-# 4) Start the web app (new terminal)
+
 pnpm dev:web
 ```
 
