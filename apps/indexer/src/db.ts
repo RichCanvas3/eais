@@ -1,0 +1,55 @@
+import Database from "better-sqlite3";
+import * as fs from "fs";
+import * as path from "path";
+import { DB_PATH } from "./env";
+
+function resolveDatabaseFilePath(configuredPath: string): string {
+  return path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(process.cwd(), configuredPath);
+}
+
+const databaseFilePath = resolveDatabaseFilePath(DB_PATH);
+const databaseDirectory = path.dirname(databaseFilePath);
+if (!fs.existsSync(databaseDirectory)) {
+  fs.mkdirSync(databaseDirectory, { recursive: true });
+}
+
+export const db = new Database(databaseFilePath);
+db.pragma("journal_mode = WAL");
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS agents (
+  agentId TEXT PRIMARY KEY,
+  agent TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  metadataURI TEXT,
+  createdAtBlock INTEGER NOT NULL,
+  createdAtTime  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY,        -- txHash:logIndex
+  agentId TEXT NOT NULL,
+  type TEXT NOT NULL,
+  blockNumber INTEGER NOT NULL,
+  logIndex INTEGER NOT NULL,
+  txHash TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS checkpoints (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+`);
+
+export function getCheckpoint(): bigint {
+  const row = db.prepare("SELECT value FROM checkpoints WHERE key='lastProcessed'").get() as { value?: string } | undefined;
+  return row?.value ? BigInt(row.value) : 0n;
+}
+
+export function setCheckpoint(bn: bigint) {
+  db.prepare("INSERT INTO checkpoints(key, value) VALUES('lastProcessed', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(bn));
+}

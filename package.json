@@ -1,0 +1,13 @@
+{
+  "name": "erc8004-indexer-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:indexer": "pnpm --filter erc8004-indexer dev",
+    "dev:web": "pnpm --filter erc8004-web dev"
+  },
+  "packageManager": "pnpm@9.7.0"
+}
