@@ -2,7 +2,13 @@
 import * as React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
-import { createAgentAdapter } from '@/lib/agentAdapter';
+import { createAgentAdapter, ensureIdentityWithAA } from '@/lib/agentAdapter';
+import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, type Address } from 'viem';
+import { sepolia } from 'viem/chains';
+import { createBundlerClient } from 'viem/account-abstraction';
+import { createPimlicoClient } from 'permissionless/clients/pimlico';
+import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
+import { identityRegistryAbi } from '@/lib/abi/identityRegistry';
 
 type Props = {
   open: boolean;
@@ -20,6 +26,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const adapter = React.useMemo(() => createAgentAdapter({ registryAddress, rpcUrl }), [registryAddress, rpcUrl]);
 
   async function handleSubmit(e: React.FormEvent) {
+
+    console.log('********************* handleSubmit', e);
     e.preventDefault();
     if (!provider) { setError('Please login first'); return; }
     if (!domain.trim()) { setError('Domain is required'); return; }
@@ -39,37 +47,38 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         }
       } catch {}
 
-      const [{ createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress }, { sepolia }] = await Promise.all([
-        import('viem'),
-        import('viem/chains')
-      ]);
-
       // 1) Create Agent AA (Hybrid) similar to indiv account abstraction
       const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-      const { createBundlerClient } = await import('permissionless');
-      const { createPimlicoClient } = await import('permissionless/clients/pimlico');
-      const { toMetaMaskSmartAccount, Implementation } = await import('permissionless/accounts');
-      const { createWalletClient } = await import('viem');
 
-      // Signatory based on current EOA
-      const signatory = { walletClient: createWalletClient({ chain: sepolia, transport: custom(provider as any) }) } as any;
+      // Owner/signatory based on current EOA from Web3Auth
+      if (!address) { throw new Error('No EOA address from Web3Auth'); }
+      const owner = address as Address;
+      const signatory = { walletClient: createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: owner }) } as any;
+      // Ensure viem client has a default account for signing (toolkit calls signTypedData without passing account)
+      try { (signatory.walletClient as any).account = owner; } catch {}
       const salt: `0x${string}` = keccak256(stringToHex(domainLower)) as `0x${string}`;
+
+      console.log('********************* toMetaMaskSmartAccount: ', address, salt);
       const agentAccountClient = await toMetaMaskSmartAccount({
         client: publicClient,
         implementation: Implementation.Hybrid,
-        deployParams: [signatory!.walletClient!.account!.address, [], [], []],
-        signatory: { walletClient: signatory!.walletClient! },
+        deployParams: [owner, [], [], []],
+        signatory: signatory,
         deploySalt: salt,
-      } as any);
-      const agentAddress = await agentAccountClient.getAddress();
+      });
 
-      // Ensure Agent AA is deployed
+      const agentAddress = await agentAccountClient.getAddress();
+      console.log('********************* agentAddress', agentAddress);
+
+      // Ensure Agent AA is deployed (sponsored via Pimlico)
+      console.info("ensure agent account client is deployed");
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
-        if (!bundlerUrl) throw new Error('Missing NEXT_PUBLIC_BUNDLER_URL for deployment');
-        const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) } as any);
+        const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+        if (!BUNDLER_URL) throw new Error('Missing BUNDLER_URL for deployment');
+        const pimlicoClient = createPimlicoClient({ transport: http(BUNDLER_URL) } as any);
         const bundlerClient = createBundlerClient({
-          transport: http(bundlerUrl),
+          transport: http(BUNDLER_URL),
           paymaster: true,
           chain: sepolia,
           paymasterContext: { mode: 'SPONSORED' },
@@ -82,15 +91,24 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         });
         await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOperationHash });
       }
+      console.log('********************* deployed', deployed);
 
+      const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+
+      console.log('********************* ensureIdentityWithAA');
+      await ensureIdentityWithAA({
+        publicClient,
+        bundlerUrl: BUNDLER_URL,
+        chain: sepolia,
+        registry: registryAddress,
+        domain: domain.trim().toLowerCase(),
+        agentAccount: agentAccountClient,
+      })
+
+      /*
       // 2+3) Call IdentityRegistry.registerByDomain via AA + paymaster
       if (!bundlerUrl) throw new Error('Missing NEXT_PUBLIC_BUNDLER_URL for newAgent');
-      const bundlerClient = createBundlerClient({
-        transport: http(bundlerUrl),
-        paymaster: true,
-        chain: sepolia,
-        paymasterContext: { mode: 'SPONSORED' },
-      } as any);
+      const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), chain: sepolia } as any);
       const data = encodeFunctionData({
         abi: (await import('@/lib/abi/identityRegistry')).identityRegistryAbi as any,
         functionName: 'registerByDomain',
@@ -101,6 +119,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         calls: [{ to: registryAddress, data }],
       });
       await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOperationHash });
+      */
 
       setIsSubmitting(false);
       onClose();
