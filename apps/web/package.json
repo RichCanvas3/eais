@@ -19,7 +19,8 @@
     "viem": "^2.21.16",
     "@web3auth/modal": "^9.4.2",
     "@web3auth/base": "^9.4.2",
-    "@web3auth/ethereum-provider": "^9.4.2"
+    "@web3auth/ethereum-provider": "^9.4.2",
+    "permissionless": "^0.2.4"
   },
   "devDependencies": {
     "@types/react": "19.1.12",
