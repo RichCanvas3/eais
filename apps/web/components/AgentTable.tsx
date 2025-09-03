@@ -2,9 +2,10 @@
 import * as React from 'react';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
-import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex } from 'viem';
+import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
+import { toMetaMaskSmartAccount, Implementation, createDelegation } from '@metamask/delegation-toolkit';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
@@ -37,6 +38,9 @@ export function AgentTable() {
 	const [cardLoading, setCardLoading] = React.useState(false);
 	const [cardFields, setCardFields] = React.useState<Record<string, any>>({});
 	const saveTimeoutRef = React.useRef<number | undefined>(undefined);
+
+	const [sessionOpen, setSessionOpen] = React.useState(false);
+	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
 
 	function scheduleAutoSave() {
 		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -314,6 +318,89 @@ export function AgentTable() {
 		}
 	}
 
+	async function openSessionFor(row: Agent) {
+		try {
+			if (!provider || !eoa) throw new Error('Not connected');
+			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+
+			// Build AA address derived from domain same as ownership check
+			const deploySalt = BigInt(keccak256(stringToHex(row.agentDomain.trim().toLowerCase())));
+			const smartAccount = await toMetaMaskSmartAccount({
+				client: publicClient,
+				implementation: Implementation.Hybrid,
+				deployParams: [eoa as `0x${string}`, [], [], []],
+				signatory: { walletClient },
+				deploySalt: toHex(deploySalt) as `0x${string}`,
+			} as any);
+			const aa = await smartAccount.getAddress() as `0x${string}`;
+			const entryPoint = (await (smartAccount as any).getEntryPointAddress?.()) as `0x${string}` || '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
+			const chainId = 11155111; // sepolia
+
+			// Session key
+			const pk = generatePrivateKey() as `0x${string}`;
+			const skAddr = privateKeyToAccount(pk).address as `0x${string}`;
+			const now = Math.floor(Date.now()/1000);
+			const validAfter = now - 60;
+			const validUntil = now + 60*30;
+
+			const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+			const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
+			const reputationRegistry = (process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`) || '0x0000000000000000000000000000000000000000';
+
+			// Optional DTK delegation
+			let signedDelegation: { message: any; signature: `0x${string}` } | undefined;
+			const PERMISSIONS_ADDR = process.env.NEXT_PUBLIC_DTK_PERMISSIONS_ADDR as `0x${string}` | undefined;
+			try {
+				// Preferred DTK flow: AA signs delegation without caveats
+				const del = await (createDelegation as any)({ from: aa as `0x${string}`, to: skAddr as `0x${string}`, caveats: [] });
+				let signature: `0x${string}`;
+				if ((smartAccount as any).signDelegation) {
+					signature = await (smartAccount as any).signDelegation({ delegation: del }) as `0x${string}`;
+				} else if ((walletClient as any).signDelegation) {
+					signature = await (walletClient as any).signDelegation({ delegation: del }) as `0x${string}`;
+				} else {
+					throw new Error('signDelegation helper not available');
+				}
+				signedDelegation = { message: del, signature };
+			} catch (_dtkErr) {
+				// Optional fallback to manual EIP-712 if permissions address is available
+				if (PERMISSIONS_ADDR) {
+					const saltBytes = new Uint8Array(32);
+					(window.crypto || (globalThis as any).crypto).getRandomValues(saltBytes);
+					const delegation = {
+						delegate: skAddr,
+						authority: '0x',
+						caveats: [],
+						salt: toHex(saltBytes) as `0x${string}`,
+					};
+					const domain = { name: 'DelegationFramework', version: '1', chainId, verifyingContract: PERMISSIONS_ADDR } as const;
+					const types = { Delegation: [ { name: 'delegate', type: 'address' }, { name: 'authority', type: 'bytes32' }, { name: 'caveats', type: 'Caveat[]' }, { name: 'salt', type: 'bytes32' } ], Caveat: [ { name: 'enforcer', type: 'address' }, { name: 'terms', type: 'bytes' } ], } as const;
+					const signature = await walletClient.signTypedData({ account: eoa as `0x${string}`, domain: domain as any, types: types as any, primaryType: 'Delegation', message: delegation as any });
+					signedDelegation = { message: delegation, signature: signature as `0x${string}` };
+				}
+			}
+
+			const session = {
+				chainId,
+				aa,
+				reputationRegistry,
+				selector: '0x8524d988',
+				sessionKey: { privateKey: pk, address: skAddr, validAfter, validUntil },
+				entryPoint,
+				bundlerUrl,
+				paymasterUrl,
+				signedDelegation,
+			} as any;
+
+			setSessionJson(JSON.stringify(session, null, 2));
+			setSessionOpen(true);
+		} catch (e: any) {
+			setCardError(e?.message ?? 'Failed to build session');
+		}
+	}
+
 	return (
 		<Stack spacing={3}>
 			<Paper variant="outlined" sx={{ p: 2.5 }}>
@@ -374,7 +461,10 @@ export function AgentTable() {
 										<Typography component="span" variant="body2" sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }} noWrap title={row.agentAddress}>{row.agentAddress}</Typography>
 										<Button size="small" onClick={() => copy(row.agentAddress)}>Copy</Button>
 										{owned[row.agentId] && (
-											<Button size="small" onClick={() => viewOrCreateCard(row)}>Card</Button>
+											<>
+												<Button size="small" onClick={() => viewOrCreateCard(row)}>Card</Button>
+												<Button size="small" onClick={() => openSessionFor(row)}>Session</Button>
+											</>
 										)}
 									</Stack>
 								</TableCell>
@@ -493,6 +583,24 @@ export function AgentTable() {
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={() => { if (cardJson && cardDomain) setStoredCard(cardDomain, cardJson); setCardOpen(false); }}>Close</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Session dialog */}
+			<Dialog open={sessionOpen} onClose={() => setSessionOpen(false)} fullWidth maxWidth="sm">
+				<DialogTitle>Session Package</DialogTitle>
+				<DialogContent dividers>
+					<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+						<IconButton size="small" aria-label="Copy" onClick={() => { if (sessionJson) { navigator.clipboard.writeText(sessionJson).catch(() => {}); } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
+							<ContentCopyIcon fontSize="inherit" />
+						</IconButton>
+						<Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>
+							{sessionJson}
+						</Box>
+					</Box>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setSessionOpen(false)}>Close</Button>
 				</DialogActions>
 			</Dialog>
 
