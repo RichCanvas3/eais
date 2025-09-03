@@ -1,11 +1,12 @@
 'use client';
 import * as React from 'react';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex } from 'viem';
 import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import { buildAgentCard } from '@/lib/agentCard';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 export type Agent = {
 	agentId: string;
@@ -33,6 +34,93 @@ export function AgentTable() {
 	const [cardError, setCardError] = React.useState<string | null>(null);
 	const [cardLoading, setCardLoading] = React.useState(false);
 	const [cardFields, setCardFields] = React.useState<Record<string, any>>({});
+	const saveTimeoutRef = React.useRef<number | undefined>(undefined);
+
+	function scheduleAutoSave() {
+		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+		saveTimeoutRef.current = window.setTimeout(() => { autoSave(); }, 600) as any;
+	}
+
+	function buildMerged(base: any) {
+		const obj = base || {};
+		const merged = {
+			...obj,
+			name: cardFields.name || obj.name,
+			description: cardFields.description || obj.description,
+			homepage: cardFields.homepage || obj.homepage,
+			url: cardFields.url || obj.url,
+			version: cardFields.version || obj.version,
+			preferredTransport: cardFields.preferredTransport || obj.preferredTransport,
+			protocolVersion: cardFields.protocolVersion || obj.protocolVersion,
+			trustModels: Array.isArray(cardFields.trustModels)
+				? cardFields.trustModels
+				: String(cardFields.trustModels || '')
+					.split(',')
+					.map((x: string) => x.trim())
+					.filter(Boolean),
+			capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
+			defaultInputModes: String(cardFields.defaultInputModes || '')
+				.split(',')
+				.map((x: string) => x.trim())
+				.filter(Boolean),
+			defaultOutputModes: String(cardFields.defaultOutputModes || '')
+				.split(',')
+				.map((x: string) => x.trim())
+				.filter(Boolean),
+			skills: [
+				{
+					id: cardFields.skillId || undefined,
+					name: cardFields.skillName || undefined,
+					description: cardFields.skillDesc || undefined,
+					tags: String(cardFields.skillTags || '')
+						.split(',')
+						.map((x: string) => x.trim())
+						.filter(Boolean),
+					examples: String(cardFields.skillExamples || '')
+						.split(/\n|,/)
+						.map((x: string) => x.trim())
+						.filter(Boolean),
+				},
+			],
+		};
+		if (obj?.registrations?.[0]?.signature) {
+			merged.registrations[0].signature = shortenSignature(obj.registrations[0].signature);
+		}
+		return merged;
+	}
+
+	async function autoSave() {
+		if (!cardDomain) return;
+		try {
+			const base = cardJson ? JSON.parse(cardJson) : {};
+			const merged = {
+				...base,
+				name: cardFields.name || base.name,
+				description: cardFields.description || base.description,
+				homepage: cardFields.homepage || base.homepage,
+				url: cardFields.url || base.url,
+				version: cardFields.version || base.version,
+				preferredTransport: cardFields.preferredTransport || base.preferredTransport,
+				protocolVersion: cardFields.protocolVersion || base.protocolVersion,
+				trustModels: Array.isArray(cardFields.trustModels) ? cardFields.trustModels : String(cardFields.trustModels || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+				capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
+				defaultInputModes: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+				defaultOutputModes: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+				skills: [{ id: cardFields.skillId || undefined, name: cardFields.skillName || undefined, description: cardFields.skillDesc || undefined, tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean), examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean) }],
+			};
+			await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: cardDomain, card: merged }) });
+			const json = JSON.stringify(merged, null, 2);
+			setStoredCard(cardDomain, json);
+			setCardJson(json);
+		} catch (e: any) {
+			setCardError(e?.message ?? 'Save failed');
+		}
+	}
+
+	function handleFieldChange(key: string, value: any) {
+		setCardFields((f) => ({ ...f, [key]: value }));
+		scheduleAutoSave();
+	}
 
 	function populateFieldsFromObj(obj: any) {
 		const skills = Array.isArray(obj?.skills) ? obj.skills : [];
@@ -181,6 +269,12 @@ export function AgentTable() {
 			setStoredCard(domain, json);
 			setCardJson(json);
 			populateFieldsFromObj(cardObj);
+			// Persist immediately on first creation
+			try {
+				await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, card: cardObj }) });
+			} catch (e: any) {
+				setCardError(e?.message ?? 'Save failed');
+			}
 			setCardOpen(true);
 		} catch (err: any) {
 			setCardError(err?.message ?? 'Failed to build agent card');
@@ -299,90 +393,107 @@ export function AgentTable() {
 			<Dialog open={cardOpen} onClose={() => setCardOpen(false)} fullWidth maxWidth="md">
 				<DialogTitle>Agent Card {cardDomain ? `— ${cardDomain}` : ''}</DialogTitle>
 				<DialogContent dividers>
-					<Stack spacing={1} sx={{ mb: 2 }}>
-						<TextField label="name" size="small" value={cardFields.name ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, name: e.target.value }))} />
-						<TextField label="description" size="small" value={cardFields.description ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, description: e.target.value }))} />
-						<TextField label="homepage" size="small" value={cardFields.homepage ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, homepage: e.target.value }))} />
-						<TextField label="url" size="small" value={cardFields.url ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, url: e.target.value }))} />
-						<TextField label="version" size="small" value={cardFields.version ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, version: e.target.value }))} />
-						<TextField label="preferredTransport" size="small" value={cardFields.preferredTransport ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, preferredTransport: e.target.value }))} />
-						<TextField label="protocolVersion" size="small" value={cardFields.protocolVersion ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, protocolVersion: e.target.value }))} />
-						<TextField label="defaultInputModes (comma)" size="small" value={cardFields.defaultInputModes ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, defaultInputModes: e.target.value }))} />
-						<TextField label="defaultOutputModes (comma)" size="small" value={cardFields.defaultOutputModes ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, defaultOutputModes: e.target.value }))} />
-						<TextField label="trustModels (comma-separated)" size="small" value={Array.isArray(cardFields.trustModels) ? cardFields.trustModels.join(', ') : (cardFields.trustModels ?? '')} onChange={(e) => setCardFields((f) => ({ ...f, trustModels: e.target.value }))} />
-						<TextField label="skillId" size="small" value={cardFields.skillId ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, skillId: e.target.value }))} />
-						<TextField label="skillName" size="small" value={cardFields.skillName ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, skillName: e.target.value }))} />
-						<TextField label="skillDescription" size="small" value={cardFields.skillDesc ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, skillDesc: e.target.value }))} />
-						<TextField label="skillTags (comma-separated)" size="small" value={cardFields.skillTags ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, skillTags: e.target.value }))} />
-						<TextField label="skillExamples (comma or newline)" size="small" multiline minRows={2} value={cardFields.skillExamples ?? ''} onChange={(e) => setCardFields((f) => ({ ...f, skillExamples: e.target.value }))} />
-					</Stack>
-					{cardLoading && <Typography variant="body2">Building…</Typography>}
-					{cardError && <Typography variant="body2" color="error">{cardError}</Typography>}
-					{cardJson && (() => {
-						try {
-							const obj = JSON.parse(cardJson);
-							// Merge editable fields
-							const merged = {
-								...obj,
-								name: cardFields.name || obj.name,
-								description: cardFields.description || obj.description,
-								homepage: cardFields.homepage || obj.homepage,
-								url: cardFields.url || obj.url,
-								version: cardFields.version || obj.version,
-								preferredTransport: cardFields.preferredTransport || obj.preferredTransport,
-								protocolVersion: cardFields.protocolVersion || obj.protocolVersion,
-								trustModels: Array.isArray(cardFields.trustModels)
-									? cardFields.trustModels
-									: String(cardFields.trustModels || '')
-										.split(',')
-										.map((x: string) => x.trim())
-										.filter(Boolean),
-								capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
-								defaultInputModes: String(cardFields.defaultInputModes || '')
-									.split(',')
-									.map((x: string) => x.trim())
-									.filter(Boolean),
-								defaultOutputModes: String(cardFields.defaultOutputModes || '')
-									.split(',')
-									.map((x: string) => x.trim())
-									.filter(Boolean),
-								skills: [
-									{
-										id: cardFields.skillId || undefined,
-										name: cardFields.skillName || undefined,
-										description: cardFields.skillDesc || undefined,
-										tags: String(cardFields.skillTags || '')
-											.split(',')
-											.map((x: string) => x.trim())
-											.filter(Boolean),
-										examples: String(cardFields.skillExamples || '')
-											.split(/\n|,/)
-											.map((x: string) => x.trim())
-											.filter(Boolean),
-									},
-								],
-							};
-							if (obj?.registrations?.[0]?.signature) {
-								merged.registrations[0].signature = shortenSignature(obj.registrations[0].signature);
-							}
-							const shortJson = JSON.stringify(merged, null, 2);
-							return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace' }}>{shortJson}</Box>;
-						} catch {
-							return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace' }}>{cardJson}</Box>;
-						}
-					})()}
+					<Grid container spacing={2}>
+						<Grid item xs={12} md={6}>
+							<Stack spacing={1} sx={{ mb: 2 }}>
+								<TextField label="name" size="small" value={cardFields.name ?? ''} onChange={(e) => handleFieldChange('name', e.target.value)} />
+								<TextField label="description" size="small" value={cardFields.description ?? ''} onChange={(e) => handleFieldChange('description', e.target.value)} />
+								<TextField label="homepage" size="small" value={cardFields.homepage ?? ''} onChange={(e) => handleFieldChange('homepage', e.target.value)} />
+								<TextField label="url" size="small" value={cardFields.url ?? ''} onChange={(e) => handleFieldChange('url', e.target.value)} />
+								<TextField label="version" size="small" value={cardFields.version ?? ''} onChange={(e) => handleFieldChange('version', e.target.value)} />
+								<TextField label="preferredTransport" size="small" value={cardFields.preferredTransport ?? ''} onChange={(e) => handleFieldChange('preferredTransport', e.target.value)} />
+								<TextField label="protocolVersion" size="small" value={cardFields.protocolVersion ?? ''} onChange={(e) => handleFieldChange('protocolVersion', e.target.value)} />
+								<TextField label="defaultInputModes (comma)" size="small" value={cardFields.defaultInputModes ?? ''} onChange={(e) => handleFieldChange('defaultInputModes', e.target.value)} />
+								<TextField label="defaultOutputModes (comma)" size="small" value={cardFields.defaultOutputModes ?? ''} onChange={(e) => handleFieldChange('defaultOutputModes', e.target.value)} />
+								<TextField label="trustModels (comma-separated)" size="small" value={Array.isArray(cardFields.trustModels) ? cardFields.trustModels.join(', ') : (cardFields.trustModels ?? '')} onChange={(e) => handleFieldChange('trustModels', e.target.value)} />
+								<TextField label="skillId" size="small" value={cardFields.skillId ?? ''} onChange={(e) => handleFieldChange('skillId', e.target.value)} />
+								<TextField label="skillName" size="small" value={cardFields.skillName ?? ''} onChange={(e) => handleFieldChange('skillName', e.target.value)} />
+								<TextField label="skillDescription" size="small" value={cardFields.skillDesc ?? ''} onChange={(e) => handleFieldChange('skillDesc', e.target.value)} />
+								<TextField label="skillTags (comma-separated)" size="small" value={cardFields.skillTags ?? ''} onChange={(e) => handleFieldChange('skillTags', e.target.value)} />
+								<TextField label="skillExamples (comma or newline)" size="small" multiline minRows={2} value={cardFields.skillExamples ?? ''} onChange={(e) => handleFieldChange('skillExamples', e.target.value)} />
+							</Stack>
+							{cardLoading && <Typography variant="body2">Building…</Typography>}
+							{cardError && <Typography variant="body2" color="error">{cardError}</Typography>}
+						</Grid>
+						<Grid item xs={12} md={6}>
+							<Box sx={{ maxHeight: 480, overflow: 'auto' }}>
+								<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+									<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const base = cardJson ? JSON.parse(cardJson) : {}; const merged = { ...base,
+										name: cardFields.name || base.name,
+										description: cardFields.description || base.description,
+										homepage: cardFields.homepage || base.homepage,
+										url: cardFields.url || base.url,
+										version: cardFields.version || base.version,
+										preferredTransport: cardFields.preferredTransport || base.preferredTransport,
+										protocolVersion: cardFields.protocolVersion || base.protocolVersion,
+										trustModels: Array.isArray(cardFields.trustModels) ? cardFields.trustModels : String(cardFields.trustModels || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+										capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
+										defaultInputModes: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+										defaultOutputModes: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+										skills: [{ id: cardFields.skillId || undefined, name: cardFields.skillName || undefined, description: cardFields.skillDesc || undefined, tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean), examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean) }]
+									}; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => {});} catch { navigator.clipboard.writeText(cardJson || '').catch(() => {}); } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
+										<ContentCopyIcon fontSize="inherit" />
+									</IconButton>
+									{cardJson && (() => {
+										try {
+											const obj = JSON.parse(cardJson);
+											// Merge editable fields
+											const merged = {
+												...obj,
+												name: cardFields.name || obj.name,
+												description: cardFields.description || obj.description,
+												homepage: cardFields.homepage || obj.homepage,
+												url: cardFields.url || obj.url,
+												version: cardFields.version || obj.version,
+												preferredTransport: cardFields.preferredTransport || obj.preferredTransport,
+												protocolVersion: cardFields.protocolVersion || obj.protocolVersion,
+												trustModels: Array.isArray(cardFields.trustModels)
+													? cardFields.trustModels
+													: String(cardFields.trustModels || '')
+														.split(',')
+														.map((x: string) => x.trim())
+														.filter(Boolean),
+												capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
+												defaultInputModes: String(cardFields.defaultInputModes || '')
+													.split(',')
+													.map((x: string) => x.trim())
+													.filter(Boolean),
+												defaultOutputModes: String(cardFields.defaultOutputModes || '')
+													.split(',')
+													.map((x: string) => x.trim())
+													.filter(Boolean),
+												skills: [
+													{
+														id: cardFields.skillId || undefined,
+														name: cardFields.skillName || undefined,
+														description: cardFields.skillDesc || undefined,
+														tags: String(cardFields.skillTags || '')
+															.split(',')
+															.map((x: string) => x.trim())
+															.filter(Boolean),
+														examples: String(cardFields.skillExamples || '')
+															.split(/\n|,/)
+															.map((x: string) => x.trim())
+															.filter(Boolean),
+													},
+												],
+											};
+											if (obj?.registrations?.[0]?.signature) {
+												merged.registrations[0].signature = shortenSignature(obj.registrations[0].signature);
+											}
+											const shortJson = JSON.stringify(merged, null, 2);
+											return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>{shortJson}</Box>;
+										} catch {
+											return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>{cardJson}</Box>;
+										}
+									})()}
+								</Box>
+							</Box>
+						</Grid>
+					</Grid>
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={() => { if (cardJson && cardDomain) setStoredCard(cardDomain, cardJson); setCardOpen(false); }}>Close</Button>
-					<Button onClick={() => saveCard()} disabled={cardLoading}>Save</Button>
-					<Button onClick={() => { if (cardJson) { navigator.clipboard.writeText(cardJson).catch(() => {}); } }}>Copy</Button>
-					{cardDomain && (
-						<Button onClick={() => {
-							if (!cardDomain) return;
-							const row = data?.rows?.find((r) => r.agentDomain.trim().toLowerCase() === cardDomain);
-							if (row) regenerateCard(row);
-						}} disabled={cardLoading}>Regenerate</Button>
-					)}
 				</DialogActions>
 			</Dialog>
 
