@@ -1,12 +1,14 @@
 'use client';
 import * as React from 'react';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex } from 'viem';
 import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 export type Agent = {
 	agentId: string;
@@ -49,19 +51,23 @@ export function AgentTable() {
 		const version = cardFields.version || obj.version;
 		const preferredTransport = cardFields.preferredTransport || obj.preferredTransport;
 		const protocolVersion = cardFields.protocolVersion || obj.protocolVersion;
-		const skill = {
-			description: cardFields.skillDesc || obj?.skills?.[0]?.description,
-			examples: String(cardFields.skillExamples || '')
-				.split(/\n|,/)
-				.map((x: string) => x.trim())
-				.filter(Boolean),
-			id: cardFields.skillId || obj?.skills?.[0]?.id,
-			name: cardFields.skillName || obj?.skills?.[0]?.name,
-			tags: String(cardFields.skillTags || '')
-				.split(',')
-				.map((x: string) => x.trim())
-				.filter(Boolean),
-		};
+		const skills: any[] = Array.isArray(cardFields.skills) ? cardFields.skills.map((s: any) => ({
+			id: s?.id || undefined,
+			name: s?.name || undefined,
+			description: s?.description || undefined,
+			tags: Array.isArray(s?.tags) ? s.tags.filter(Boolean) : [],
+			examples: Array.isArray(s?.examples) ? s.examples.filter(Boolean) : [],
+		})) : (() => {
+			// fallback to legacy single-skill fields
+			const fallback = {
+				id: cardFields.skillId || obj?.skills?.[0]?.id,
+				name: cardFields.skillName || obj?.skills?.[0]?.name,
+				description: cardFields.skillDesc || obj?.skills?.[0]?.description,
+				tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+				examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean),
+			};
+			return [fallback];
+		})();
 		const trustModels = Array.isArray(cardFields.trustModels)
 			? cardFields.trustModels
 			: String(cardFields.trustModels || '')
@@ -69,14 +75,12 @@ export function AgentTable() {
 				.map((x: string) => x.trim())
 				.filter(Boolean);
 		const capabilities = { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream };
-		const defaultInputModes = String(cardFields.defaultInputModes || '')
-			.split(',')
-			.map((x: string) => x.trim())
-			.filter(Boolean);
-		const defaultOutputModes = String(cardFields.defaultOutputModes || '')
-			.split(',')
-			.map((x: string) => x.trim())
-			.filter(Boolean);
+		const defaultInputModes = Array.isArray(cardFields.defaultInputModes)
+			? cardFields.defaultInputModes.filter(Boolean)
+			: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean);
+		const defaultOutputModes = Array.isArray(cardFields.defaultOutputModes)
+			? cardFields.defaultOutputModes.filter(Boolean)
+			: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean);
 		const ordered: any = {};
 		// Exact requested order
 		ordered.name = name;
@@ -85,7 +89,7 @@ export function AgentTable() {
 		ordered.version = version;
 		ordered.preferredTransport = preferredTransport;
 		ordered.protocolVersion = protocolVersion;
-		ordered.skills = [skill];
+		ordered.skills = skills;
 		if (obj?.registrations) {
 			const regs = Array.isArray(obj.registrations) ? obj.registrations : [];
 			ordered.registrations = regs.map((r: any) => ({
@@ -121,11 +125,9 @@ export function AgentTable() {
 
 	function populateFieldsFromObj(obj: any) {
 		const skills = Array.isArray(obj?.skills) ? obj.skills : [];
-		const firstSkill = skills[0] || {};
 		setCardFields({
 			name: obj?.name ?? '',
 			description: obj?.description ?? '',
-			homepage: obj?.homepage ?? '',
 			url: obj?.url ?? '',
 			version: obj?.version ?? '',
 			preferredTransport: obj?.preferredTransport ?? '',
@@ -133,13 +135,15 @@ export function AgentTable() {
 			trustModels: Array.isArray(obj?.trustModels) ? obj.trustModels : [],
 			capPush: !!obj?.capabilities?.pushNotifications,
 			capStream: !!obj?.capabilities?.streaming,
-			defaultInputModes: Array.isArray(obj?.defaultInputModes) ? obj.defaultInputModes.join(', ') : (obj?.defaultInputModes ?? ''),
-			defaultOutputModes: Array.isArray(obj?.defaultOutputModes) ? obj.defaultOutputModes.join(', ') : (obj?.defaultOutputModes ?? ''),
-			skillId: firstSkill?.id ?? '',
-			skillName: firstSkill?.name ?? '',
-			skillDesc: firstSkill?.description ?? '',
-			skillTags: Array.isArray(firstSkill?.tags) ? firstSkill.tags.join(', ') : (firstSkill?.tags ?? ''),
-			skillExamples: Array.isArray(firstSkill?.examples) ? firstSkill.examples.join('\n') : (firstSkill?.examples ?? ''),
+			defaultInputModes: Array.isArray(obj?.defaultInputModes) ? obj.defaultInputModes : [],
+			defaultOutputModes: Array.isArray(obj?.defaultOutputModes) ? obj.defaultOutputModes : [],
+			skills: skills.map((s: any) => ({
+				id: s?.id ?? '',
+				name: s?.name ?? '',
+				description: s?.description ?? '',
+				tags: Array.isArray(s?.tags) ? s.tags : (typeof s?.tags === 'string' ? [s.tags] : []),
+				examples: Array.isArray(s?.examples) ? s.examples : (typeof s?.examples === 'string' ? [s.examples] : []),
+			})),
 		});
 	}
 
@@ -399,14 +403,50 @@ export function AgentTable() {
 								<TextField label="version" size="small" value={cardFields.version ?? ''} onChange={(e) => handleFieldChange('version', e.target.value)} />
 								<TextField label="preferredTransport" size="small" value={cardFields.preferredTransport ?? ''} onChange={(e) => handleFieldChange('preferredTransport', e.target.value)} />
 								<TextField label="protocolVersion" size="small" value={cardFields.protocolVersion ?? ''} onChange={(e) => handleFieldChange('protocolVersion', e.target.value)} />
-								<TextField label="skillDescription" size="small" value={cardFields.skillDesc ?? ''} onChange={(e) => handleFieldChange('skillDesc', e.target.value)} />
-								<TextField label="skillExamples (comma or newline)" size="small" multiline minRows={2} value={cardFields.skillExamples ?? ''} onChange={(e) => handleFieldChange('skillExamples', e.target.value)} />
-								<TextField label="skillId" size="small" value={cardFields.skillId ?? ''} onChange={(e) => handleFieldChange('skillId', e.target.value)} />
-								<TextField label="skillName" size="small" value={cardFields.skillName ?? ''} onChange={(e) => handleFieldChange('skillName', e.target.value)} />
-								<TextField label="skillTags (comma-separated)" size="small" value={cardFields.skillTags ?? ''} onChange={(e) => handleFieldChange('skillTags', e.target.value)} />
-								<TextField label="trustModels (comma-separated)" size="small" value={Array.isArray(cardFields.trustModels) ? cardFields.trustModels.join(', ') : (cardFields.trustModels ?? '')} onChange={(e) => handleFieldChange('trustModels', e.target.value)} />
-								<TextField label="defaultInputModes (comma)" size="small" value={cardFields.defaultInputModes ?? ''} onChange={(e) => handleFieldChange('defaultInputModes', e.target.value)} />
-								<TextField label="defaultOutputModes (comma)" size="small" value={cardFields.defaultOutputModes ?? ''} onChange={(e) => handleFieldChange('defaultOutputModes', e.target.value)} />
+
+								<Divider sx={{ my: 1 }} />
+								<Stack direction="row" alignItems="center" justifyContent="space-between">
+									<Typography variant="subtitle2">Skills</Typography>
+									<IconButton size="small" onClick={() => handleFieldChange('skills', [ ...(cardFields.skills || []), { id: '', name: '', description: '', tags: [], examples: [] } ])}><AddIcon fontSize="inherit" /></IconButton>
+								</Stack>
+								<Stack spacing={1}>
+									{(cardFields.skills || []).map((s: any, idx: number) => (
+										<Box key={idx} sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}>
+											<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+												<Typography variant="caption">Skill #{idx + 1}</Typography>
+												<IconButton size="small" onClick={() => {
+													const next = [...(cardFields.skills || [])];
+													next.splice(idx, 1);
+													handleFieldChange('skills', next);
+												}}><DeleteIcon fontSize="inherit" /></IconButton>
+											</Stack>
+											<Grid container spacing={1}>
+												<Grid item xs={12} sm={6}><TextField fullWidth size="small" label="id" value={s.id} onChange={(e) => {
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], id: e.target.value }; handleFieldChange('skills', next);
+												}} /></Grid>
+												<Grid item xs={12} sm={6}><TextField fullWidth size="small" label="name" value={s.name} onChange={(e) => {
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], name: e.target.value }; handleFieldChange('skills', next);
+												}} /></Grid>
+												<Grid item xs={12}><TextField fullWidth size="small" label="description" value={s.description} onChange={(e) => {
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], description: e.target.value }; handleFieldChange('skills', next);
+												}} /></Grid>
+												<Grid item xs={12}><TextField fullWidth size="small" label="examples (one per line)" multiline minRows={2} value={(s.examples || []).join('\n')} onChange={(e) => {
+													const lines = e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean);
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], examples: lines }; handleFieldChange('skills', next);
+												}} /></Grid>
+												<Grid item xs={12}><TextField fullWidth size="small" label="tags (one per line)" multiline minRows={2} value={(s.tags || []).join('\n')} onChange={(e) => {
+													const lines = e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean);
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], tags: lines }; handleFieldChange('skills', next);
+												}} /></Grid>
+											</Grid>
+										</Box>
+									))}
+								</Stack>
+
+								<Divider sx={{ my: 1 }} />
+								<TextField label="trustModels (one per line)" size="small" multiline minRows={2} value={Array.isArray(cardFields.trustModels) ? cardFields.trustModels.join('\n') : ''} onChange={(e) => handleFieldChange('trustModels', e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean))} />
+								<TextField label="defaultInputModes (one per line)" size="small" multiline minRows={2} value={Array.isArray(cardFields.defaultInputModes) ? cardFields.defaultInputModes.join('\n') : ''} onChange={(e) => handleFieldChange('defaultInputModes', e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean))} />
+								<TextField label="defaultOutputModes (one per line)" size="small" multiline minRows={2} value={Array.isArray(cardFields.defaultOutputModes) ? cardFields.defaultOutputModes.join('\n') : ''} onChange={(e) => handleFieldChange('defaultOutputModes', e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean))} />
 							</Stack>
 							{cardLoading && <Typography variant="body2">Building…</Typography>}
 							{cardError && <Typography variant="body2" color="error">{cardError}</Typography>}

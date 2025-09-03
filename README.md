@@ -1,6 +1,6 @@
-# ERC‑8004 Identity Registry — Indexer + Web (React/TS)
+# Ethereum Agent Identity Service (EAIS)
 
-This monorepo gives you a tiny TypeScript indexer (SQLite) and a Next.js UI for your existing IdentityRegistry.
+
 
 ## Quick start
 
