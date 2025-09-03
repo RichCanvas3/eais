@@ -1,4 +1,4 @@
-# Ethereum Agent Identity Service (EAIS)
+# EAIS,  Agent Identity Service for Ethereum Blockchain (EAIS)
 
 
 
