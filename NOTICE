@@ -1,0 +1,12 @@
+This project implements parts of the ERC-8004 “Trustless Agents” specification.
+
+Specification: https://eips.ethereum.org/EIPS/eip-8004
+Status: Draft (Standards Track: ERC)
+Copyright:
+  The ERC-8004 text is made available under CC0 1.0 Universal (public domain).
+  No endorsement by the Ethereum Foundation, EIP editors, or authors is implied.
+
+Suggested citation (from the EIP page):
+  Marco De Rossi, Davide Crapis, Jordan Ellis, “ERC-8004: Trustless Agents [DRAFT],”
+  Ethereum Improvement Proposals, no. 8004, August 2025. Available:
+  https://eips.ethereum.org/EIPS/eip-8004

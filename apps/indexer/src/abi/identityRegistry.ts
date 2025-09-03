@@ -1,6 +1,12 @@
+// SPDX-License-Identifier: MIT
+// Portions derived from ChaosChain/trustless-agents-erc-ri (commit <SHA>).
+// Upstream: https://github.com/ChaosChain/trustless-agents-erc-ri
+
 import type { Abi } from "viem";
 
 // ✅ ABI from your deployed IdentityRegistry (uint256 agentId, string agentDomain, address agentAddress)
+
+
 export const identityRegistryAbi = [
   {
     type: "event",
