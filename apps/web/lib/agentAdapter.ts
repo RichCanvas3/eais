@@ -204,6 +204,27 @@ export async function getAgentByDomain(params: {
   return null;
 }
 
+export async function getAgentInfoByDomain(params: {
+  publicClient: PublicClient,
+  registry: `0x${string}`,
+  domain: string,
+}): Promise<{ agentId: bigint; agentAddress: `0x${string}` } | null> {
+  const { publicClient, registry } = params;
+  const domain = params.domain.trim().toLowerCase();
+  try {
+    const info: any = await publicClient.readContract({
+      address: registry,
+      abi: identityRegistrationAbi as any,
+      functionName: 'resolveByDomain' as any,
+      args: [domain],
+    });
+    const agentId = BigInt(info?.agentId ?? info?.[0] ?? 0);
+    const agentAddress = (info?.agentAddress ?? info?.[2]) as `0x${string}` | undefined;
+    if (agentId > 0n && agentAddress) return { agentId, agentAddress };
+  } catch {}
+  return null;
+}
+
 export async function deploySmartAccountIfNeeded(params: {
   bundlerUrl: string,
   chain: Chain,
