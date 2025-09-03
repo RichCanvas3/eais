@@ -43,71 +43,68 @@ export function AgentTable() {
 
 	function buildMerged(base: any) {
 		const obj = base || {};
-		const merged = {
-			...obj,
-			name: cardFields.name || obj.name,
-			description: cardFields.description || obj.description,
-			homepage: cardFields.homepage || obj.homepage,
-			url: cardFields.url || obj.url,
-			version: cardFields.version || obj.version,
-			preferredTransport: cardFields.preferredTransport || obj.preferredTransport,
-			protocolVersion: cardFields.protocolVersion || obj.protocolVersion,
-			trustModels: Array.isArray(cardFields.trustModels)
-				? cardFields.trustModels
-				: String(cardFields.trustModels || '')
-					.split(',')
-					.map((x: string) => x.trim())
-					.filter(Boolean),
-			capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
-			defaultInputModes: String(cardFields.defaultInputModes || '')
+		const name = cardFields.name || obj.name;
+		const description = cardFields.description || obj.description;
+		const url = cardFields.url || obj.url;
+		const version = cardFields.version || obj.version;
+		const preferredTransport = cardFields.preferredTransport || obj.preferredTransport;
+		const protocolVersion = cardFields.protocolVersion || obj.protocolVersion;
+		const skill = {
+			description: cardFields.skillDesc || obj?.skills?.[0]?.description,
+			examples: String(cardFields.skillExamples || '')
+				.split(/\n|,/)
+				.map((x: string) => x.trim())
+				.filter(Boolean),
+			id: cardFields.skillId || obj?.skills?.[0]?.id,
+			name: cardFields.skillName || obj?.skills?.[0]?.name,
+			tags: String(cardFields.skillTags || '')
 				.split(',')
 				.map((x: string) => x.trim())
 				.filter(Boolean),
-			defaultOutputModes: String(cardFields.defaultOutputModes || '')
-				.split(',')
-				.map((x: string) => x.trim())
-				.filter(Boolean),
-			skills: [
-				{
-					id: cardFields.skillId || undefined,
-					name: cardFields.skillName || undefined,
-					description: cardFields.skillDesc || undefined,
-					tags: String(cardFields.skillTags || '')
-						.split(',')
-						.map((x: string) => x.trim())
-						.filter(Boolean),
-					examples: String(cardFields.skillExamples || '')
-						.split(/\n|,/)
-						.map((x: string) => x.trim())
-						.filter(Boolean),
-				},
-			],
 		};
-		if (obj?.registrations?.[0]?.signature) {
-			merged.registrations[0].signature = shortenSignature(obj.registrations[0].signature);
+		const trustModels = Array.isArray(cardFields.trustModels)
+			? cardFields.trustModels
+			: String(cardFields.trustModels || '')
+				.split(',')
+				.map((x: string) => x.trim())
+				.filter(Boolean);
+		const capabilities = { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream };
+		const defaultInputModes = String(cardFields.defaultInputModes || '')
+			.split(',')
+			.map((x: string) => x.trim())
+			.filter(Boolean);
+		const defaultOutputModes = String(cardFields.defaultOutputModes || '')
+			.split(',')
+			.map((x: string) => x.trim())
+			.filter(Boolean);
+		const ordered: any = {};
+		// Exact requested order
+		ordered.name = name;
+		ordered.description = description;
+		ordered.url = url;
+		ordered.version = version;
+		ordered.preferredTransport = preferredTransport;
+		ordered.protocolVersion = protocolVersion;
+		ordered.skills = [skill];
+		if (obj?.registrations) {
+			const regs = Array.isArray(obj.registrations) ? obj.registrations : [];
+			ordered.registrations = regs.map((r: any) => ({
+				...r,
+				signature: r?.signature ? shortenSignature(r.signature) : r?.signature,
+			}));
 		}
-		return merged;
+		ordered.trustModels = trustModels;
+		ordered.capabilities = capabilities;
+		ordered.defaultInputModes = defaultInputModes;
+		ordered.defaultOutputModes = defaultOutputModes;
+		return ordered;
 	}
 
 	async function autoSave() {
 		if (!cardDomain) return;
 		try {
 			const base = cardJson ? JSON.parse(cardJson) : {};
-			const merged = {
-				...base,
-				name: cardFields.name || base.name,
-				description: cardFields.description || base.description,
-				homepage: cardFields.homepage || base.homepage,
-				url: cardFields.url || base.url,
-				version: cardFields.version || base.version,
-				preferredTransport: cardFields.preferredTransport || base.preferredTransport,
-				protocolVersion: cardFields.protocolVersion || base.protocolVersion,
-				trustModels: Array.isArray(cardFields.trustModels) ? cardFields.trustModels : String(cardFields.trustModels || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-				capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
-				defaultInputModes: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-				defaultOutputModes: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-				skills: [{ id: cardFields.skillId || undefined, name: cardFields.skillName || undefined, description: cardFields.skillDesc || undefined, tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean), examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean) }],
-			};
+			const merged = buildMerged(base);
 			await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: cardDomain, card: merged }) });
 			const json = JSON.stringify(merged, null, 2);
 			setStoredCard(cardDomain, json);
@@ -398,25 +395,24 @@ export function AgentTable() {
 							<Stack spacing={1} sx={{ mb: 2 }}>
 								<TextField label="name" size="small" value={cardFields.name ?? ''} onChange={(e) => handleFieldChange('name', e.target.value)} />
 								<TextField label="description" size="small" value={cardFields.description ?? ''} onChange={(e) => handleFieldChange('description', e.target.value)} />
-								<TextField label="homepage" size="small" value={cardFields.homepage ?? ''} onChange={(e) => handleFieldChange('homepage', e.target.value)} />
 								<TextField label="url" size="small" value={cardFields.url ?? ''} onChange={(e) => handleFieldChange('url', e.target.value)} />
 								<TextField label="version" size="small" value={cardFields.version ?? ''} onChange={(e) => handleFieldChange('version', e.target.value)} />
 								<TextField label="preferredTransport" size="small" value={cardFields.preferredTransport ?? ''} onChange={(e) => handleFieldChange('preferredTransport', e.target.value)} />
 								<TextField label="protocolVersion" size="small" value={cardFields.protocolVersion ?? ''} onChange={(e) => handleFieldChange('protocolVersion', e.target.value)} />
-								<TextField label="defaultInputModes (comma)" size="small" value={cardFields.defaultInputModes ?? ''} onChange={(e) => handleFieldChange('defaultInputModes', e.target.value)} />
-								<TextField label="defaultOutputModes (comma)" size="small" value={cardFields.defaultOutputModes ?? ''} onChange={(e) => handleFieldChange('defaultOutputModes', e.target.value)} />
-								<TextField label="trustModels (comma-separated)" size="small" value={Array.isArray(cardFields.trustModels) ? cardFields.trustModels.join(', ') : (cardFields.trustModels ?? '')} onChange={(e) => handleFieldChange('trustModels', e.target.value)} />
+								<TextField label="skillDescription" size="small" value={cardFields.skillDesc ?? ''} onChange={(e) => handleFieldChange('skillDesc', e.target.value)} />
+								<TextField label="skillExamples (comma or newline)" size="small" multiline minRows={2} value={cardFields.skillExamples ?? ''} onChange={(e) => handleFieldChange('skillExamples', e.target.value)} />
 								<TextField label="skillId" size="small" value={cardFields.skillId ?? ''} onChange={(e) => handleFieldChange('skillId', e.target.value)} />
 								<TextField label="skillName" size="small" value={cardFields.skillName ?? ''} onChange={(e) => handleFieldChange('skillName', e.target.value)} />
-								<TextField label="skillDescription" size="small" value={cardFields.skillDesc ?? ''} onChange={(e) => handleFieldChange('skillDesc', e.target.value)} />
 								<TextField label="skillTags (comma-separated)" size="small" value={cardFields.skillTags ?? ''} onChange={(e) => handleFieldChange('skillTags', e.target.value)} />
-								<TextField label="skillExamples (comma or newline)" size="small" multiline minRows={2} value={cardFields.skillExamples ?? ''} onChange={(e) => handleFieldChange('skillExamples', e.target.value)} />
+								<TextField label="trustModels (comma-separated)" size="small" value={Array.isArray(cardFields.trustModels) ? cardFields.trustModels.join(', ') : (cardFields.trustModels ?? '')} onChange={(e) => handleFieldChange('trustModels', e.target.value)} />
+								<TextField label="defaultInputModes (comma)" size="small" value={cardFields.defaultInputModes ?? ''} onChange={(e) => handleFieldChange('defaultInputModes', e.target.value)} />
+								<TextField label="defaultOutputModes (comma)" size="small" value={cardFields.defaultOutputModes ?? ''} onChange={(e) => handleFieldChange('defaultOutputModes', e.target.value)} />
 							</Stack>
 							{cardLoading && <Typography variant="body2">Building…</Typography>}
 							{cardError && <Typography variant="body2" color="error">{cardError}</Typography>}
 						</Grid>
 						<Grid item xs={12} md={6}>
-							<Box sx={{ maxHeight: 480, overflow: 'auto' }}>
+							<Box>
 								<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
 									<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const base = cardJson ? JSON.parse(cardJson) : {}; const merged = { ...base,
 										name: cardFields.name || base.name,
@@ -439,44 +435,7 @@ export function AgentTable() {
 											const obj = JSON.parse(cardJson);
 											// Merge editable fields
 											const merged = {
-												...obj,
-												name: cardFields.name || obj.name,
-												description: cardFields.description || obj.description,
-												homepage: cardFields.homepage || obj.homepage,
-												url: cardFields.url || obj.url,
-												version: cardFields.version || obj.version,
-												preferredTransport: cardFields.preferredTransport || obj.preferredTransport,
-												protocolVersion: cardFields.protocolVersion || obj.protocolVersion,
-												trustModels: Array.isArray(cardFields.trustModels)
-													? cardFields.trustModels
-													: String(cardFields.trustModels || '')
-														.split(',')
-														.map((x: string) => x.trim())
-														.filter(Boolean),
-												capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
-												defaultInputModes: String(cardFields.defaultInputModes || '')
-													.split(',')
-													.map((x: string) => x.trim())
-													.filter(Boolean),
-												defaultOutputModes: String(cardFields.defaultOutputModes || '')
-													.split(',')
-													.map((x: string) => x.trim())
-													.filter(Boolean),
-												skills: [
-													{
-														id: cardFields.skillId || undefined,
-														name: cardFields.skillName || undefined,
-														description: cardFields.skillDesc || undefined,
-														tags: String(cardFields.skillTags || '')
-															.split(',')
-															.map((x: string) => x.trim())
-															.filter(Boolean),
-														examples: String(cardFields.skillExamples || '')
-															.split(/\n|,/)
-															.map((x: string) => x.trim())
-															.filter(Boolean),
-													},
-												],
+												...buildMerged(obj),
 											};
 											if (obj?.registrations?.[0]?.signature) {
 												merged.registrations[0].signature = shortenSignature(obj.registrations[0].signature);
