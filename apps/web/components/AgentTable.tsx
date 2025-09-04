@@ -2,10 +2,12 @@
 import * as React from 'react';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
-import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex } from 'viem';
+import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { toMetaMaskSmartAccount, Implementation, createDelegation } from '@metamask/delegation-toolkit';
+import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder, createCaveat } from '@metamask/delegation-toolkit';
+import { createPimlicoClient } from 'permissionless/clients/pimlico';
+import { createBundlerClient } from 'viem/account-abstraction';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
@@ -41,6 +43,7 @@ export function AgentTable() {
 
 	const [sessionOpen, setSessionOpen] = React.useState(false);
 	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
+	const [sessionLoading, setSessionLoading] = React.useState(false);
 
 	function scheduleAutoSave() {
 		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -319,6 +322,8 @@ export function AgentTable() {
 	}
 
 	async function openSessionFor(row: Agent) {
+		console.log('Starting session creation for:', row.agentDomain);
+		setSessionLoading(true);
 		try {
 			if (!provider || !eoa) throw new Error('Not connected');
 			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
@@ -338,9 +343,51 @@ export function AgentTable() {
 			const entryPoint = (await (smartAccount as any).getEntryPointAddress?.()) as `0x${string}` || '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 			const chainId = 11155111; // sepolia
 
+			// Ensure main AA is deployed via bundler (sponsored)
+			const aaCode = await publicClient.getBytecode({ address: aa });
+			const aaDeployed = !!aaCode && aaCode !== '0x';
+			if (!aaDeployed) {
+				const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+				const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
+				console.info("create bundler client ", bundlerUrl, paymasterUrl);
+				const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
+				const bundlerClient = createBundlerClient({
+					transport: http(bundlerUrl),
+					paymaster: true as any,
+					chain: sepolia as any,
+					paymasterContext: { mode: 'SPONSORED' },
+				} as any);
+
+				console.info("get gas price");
+				const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+
+				console.info("deploy indivAccount EOA address: ", eoa);
+				console.info("deploy indivAccountClient AA address: ", aa);
+				try {
+					console.info("send user operation with bundlerClient 2: ", bundlerClient);
+					const userOperationHash = await bundlerClient!.sendUserOperation({
+						account: smartAccount as any,
+						calls: [
+							{
+								to: zeroAddress,
+							},
+						],
+						...fee,
+					});
+
+					console.info("individual account is deployed - done");
+					const { receipt } = await bundlerClient!.waitForUserOperationReceipt({
+						hash: userOperationHash,
+					});
+				} catch (error) {
+					console.info("error deploying indivAccountClient: ", error);
+				}
+			}
+
 			// Session key
 			const pk = generatePrivateKey() as `0x${string}`;
-			const skAddr = privateKeyToAccount(pk).address as `0x${string}`;
+			const sk = privateKeyToAccount(pk);
+			const skAddr = sk.address as `0x${string}`;
 			const now = Math.floor(Date.now()/1000);
 			const validAfter = now - 60;
 			const validUntil = now + 60*30;
@@ -349,42 +396,71 @@ export function AgentTable() {
 			const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
 			const reputationRegistry = (process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`) || '0x0000000000000000000000000000000000000000';
 
-			// Optional DTK delegation
-			let signedDelegation: { message: any; signature: `0x${string}` } | undefined;
-			const PERMISSIONS_ADDR = process.env.NEXT_PUBLIC_DTK_PERMISSIONS_ADDR as `0x${string}` | undefined;
-			try {
-				// Preferred DTK flow: AA signs delegation without caveats
-				const del = await (createDelegation as any)({ from: aa as `0x${string}`, to: skAddr as `0x${string}`, caveats: [] });
-				let signature: `0x${string}`;
-				if ((smartAccount as any).signDelegation) {
-					signature = await (smartAccount as any).signDelegation({ delegation: del }) as `0x${string}`;
-				} else if ((walletClient as any).signDelegation) {
-					signature = await (walletClient as any).signDelegation({ delegation: del }) as `0x${string}`;
-				} else {
-					throw new Error('signDelegation helper not available');
-				}
-				signedDelegation = { message: del, signature };
-			} catch (_dtkErr) {
-				// Optional fallback to manual EIP-712 if permissions address is available
-				if (PERMISSIONS_ADDR) {
-					const saltBytes = new Uint8Array(32);
-					(window.crypto || (globalThis as any).crypto).getRandomValues(saltBytes);
-					const delegation = {
-						delegate: skAddr,
-						authority: '0x',
-						caveats: [],
-						salt: toHex(saltBytes) as `0x${string}`,
-					};
-					const domain = { name: 'DelegationFramework', version: '1', chainId, verifyingContract: PERMISSIONS_ADDR } as const;
-					const types = { Delegation: [ { name: 'delegate', type: 'address' }, { name: 'authority', type: 'bytes32' }, { name: 'caveats', type: 'Caveat[]' }, { name: 'salt', type: 'bytes32' } ], Caveat: [ { name: 'enforcer', type: 'address' }, { name: 'terms', type: 'bytes' } ], } as const;
-					const signature = await walletClient.signTypedData({ account: eoa as `0x${string}`, domain: domain as any, types: types as any, primaryType: 'Delegation', message: delegation as any });
-					signedDelegation = { message: delegation, signature: signature as `0x${string}` };
-				}
+			// Create session AA (burner) from session key pk
+			const burnerAccountClient = await toMetaMaskSmartAccount({
+				client: publicClient,
+				implementation: Implementation.Hybrid,
+				deployParams: [skAddr, [], [], []],
+				signatory: { account: sk },
+				deploySalt: toHex(10),
+			} as any);
+			const sessionAA = await burnerAccountClient.getAddress() as `0x${string}`;
+
+
+			const code = await publicClient.getBytecode({ address: sessionAA });
+			const isDeployed = !!code && code !== '0x';
+			if (!isDeployed) {
+				const pimlico = createPimlicoClient({ transport: http(bundlerUrl) });
+				const bundlerClient = createBundlerClient({
+					transport: http(bundlerUrl),
+					paymaster: true as any,
+					chain: sepolia as any,
+					paymasterContext: { mode: 'SPONSORED' },
+				} as any);
+				const { fast: fee } = await pimlico.getUserOperationGasPrice();
+				const userOperationHash = await bundlerClient.sendUserOperation({
+					account: burnerAccountClient as any,
+					calls: [ { to: zeroAddress } ],
+					...fee,
+				});
+				await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
 			}
+
+			// Preferred DTK flow: AA signs delegation with caveats
+			let signedDelegation: any;
+			
+			// Go back to CaveatBuilder but fix the address issue
+			console.log('Creating caveats using CaveatBuilder');
+			console.log('reputationRegistry:', reputationRegistry, typeof reputationRegistry);
+			const environment = (smartAccount as any).environment;
+			const registryAddress = String(reputationRegistry).toLowerCase() as `0x${string}`;
+			console.log('registryAddress:', registryAddress);
+			const caveatBuilder = createCaveatBuilder(environment as any);
+			const caveats = caveatBuilder
+				.addCaveat("allowedTargets", [registryAddress] as any)
+				// Remove method restriction for now - just restrict to address
+				.build();
+			
+			const del = await (createDelegation as any)({ 
+				from: aa as `0x${string}`, 
+				to: sessionAA as `0x${string}`, 
+				caveats: caveats
+			});
+			let signature: `0x${string}`;
+			if ((smartAccount as any).signDelegation) {
+				signature = await (smartAccount as any).signDelegation({ delegation: del }) as `0x${string}`;
+			} else if ((walletClient as any).signDelegation) {
+				signature = await (walletClient as any).signDelegation({ delegation: del }) as `0x${string}`;
+			} else {
+				throw new Error('signDelegation helper not available');
+			}
+			signedDelegation = { message: del, signature };
+		
 
 			const session = {
 				chainId,
 				aa,
+				sessionAA,
 				reputationRegistry,
 				selector: '0x8524d988',
 				sessionKey: { privateKey: pk, address: skAddr, validAfter, validUntil },
@@ -394,10 +470,14 @@ export function AgentTable() {
 				signedDelegation,
 			} as any;
 
+			console.log('Session created successfully:', session);
 			setSessionJson(JSON.stringify(session, null, 2));
 			setSessionOpen(true);
 		} catch (e: any) {
+			console.error('Error creating session:', e);
 			setCardError(e?.message ?? 'Failed to build session');
+		} finally {
+			setSessionLoading(false);
 		}
 	}
 
@@ -463,7 +543,9 @@ export function AgentTable() {
 										{owned[row.agentId] && (
 											<>
 												<Button size="small" onClick={() => viewOrCreateCard(row)}>Card</Button>
-												<Button size="small" onClick={() => openSessionFor(row)}>Session</Button>
+												<Button size="small" onClick={() => openSessionFor(row)} disabled={sessionLoading}>
+													{sessionLoading ? 'Loading...' : 'Session'}
+												</Button>
 											</>
 										)}
 									</Stack>
