@@ -64,6 +64,8 @@ export function AgentTable() {
 			description: s?.description || undefined,
 			tags: Array.isArray(s?.tags) ? s.tags.filter(Boolean) : [],
 			examples: Array.isArray(s?.examples) ? s.examples.filter(Boolean) : [],
+			inputModes: Array.isArray(s?.inputModes) ? s.inputModes.filter(Boolean) : undefined,
+			outputModes: Array.isArray(s?.outputModes) ? s.outputModes.filter(Boolean) : undefined,
 		})) : (() => {
 			// fallback to legacy single-skill fields
 			const fallback = {
@@ -81,13 +83,21 @@ export function AgentTable() {
 				.split(',')
 				.map((x: string) => x.trim())
 				.filter(Boolean);
-		const capabilities = { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream };
+		const capabilities = { 
+			streaming: !!cardFields.capStream,
+			pushNotifications: !!cardFields.capPush,
+			stateTransitionHistory: !!cardFields.capStateTransitionHistory
+		};
 		const defaultInputModes = Array.isArray(cardFields.defaultInputModes)
 			? cardFields.defaultInputModes.filter(Boolean)
 			: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean);
 		const defaultOutputModes = Array.isArray(cardFields.defaultOutputModes)
 			? cardFields.defaultOutputModes.filter(Boolean)
 			: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean);
+		const provider = (cardFields.providerOrganization || cardFields.providerUrl) ? {
+			organization: cardFields.providerOrganization || undefined,
+			url: cardFields.providerUrl || undefined
+		} : undefined;
 		const ordered: any = {};
 		// Exact requested order
 		ordered.name = name;
@@ -101,13 +111,20 @@ export function AgentTable() {
 			const regs = Array.isArray(obj.registrations) ? obj.registrations : [];
 			ordered.registrations = regs.map((r: any) => ({
 				...r,
-				signature: r?.signature ? shortenSignature(r.signature) : r?.signature,
+				signature: r?.signature,
 			}));
 		}
 		ordered.trustModels = trustModels;
 		ordered.capabilities = capabilities;
 		ordered.defaultInputModes = defaultInputModes;
 		ordered.defaultOutputModes = defaultOutputModes;
+		if (provider) ordered.provider = provider;
+		if (cardFields.supportsAuthenticatedExtendedCard !== undefined) {
+			ordered.supportsAuthenticatedExtendedCard = cardFields.supportsAuthenticatedExtendedCard;
+		}
+		if (cardFields.feedbackDataURI !== undefined) {
+			ordered.feedbackDataURI = cardFields.feedbackDataURI;
+		}
 		return ordered;
 	}
 
@@ -130,8 +147,31 @@ export function AgentTable() {
 		scheduleAutoSave();
 	}
 
-	function populateFieldsFromObj(obj: any) {
+	async function populateFieldsFromObj(obj: any) {
 		const skills = Array.isArray(obj?.skills) ? obj.skills : [];
+		
+		// Regenerate signature if it's truncated
+		let regeneratedSignature = null;
+		if (obj?.registrations?.[0]?.signature && obj.registrations[0].signature.includes('…')) {
+			try {
+				// Get the domain from the card or use a default
+				const domain = cardDomain || 'example.com';
+				console.log('Signature is truncated, regenerating for domain:', domain);
+				
+				// Regenerate signature by signing the domain
+				if (provider) {
+					const signature = await provider.request({
+						method: 'personal_sign',
+						params: [domain, address],
+					});
+					regeneratedSignature = signature;
+					console.log('Regenerated signature:', signature);
+				}
+			} catch (e) {
+				console.log('Could not regenerate signature:', e);
+			}
+		}
+		
 		setCardFields({
 			name: obj?.name ?? '',
 			description: obj?.description ?? '',
@@ -140,28 +180,35 @@ export function AgentTable() {
 			preferredTransport: obj?.preferredTransport ?? '',
 			protocolVersion: obj?.protocolVersion ?? '',
 			trustModels: Array.isArray(obj?.trustModels) ? obj.trustModels : [],
-			capPush: !!obj?.capabilities?.pushNotifications,
 			capStream: !!obj?.capabilities?.streaming,
+			capPush: !!obj?.capabilities?.pushNotifications,
+			capStateTransitionHistory: !!obj?.capabilities?.stateTransitionHistory,
 			defaultInputModes: Array.isArray(obj?.defaultInputModes) ? obj.defaultInputModes : [],
 			defaultOutputModes: Array.isArray(obj?.defaultOutputModes) ? obj.defaultOutputModes : [],
+			providerOrganization: obj?.provider?.organization ?? '',
+			providerUrl: obj?.provider?.url ?? '',
+			supportsAuthenticatedExtendedCard: !!obj?.supportsAuthenticatedExtendedCard,
+			feedbackDataURI: obj?.feedbackDataURI ?? '',
 			skills: skills.map((s: any) => ({
 				id: s?.id ?? '',
 				name: s?.name ?? '',
 				description: s?.description ?? '',
 				tags: Array.isArray(s?.tags) ? s.tags : (typeof s?.tags === 'string' ? [s.tags] : []),
 				examples: Array.isArray(s?.examples) ? s.examples : (typeof s?.examples === 'string' ? [s.examples] : []),
+				inputModes: Array.isArray(s?.inputModes) ? s.inputModes : [],
+				outputModes: Array.isArray(s?.outputModes) ? s.outputModes : [],
 			})),
 		});
+		
+		// If we regenerated a signature, update the card
+		if (regeneratedSignature && obj?.registrations?.[0]) {
+			obj.registrations[0].signature = regeneratedSignature;
+			// Trigger a re-render with the updated signature
+			const updatedJson = JSON.stringify(obj, null, 2);
+			setCardJson(updatedJson);
+		}
 	}
 
-	function shortenSignature(hex?: string | null): string | null {
-		if (!hex || typeof hex !== 'string') return hex ?? null;
-		if (!hex.startsWith('0x') || hex.length <= 2 + 20) return hex;
-		const body = hex.slice(2);
-		const left = body.slice(0, 10);
-		const right = body.slice(-10);
-		return `0x${left}…${right}`;
-	}
 
 	async function fetchData(page = 1) {
 		setIsLoading(true);
@@ -249,7 +296,7 @@ export function AgentTable() {
 		}
 		if (existing) {
 			setCardJson(existing);
-			try { populateFieldsFromObj(JSON.parse(existing)); } catch {}
+			try { await populateFieldsFromObj(JSON.parse(existing)); } catch {}
 			setCardOpen(true);
 			return;
 		}
@@ -276,7 +323,7 @@ export function AgentTable() {
 			const json = JSON.stringify(cardObj, null, 2);
 			setStoredCard(domain, json);
 			setCardJson(json);
-			populateFieldsFromObj(cardObj);
+			await populateFieldsFromObj(cardObj);
 			// Persist immediately on first creation
 			try {
 				await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, card: cardObj }) });
@@ -575,11 +622,42 @@ export function AgentTable() {
 								<TextField label="version" size="small" value={cardFields.version ?? ''} onChange={(e) => handleFieldChange('version', e.target.value)} />
 								<TextField label="preferredTransport" size="small" value={cardFields.preferredTransport ?? ''} onChange={(e) => handleFieldChange('preferredTransport', e.target.value)} />
 								<TextField label="protocolVersion" size="small" value={cardFields.protocolVersion ?? ''} onChange={(e) => handleFieldChange('protocolVersion', e.target.value)} />
+								
+								<Divider sx={{ my: 1 }} />
+								<Typography variant="subtitle2">Provider</Typography>
+								<TextField label="Provider Organization" size="small" value={cardFields.providerOrganization ?? ''} onChange={(e) => handleFieldChange('providerOrganization', e.target.value)} />
+								<TextField label="Provider URL" size="small" value={cardFields.providerUrl ?? ''} onChange={(e) => handleFieldChange('providerUrl', e.target.value)} />
+								
+								<Divider sx={{ my: 1 }} />
+								<Typography variant="subtitle2">Feedback</Typography>
+								<TextField label="Feedback Data URI" size="small" value={cardFields.feedbackDataURI ?? ''} onChange={(e) => handleFieldChange('feedbackDataURI', e.target.value)} />
+								
+								<Divider sx={{ my: 1 }} />
+								<Typography variant="subtitle2">Capabilities</Typography>
+								<FormControlLabel 
+									control={<Checkbox checked={!!cardFields.capStream} onChange={(e) => handleFieldChange('capStream', e.target.checked)} />} 
+									label="Streaming" 
+								/>
+								<FormControlLabel 
+									control={<Checkbox checked={!!cardFields.capPush} onChange={(e) => handleFieldChange('capPush', e.target.checked)} />} 
+									label="Push Notifications" 
+								/>
+								<FormControlLabel 
+									control={<Checkbox checked={!!cardFields.capStateTransitionHistory} onChange={(e) => handleFieldChange('capStateTransitionHistory', e.target.checked)} />} 
+									label="State Transition History" 
+								/>
+								
+								<Divider sx={{ my: 1 }} />
+								<Typography variant="subtitle2">Extended Card</Typography>
+								<FormControlLabel 
+									control={<Checkbox checked={!!cardFields.supportsAuthenticatedExtendedCard} onChange={(e) => handleFieldChange('supportsAuthenticatedExtendedCard', e.target.checked)} />} 
+									label="Supports Authenticated Extended Card" 
+								/>
 
 								<Divider sx={{ my: 1 }} />
 								<Stack direction="row" alignItems="center" justifyContent="space-between">
 									<Typography variant="subtitle2">Skills</Typography>
-									<IconButton size="small" onClick={() => handleFieldChange('skills', [ ...(cardFields.skills || []), { id: '', name: '', description: '', tags: [], examples: [] } ])}><AddIcon fontSize="inherit" /></IconButton>
+									<IconButton size="small" onClick={() => handleFieldChange('skills', [ ...(cardFields.skills || []), { id: '', name: '', description: '', tags: [], examples: [], inputModes: [], outputModes: [] } ])}><AddIcon fontSize="inherit" /></IconButton>
 								</Stack>
 								<Stack spacing={1}>
 									{(cardFields.skills || []).map((s: any, idx: number) => (
@@ -609,6 +687,14 @@ export function AgentTable() {
 												<Grid item xs={12}><TextField fullWidth size="small" label="tags (one per line)" multiline minRows={2} value={(s.tags || []).join('\n')} onChange={(e) => {
 													const lines = e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean);
 													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], tags: lines }; handleFieldChange('skills', next);
+												}} /></Grid>
+												<Grid item xs={12}><TextField fullWidth size="small" label="inputModes (one per line)" multiline minRows={2} value={(s.inputModes || []).join('\n')} onChange={(e) => {
+													const lines = e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean);
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], inputModes: lines }; handleFieldChange('skills', next);
+												}} /></Grid>
+												<Grid item xs={12}><TextField fullWidth size="small" label="outputModes (one per line)" multiline minRows={2} value={(s.outputModes || []).join('\n')} onChange={(e) => {
+													const lines = e.target.value.split(/\n/).map((x) => x.trim()).filter(Boolean);
+													const next = [...(cardFields.skills || [])]; next[idx] = { ...next[idx], outputModes: lines }; handleFieldChange('skills', next);
 												}} /></Grid>
 											</Grid>
 										</Box>
@@ -650,7 +736,7 @@ export function AgentTable() {
 												...buildMerged(obj),
 											};
 											if (obj?.registrations?.[0]?.signature) {
-												merged.registrations[0].signature = shortenSignature(obj.registrations[0].signature);
+												merged.registrations[0].signature = obj.registrations[0].signature;
 											}
 											const shortJson = JSON.stringify(merged, null, 2);
 											return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>{shortJson}</Box>;
