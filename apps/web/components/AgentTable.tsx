@@ -8,6 +8,7 @@ import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder, createCaveat } from '@metamask/delegation-toolkit';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
+import { AddAgentModal } from './AddAgentModal';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
@@ -44,6 +45,15 @@ export function AgentTable() {
 	const [sessionOpen, setSessionOpen] = React.useState(false);
 	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
 	const [sessionLoading, setSessionLoading] = React.useState(false);
+
+	const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+	const [feedbackData, setFeedbackData] = React.useState<any[]>([]);
+	const [feedbackLoading, setFeedbackLoading] = React.useState(false);
+	const [feedbackError, setFeedbackError] = React.useState<string | null>(null);
+	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
+	const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
+	
+	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
 
 	function scheduleAutoSave() {
 		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -252,6 +262,21 @@ export function AgentTable() {
 				}
 			}
 			setOwned(entries);
+			
+			// Check for feedback URIs for all agents
+			const feedbackURIMap: Record<string, string> = {};
+			for (const row of data.rows) {
+				try {
+					const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentDomain)}`);
+					const cardData = await response.json();
+					if (cardData.found && cardData.card?.feedbackDataURI) {
+						feedbackURIMap[row.agentId] = cardData.card.feedbackDataURI;
+					}
+				} catch {
+					// Ignore errors, just don't add feedback URI
+				}
+			}
+			setAgentFeedbackURIs(feedbackURIMap);
 		}
 		computeOwnership();
 	}, [data?.rows, provider, eoa]);
@@ -269,9 +294,6 @@ export function AgentTable() {
 		fetchData(1);
 	}
 
-	async function copy(text: string) {
-		try { await navigator.clipboard.writeText(text); } catch {}
-	}
 
 	function getStoredCard(domain: string): string | null {
 		try { return localStorage.getItem(`agent_card:${domain.trim().toLowerCase()}`); } catch { return null; }
@@ -365,6 +387,51 @@ export function AgentTable() {
 			setCardJson(json);
 		} catch (e: any) {
 			setCardError(e?.message ?? 'Save failed');
+		}
+	}
+
+	async function openFeedbackFor(row: Agent) {
+		setCurrentAgent(row);
+		setFeedbackOpen(true);
+		setFeedbackLoading(true);
+		setFeedbackError(null);
+		setFeedbackData([]);
+
+		try {
+			// Use the pre-fetched feedback URI
+			const feedbackURI = agentFeedbackURIs[row.agentId];
+			if (!feedbackURI) {
+				setFeedbackError('No feedback data URI found for this agent');
+				setFeedbackLoading(false);
+				return;
+			}
+
+			// Fetch feedback data from the URI
+			const feedbackResponse = await fetch(feedbackURI);
+			if (!feedbackResponse.ok) {
+				throw new Error(`Failed to fetch feedback data: ${feedbackResponse.statusText}`);
+			}
+			
+			const feedback = await feedbackResponse.json();
+			
+			// Handle different response formats
+			let feedbackList = [];
+			if (Array.isArray(feedback)) {
+				feedbackList = feedback;
+			} else if (feedback.data && Array.isArray(feedback.data)) {
+				feedbackList = feedback.data;
+			} else if (feedback.feedback && Array.isArray(feedback.feedback)) {
+				feedbackList = feedback.feedback;
+			} else {
+				feedbackList = [feedback]; // Single feedback item
+			}
+			
+			setFeedbackData(feedbackList);
+		} catch (error: any) {
+			console.error('Error fetching feedback data:', error);
+			setFeedbackError(error.message || 'Failed to fetch feedback data');
+		} finally {
+			setFeedbackLoading(false);
 		}
 	}
 
@@ -531,28 +598,98 @@ export function AgentTable() {
 	return (
 		<Stack spacing={3}>
 			<Paper variant="outlined" sx={{ p: 2.5 }}>
-				<Box component="form" onSubmit={handleSubmit}>
-					<Grid container spacing={2}>
-						<Grid item xs={12} md={3}>
-							<TextField fullWidth label="Domain" placeholder="Filter by domain" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
-						</Grid>
-						<Grid item xs={12} md={3}>
-							<TextField fullWidth label="Agent address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
-						</Grid>
-						<Grid item xs={12} md={3}>
-							<TextField fullWidth label="AgentId" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
-						</Grid>
-						<Grid item xs={12} md={1}>
-							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
-						</Grid>
-						<Grid item xs={12} md={2}>
-							<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
-								<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={isLoading}>{isLoading ? 'Searching…' : 'Search'}</Button>
-								<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={isLoading} onClick={clearFilters}>Clear</Button>
+				<Stack spacing={2}>
+					{/* Header Row with EOA and Actions */}
+					<Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+						<Stack direction="row" alignItems="center" spacing={2}>
+							{eoa && (
+								<Chip
+									label={`EOA: ${eoa}`}
+									size="small"
+									variant="outlined"
+									sx={{ 
+										fontSize: '0.7rem',
+										cursor: 'pointer',
+										'&:hover': {
+											backgroundColor: 'action.hover'
+										}
+									}}
+									onClick={() => window.open(`https://sepolia.etherscan.io/address/${eoa}`, '_blank')}
+								/>
+							)}
+							<Stack direction="row" spacing={1}>
+								<Chip
+									label={`Identity: ${(process.env.NEXT_PUBLIC_REGISTRY_ADDRESS || 'Not configured').slice(0, 10)}...`}
+									size="small"
+									variant="outlined"
+									sx={{ 
+										fontSize: '0.7rem',
+										cursor: 'pointer',
+										'&:hover': {
+											backgroundColor: 'action.hover'
+										}
+									}}
+									onClick={() => {
+										const address = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS;
+										if (address) {
+											window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
+										}
+									}}
+								/>
+								<Chip
+									label={`Reputation: ${(process.env.NEXT_PUBLIC_REPUTATION_REGISTRY || 'Not configured').slice(0, 10)}...`}
+									size="small"
+									variant="outlined"
+									sx={{ 
+										fontSize: '0.7rem',
+										cursor: 'pointer',
+										'&:hover': {
+											backgroundColor: 'action.hover'
+										}
+									}}
+									onClick={() => {
+										const address = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY;
+										if (address) {
+											window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
+										}
+									}}
+								/>
 							</Stack>
+						</Stack>
+						<Button
+							variant="contained"
+							startIcon={<AddIcon />}
+							onClick={() => setAddAgentOpen(true)}
+							size="small"
+						>
+							Create Agent
+						</Button>
+					</Stack>
+
+					{/* Search Form */}
+					<Box component="form" onSubmit={handleSubmit}>
+						<Grid container spacing={2}>
+							<Grid item xs={12} md={3}>
+								<TextField fullWidth label="Domain" placeholder="Filter by domain" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
+							</Grid>
+							<Grid item xs={12} md={3}>
+								<TextField fullWidth label="Agent address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
+							</Grid>
+							<Grid item xs={12} md={3}>
+								<TextField fullWidth label="AgentId" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
+							</Grid>
+							<Grid item xs={12} md={1}>
+								<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
+							</Grid>
+							<Grid item xs={12} md={2}>
+								<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
+									<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={isLoading}>{isLoading ? 'Searching…' : 'Search'}</Button>
+									<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={isLoading} onClick={clearFilters}>Clear</Button>
+								</Stack>
+							</Grid>
 						</Grid>
-					</Grid>
-				</Box>
+					</Box>
+				</Stack>
 			</Paper>
 
 			<TableContainer component={Paper} variant="outlined">
@@ -561,7 +698,7 @@ export function AgentTable() {
 						<TableRow>
 							<TableCell>Domain</TableCell>
 							<TableCell>Agent Address</TableCell>
-							<TableCell>AgentId (uint256)</TableCell>
+							<TableCell>AgentId</TableCell>
 							<TableCell>Mine</TableCell>
 						</TableRow>
 					</TableHead>
@@ -582,11 +719,77 @@ export function AgentTable() {
 						)}
 						{data?.rows?.filter((row) => !mineOnly || owned[row.agentId])?.map((row) => (
 							<TableRow key={row.agentId} hover>
-								<TableCell sx={{ fontWeight: 600 }}>{row.agentDomain}</TableCell>
+								<TableCell sx={{ fontWeight: 600 }}>
+									<Stack direction="row" alignItems="center" spacing={1}>
+										<Typography component="span">
+											{row.agentDomain.replace(/\/$/, '')}
+										</Typography>
+										<IconButton
+											size="small"
+											sx={{ 
+												p: 0.5,
+												color: 'primary.main',
+												'&:hover': {
+													color: 'primary.dark',
+													backgroundColor: 'action.hover'
+												}
+											}}
+											title={`Visit ${row.agentDomain.replace(/\/$/, '')}`}
+											onClick={() => {
+												const cleanDomain = row.agentDomain.replace(/\/$/, '');
+												const url = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
+												window.open(url, '_blank');
+											}}
+										>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+												<path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
+											</svg>
+										</IconButton>
+										<IconButton
+											size="small"
+											sx={{ 
+												p: 0.5,
+												color: 'secondary.main',
+												'&:hover': {
+													color: 'secondary.dark',
+													backgroundColor: 'action.hover'
+												}
+											}}
+											title={`View agent card JSON`}
+											onClick={() => {
+												const cleanDomain = row.agentDomain.replace(/\/$/, '');
+												const domain = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
+												const agentCardUrl = `${domain}/.well-known/agent-card.json`;
+												window.open(agentCardUrl, '_blank');
+											}}
+										>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+												<path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+											</svg>
+										</IconButton>
+									</Stack>
+								</TableCell>
 								<TableCell>
 									<Stack direction="row" spacing={1} alignItems="center">
-										<Typography component="span" variant="body2" sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }} noWrap title={row.agentAddress}>{row.agentAddress}</Typography>
-										<Button size="small" onClick={() => copy(row.agentAddress)}>Copy</Button>
+										<Typography 
+											component="span" 
+											variant="body2" 
+											sx={{ 
+												fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+												cursor: 'pointer',
+												color: 'primary.main',
+												textDecoration: 'underline',
+												'&:hover': {
+													color: 'primary.dark',
+													textDecoration: 'none'
+												}
+											}} 
+											noWrap 
+											title={`Click to view on Etherscan: ${row.agentAddress}`}
+											onClick={() => window.open(`https://sepolia.etherscan.io/address/${row.agentAddress}`, '_blank')}
+										>
+											{row.agentAddress}
+										</Typography>
 										{owned[row.agentId] && (
 											<>
 												<Button size="small" onClick={() => viewOrCreateCard(row)}>Card</Button>
@@ -594,6 +797,9 @@ export function AgentTable() {
 													{sessionLoading ? 'Loading...' : 'Session'}
 												</Button>
 											</>
+										)}
+										{agentFeedbackURIs[row.agentId] && (
+											<Button size="small" onClick={() => openFeedbackFor(row)}>Feedback</Button>
 										)}
 									</Stack>
 								</TableCell>
@@ -771,6 +977,68 @@ export function AgentTable() {
 					<Button onClick={() => setSessionOpen(false)}>Close</Button>
 				</DialogActions>
 			</Dialog>
+
+			{/* Feedback Dialog */}
+			<Dialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					Feedback for {currentAgent?.agentDomain}
+				</DialogTitle>
+				<DialogContent>
+					{feedbackLoading && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+							<Typography>Loading feedback data...</Typography>
+						</Box>
+					)}
+					
+					{feedbackError && (
+						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
+							<Typography color="error">{feedbackError}</Typography>
+						</Box>
+					)}
+					
+					{!feedbackLoading && !feedbackError && feedbackData.length === 0 && (
+						<Box sx={{ p: 2, textAlign: 'center' }}>
+							<Typography color="text.secondary">No feedback data available</Typography>
+						</Box>
+					)}
+					
+					{!feedbackLoading && !feedbackError && feedbackData.length > 0 && (
+						<Stack spacing={2}>
+							{feedbackData.map((item, index) => (
+								<Paper key={index} sx={{ p: 2, bgcolor: 'grey.50' }}>
+									<Stack spacing={1}>
+										{Object.entries(item).map(([key, value]) => (
+											<Box key={key}>
+												<Typography variant="subtitle2" color="primary" sx={{ fontWeight: 600 }}>
+													{key}:
+												</Typography>
+												<Typography variant="body2" sx={{ 
+													fontFamily: typeof value === 'object' ? 'ui-monospace, monospace' : 'inherit',
+													whiteSpace: 'pre-wrap',
+													wordBreak: 'break-word'
+												}}>
+													{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+												</Typography>
+											</Box>
+										))}
+									</Stack>
+								</Paper>
+							))}
+						</Stack>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setFeedbackOpen(false)}>Close</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Add Agent Modal */}
+			<AddAgentModal
+				open={addAgentOpen}
+				onClose={() => setAddAgentOpen(false)}
+				registryAddress={process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`}
+				rpcUrl={process.env.NEXT_PUBLIC_RPC_URL as string}
+			/>
 
 			<Stack direction="row" alignItems="center" justifyContent="space-between">
 				<Typography variant="body2" color="text.secondary">Total: {data?.total ?? 0}</Typography>
