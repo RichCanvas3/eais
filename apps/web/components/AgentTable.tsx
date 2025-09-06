@@ -2,10 +2,10 @@
 import * as React from 'react';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
-import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters } from 'viem';
+import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder, createCaveat } from '@metamask/delegation-toolkit';
+import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
@@ -13,6 +13,7 @@ import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ensService from '@/service/ensService';
 
 export type Agent = {
 	agentId: string;
@@ -34,6 +35,153 @@ export function AgentTable() {
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
 	const { provider, address: eoa } = useWeb3Auth();
 
+	// Helper function to clean ENS name
+	const cleanEnsName = (name: string) => {
+		return name.replace(/^ENS:\s*/, '').replace(/\.eth$/i, '').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
+	};
+
+	// Get expected ENS owner AA details
+	const getExpectedEnsOwnerAA = () => {
+		const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
+		if (!ensPrivateKey) {
+			console.log('❌ NEXT_PUBLIC_ENS_PRIVATE_KEY not configured');
+			return null;
+		}
+		
+		try {
+			const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
+			console.log('🔍 ENS Owner EOA:', ensOwnerEOA.address);
+			console.log('🔧 Expected AA Parameters:', {
+				owner: ensOwnerEOA.address,
+				salt: 200,
+				saltHex: `0x${(200).toString(16)}`,
+				implementation: 'Hybrid'
+			});
+			
+			return {
+				eoaAddress: ensOwnerEOA.address,
+				expectedSalt: 200,
+				expectedSaltHex: `0x${(200).toString(16)}`
+			};
+		} catch (error) {
+			console.error('❌ Error calculating expected AA:', error);
+			return null;
+		}
+	};
+
+	// Check if parent ENS domain is already wrapped
+	const checkParentWrapStatus = async () => {
+		const parentEnsName = process.env.NEXT_PUBLIC_ENS_NAME;
+		if (!parentEnsName) {
+			console.log('❌ NEXT_PUBLIC_ENS_NAME not configured');
+			setEnsError('Parent ENS name not configured');
+			return;
+		}
+
+		console.log('🔍 Starting wrap status check...');
+		console.log('📋 Configuration:', {
+			parentEnsName,
+			chainName: sepolia.name,
+			chainId: sepolia.id,
+			ENS_PRIVATE_KEY: process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY ? `${process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY.slice(0, 10)}...` : 'NOT_SET'
+		});
+
+		setIsCheckingWrapStatus(true);
+		setEnsError(null);
+
+		try {
+			const cleanName = cleanEnsName(parentEnsName);
+			console.log('🧹 Cleaned ENS name:', cleanName);
+			
+			// Create public client for reading contract data
+			const publicClient = createPublicClient({
+				chain: sepolia,
+				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
+			});
+			
+			// Check if the parent domain is wrapped by checking if ENS Registry owner is NameWrapper
+			const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+			const NAME_WRAPPER_ADDRESS = '0x0635513f179D50A207757E05759CbD106d7dFcE8';
+			const parentNode = namehash(cleanName + '.eth');
+			
+			console.log('🔍 Checking ENS Registry for parent domain owner...');
+			const parentOwner = await publicClient.readContract({
+				address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+				abi: [{ name: 'owner', type: 'function', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }], stateMutability: 'view' }],
+				functionName: 'owner',
+				args: [parentNode]
+			}) as `0x${string}`;
+			
+			console.log(`🔗 Parent domain: ${cleanName}.eth`);
+			console.log(`🔗 Parent node: ${parentNode}`);
+			console.log(`👤 Parent owner - from ENS Registry which for wrapped points to NameWrapper: ${parentOwner}`);
+			
+			if (parentOwner === '0x0000000000000000000000000000000000000000') {
+				console.log('❌ Parent domain does not exist or has no owner');
+				setEnsError(`Parent domain "${cleanName}.eth" does not exist or has no owner`);
+				setIsParentWrapped(false);
+				return;
+			}
+			
+			// For wrapped ENS records, we need to get the actual owner from NameWrapper
+			let actualOwner: string;
+			let isWrapped = false;
+			
+			if (parentOwner.toLowerCase() === NAME_WRAPPER_ADDRESS.toLowerCase()) {
+				console.log('✅ Parent domain is wrapped, getting NameWrapper owner...');
+				isWrapped = true;
+				
+				try {
+					const tokenId = BigInt(parentNode);
+					actualOwner = await publicClient.readContract({
+						address: NAME_WRAPPER_ADDRESS as `0x${string}`,
+						abi: [{ name: 'ownerOf', type: 'function', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: '', type: 'address' }], stateMutability: 'view' }],
+						functionName: 'ownerOf',
+						args: [tokenId]
+					}) as `0x${string}`;
+					
+					console.log(`🎯 NameWrapper owner: ${actualOwner}`);
+				} catch (error) {
+					console.error('❌ Error getting NameWrapper owner:', error);
+					setEnsError(`Failed to get NameWrapper owner: ${error instanceof Error ? error.message : String(error)}`);
+					setIsParentWrapped(false);
+					return;
+				}
+			} else {
+				actualOwner = parentOwner;
+				console.log(`🎯 Direct owner (not wrapped): ${actualOwner}`);
+			}
+			
+			setIsParentWrapped(isWrapped);
+			setParentEnsOwner(actualOwner);
+			
+			if (isWrapped) {
+				console.log('✅ Parent domain is wrapped successfully');
+				console.log('👑 Current wrapped domain owner:', actualOwner);
+				
+				// Calculate what the expected AA address should be
+				const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
+				if (ensPrivateKey) {
+					const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
+					console.log('🔍 Expected AA owner details:', {
+						eoaAddress: ensOwnerEOA.address,
+						expectedAASalt: 200,
+						expectedAASaltHex: `0x${(200).toString(16)}`,
+						note: 'This AA should own the wrapped parent domain'
+					});
+				}
+			} else {
+				console.log('⚠️  Parent domain is NOT wrapped');
+				setEnsError(`Parent domain "${cleanName}.eth" is not wrapped.`);
+			}
+		} catch (error) {
+			console.error('❌ Error checking wrap status:', error);
+			setEnsError(`Failed to check wrap status: ${error instanceof Error ? error.message : String(error)}`);
+		} finally {
+			setIsCheckingWrapStatus(false);
+		}
+	};
+
 	const [cardOpen, setCardOpen] = React.useState(false);
 	const [cardJson, setCardJson] = React.useState<string | null>(null);
 	const [cardDomain, setCardDomain] = React.useState<string | null>(null);
@@ -52,6 +200,26 @@ export function AgentTable() {
 	const [feedbackError, setFeedbackError] = React.useState<string | null>(null);
 	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
 	const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
+
+	const [ensOpen, setEnsOpen] = React.useState(false);
+	const [ensData, setEnsData] = React.useState<{
+		name: string | null;
+		avatar: string | null;
+		website: string | null;
+		email: string | null;
+		twitter: string | null;
+		github: string | null;
+		discord: string | null;
+	} | null>(null);
+	const [ensLoading, setEnsLoading] = React.useState(false);
+	const [ensError, setEnsError] = React.useState<string | null>(null);
+	const [ensCurrentAgent, setEnsCurrentAgent] = React.useState<Agent | null>(null);
+	const [ensSubdomainName, setEnsSubdomainName] = React.useState('');
+	const [ensParentName, setEnsParentName] = React.useState('');
+	const [ensCreating, setEnsCreating] = React.useState(false);
+	const [isParentWrapped, setIsParentWrapped] = React.useState<boolean | null>(null);
+	const [isCheckingWrapStatus, setIsCheckingWrapStatus] = React.useState(false);
+	const [parentEnsOwner, setParentEnsOwner] = React.useState<string | null>(null);
 	
 	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
 
@@ -435,6 +603,231 @@ export function AgentTable() {
 		}
 	}
 
+	async function openEnsFor(row: Agent) {
+		setEnsCurrentAgent(row);
+		setEnsOpen(true);
+		setEnsLoading(true);
+		setEnsError(null);
+		setEnsData(null);
+		setEnsSubdomainName('');
+		
+		// Set parent name from environment variables
+		const parentEnsName = process.env.NEXT_PUBLIC_ENS_NAME;
+		if (parentEnsName) {
+			setEnsParentName(cleanEnsName(parentEnsName) + '.eth');
+		}
+
+		try {
+			// First check parent domain wrap status
+			await checkParentWrapStatus();
+			
+			// Perform reverse lookup to get ENS name for the agent address
+			const ensName = await ensService.getEnsName(row.agentAddress, sepolia);
+			
+			if (ensName) {
+				// Get comprehensive ENS data including avatar
+				const comprehensiveData = await ensService.getEnsComprehensiveData(row.agentAddress, sepolia);
+				setEnsData(comprehensiveData);
+			} else {
+				// No ENS name found, set empty data
+				setEnsData({
+					name: null,
+					avatar: null,
+					website: null,
+					email: null,
+					twitter: null,
+					github: null,
+					discord: null
+				});
+			}
+		} catch (error: any) {
+			console.error('Error fetching ENS data:', error);
+			setEnsError(error?.message ?? 'Failed to fetch ENS data');
+		} finally {
+			setEnsLoading(false);
+		}
+	}
+
+	async function createEnsSubdomain() {
+		if (!ensCurrentAgent || !ensSubdomainName.trim() || !ensParentName.trim()) {
+			setEnsError('Please provide both subdomain name and parent domain name');
+			return;
+		}
+
+		if (!isParentWrapped) {
+			setEnsError('Parent domain is not wrapped. Please wrap the parent domain first.');
+			return;
+		}
+
+		setEnsCreating(true);
+		setEnsError(null);
+
+		try {
+			console.log('🚀 Creating ENS subdomain using ENS owner AA with paymaster...');
+			console.log('Agent Address:', ensCurrentAgent.agentAddress);
+			console.log('Subdomain:', ensSubdomainName);
+			console.log('Parent:', ensParentName);
+
+			// Get ENS private key from environment
+			const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
+			if (!ensPrivateKey) {
+				throw new Error('NEXT_PUBLIC_ENS_PRIVATE_KEY not configured');
+			}
+
+			// Create ENS owner EOA from private key
+			const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
+			console.log('🔍 ENS Owner EOA:', ensOwnerEOA.address);
+
+			// Create public client
+			const publicClient = createPublicClient({
+				chain: sepolia,
+				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
+			});
+
+			// Create ENS owner account abstraction
+
+
+			const ensOwnerAA = await toMetaMaskSmartAccount({
+				client: publicClient,
+				implementation: Implementation.Hybrid,
+				deployParams: [ensOwnerEOA.address, [], [], []],
+				signatory: { account: ensOwnerEOA },
+				deploySalt: `0x${(10000).toString(16)}` as `0x${string}`, // Organization salt like in test
+			  });
+
+			console.log('🔧 ENS Owner AA Address:', await ensOwnerAA.getAddress());
+
+			// Clean the parent name first
+			const cleanParentName = ensParentName.replace(/\.eth$/i, '').toLowerCase();
+			const subdomainName = ensSubdomainName.trim().toLowerCase();
+
+			// Check if ENS owner AA is the actual owner of the parent domain
+			const ensOwnerAAAddress = await ensOwnerAA.getAddress();
+			console.log('🔍 Checking if ENS owner AA is the actual owner of parent domain...');
+			console.log('ENS Owner AA Address:', ensOwnerAAAddress);
+			console.log('Parent ENS Owner from check:', parentEnsOwner);
+			
+			if (parentEnsOwner && parentEnsOwner.toLowerCase() !== ensOwnerAAAddress.toLowerCase()) {
+				console.log('⚠️  ENS Owner AA is not the actual owner of the parent domain');
+				console.log('Attempting to transfer parent domain to ENS owner AA...');
+				
+				try {
+					// Create an ethers provider and wallet for the current owner
+					const { ethers } = await import('ethers');
+					const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
+					const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
+					
+					// We need to use the current owner's private key to transfer ownership
+					// For now, let's check if the current owner is the EOA from the private key
+					if (parentEnsOwner.toLowerCase() === ensOwnerEOA.address.toLowerCase()) {
+						console.log('✅ Current owner is the EOA, transferring to ENS owner AA...');
+						
+						// Create NameWrapper contract instance
+						const nameWrapper = new ethers.Contract(
+							'0x0635513f179D50A207757E05759CbD106d7dFcE8',
+							[
+								{
+									"inputs": [
+										{"name": "tokenId", "type": "uint256"},
+										{"name": "to", "type": "address"},
+										{"name": "data", "type": "bytes"}
+									],
+									"name": "safeTransferFrom",
+									"outputs": [],
+									"stateMutability": "nonpayable",
+									"type": "function"
+								}
+							],
+							ensOwnerWallet
+						);
+						
+						const parentNode = namehash(cleanParentName + '.eth');
+						const tokenId = BigInt(parentNode);
+						
+						// Transfer ownership to ENS owner AA
+						const transferTx = await nameWrapper.safeTransferFrom(
+							ensOwnerEOA.address,
+							ensOwnerAAAddress,
+							tokenId,
+							'0x'
+						);
+						
+						console.log('⏳ Waiting for transfer transaction...');
+						await transferTx.wait();
+						console.log('✅ Parent domain transferred to ENS owner AA');
+					} else {
+						throw new Error(`Cannot transfer parent domain: Current owner (${parentEnsOwner}) is not the EOA (${ensOwnerEOA.address})`);
+					}
+				} catch (error: any) {
+					console.error('❌ Error transferring parent domain:', error);
+					setEnsError(`Failed to transfer parent domain to ENS owner AA: ${error.message}`);
+					return;
+				}
+			}
+
+			// Deploy ENS owner AA if needed
+			const ensOwnerCode = await publicClient.getCode({ address: ensOwnerAAAddress as `0x${string}` });
+			
+			if (ensOwnerCode === '0x') {
+				console.log('📦 Deploying ENS owner AA...');
+				
+				// Create bundler client for deployment
+				const BUNDLER_URL = process.env.NEXT_PUBLIC_BUNDLER_URL as string;
+				const bundlerClient = createBundlerClient({
+					transport: http(BUNDLER_URL),
+					paymaster: true,
+					chain: sepolia,
+					paymasterContext: {
+						mode: 'SPONSORED',
+					},
+				});
+
+				// Deploy ENS owner AA
+				const userOperationHash = await bundlerClient.sendUserOperation({
+					account: ensOwnerAA,
+					calls: [{ to: zeroAddress }],
+				});
+
+				console.log('⏳ Waiting for ENS owner AA deployment...');
+				const { receipt } = await bundlerClient.waitForUserOperationReceipt({
+					hash: userOperationHash,
+				});
+
+				console.log('✅ ENS owner AA deployed successfully:', receipt);
+			} else {
+				console.log('✅ ENS owner AA already deployed');
+			}
+
+			// Create an ethers provider and signer for the ENS owner EOA (using private key directly)
+			const { ethers } = await import('ethers');
+			const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
+			const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
+			const ensOwnerSigner = ensOwnerWallet.connect(ethersProvider);
+
+			// Create subdomain using ENS owner AA with paymaster
+			// The agent address will be the owner of the subdomain
+			const result = await ensService.createSubdomainForOrg(
+				ensOwnerSigner as any, // Cast to any to bypass type issues
+				ensOwnerAA, 
+				ensCurrentAgent.agentAddress as `0x${string}`, // Agent address as subdomain owner
+				cleanParentName, 
+				subdomainName, 
+				sepolia
+			);
+
+			console.log('✅ ENS subdomain created successfully:', result);
+			
+			// Refresh ENS data to show the new subdomain
+			await openEnsFor(ensCurrentAgent);
+			
+		} catch (error: any) {
+			console.error('❌ Error creating ENS subdomain:', error);
+			setEnsError(error?.message ?? 'Failed to create ENS subdomain');
+		} finally {
+			setEnsCreating(false);
+		}
+	}
+
 	async function openSessionFor(row: Agent) {
 		console.log('Starting session creation for:', row.agentDomain);
 		setSessionLoading(true);
@@ -656,14 +1049,16 @@ export function AgentTable() {
 								/>
 							</Stack>
 						</Stack>
-						<Button
-							variant="contained"
-							startIcon={<AddIcon />}
-							onClick={() => setAddAgentOpen(true)}
-							size="small"
-						>
-							Create Agent
-						</Button>
+						{eoa && (
+							<Button
+								variant="contained"
+								startIcon={<AddIcon />}
+								onClick={() => setAddAgentOpen(true)}
+								size="small"
+							>
+								Create Agent
+							</Button>
+						)}
 					</Stack>
 
 					{/* Search Form */}
@@ -692,32 +1087,43 @@ export function AgentTable() {
 				</Stack>
 			</Paper>
 
-			<TableContainer component={Paper} variant="outlined">
-				<Table size="small">
+			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+				<Table size="small" sx={{ minWidth: 600 }}>
 					<TableHead>
 						<TableRow>
 							<TableCell>Domain</TableCell>
 							<TableCell>Agent Address</TableCell>
 							<TableCell>AgentId</TableCell>
 							<TableCell>Mine</TableCell>
+							{eoa && <TableCell></TableCell>}
 						</TableRow>
 					</TableHead>
 					<TableBody>
-						{!isLoading && (data?.rows?.filter((row) => !mineOnly || owned[row.agentId]).length ?? 0) === 0 && (
+						{!isLoading && (data?.rows?.filter((row) => {
+							const agentIdNum = parseInt(row.agentId);
+							//const isInExcludedRange = agentIdNum >= 5 && agentIdNum <= 10;
+							//return (!mineOnly || owned[row.agentId]) && !isInExcludedRange;
+							return (!mineOnly || owned[row.agentId]);
+						}).length ?? 0) === 0 && (
 							<TableRow>
-								<TableCell colSpan={4} align="center">
+								<TableCell colSpan={eoa ? 5 : 4} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
 							<TableRow>
-								<TableCell colSpan={4} align="center">
+								<TableCell colSpan={eoa ? 5 : 4} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
 						)}
-						{data?.rows?.filter((row) => !mineOnly || owned[row.agentId])?.map((row) => (
+						{data?.rows?.filter((row) => {
+							const agentIdNum = parseInt(row.agentId);
+							const isInExcludedRange = agentIdNum >= 5 && agentIdNum <= 10;
+							return (!mineOnly || owned[row.agentId]) && !isInExcludedRange;
+							//return (!mineOnly || owned[row.agentId]);
+						})?.map((row) => (
 							<TableRow key={row.agentId} hover>
 								<TableCell sx={{ fontWeight: 600 }}>
 									<Stack direction="row" alignItems="center" spacing={1}>
@@ -728,34 +1134,13 @@ export function AgentTable() {
 											size="small"
 											sx={{ 
 												p: 0.5,
-												color: 'primary.main',
-												'&:hover': {
-													color: 'primary.dark',
-													backgroundColor: 'action.hover'
-												}
-											}}
-											title={`Visit ${row.agentDomain.replace(/\/$/, '')}`}
-											onClick={() => {
-												const cleanDomain = row.agentDomain.replace(/\/$/, '');
-												const url = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
-												window.open(url, '_blank');
-											}}
-										>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-												<path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
-											</svg>
-										</IconButton>
-										<IconButton
-											size="small"
-											sx={{ 
-												p: 0.5,
 												color: 'secondary.main',
 												'&:hover': {
 													color: 'secondary.dark',
 													backgroundColor: 'action.hover'
 												}
 											}}
-											title={`View agent card JSON`}
+											title={`Review feedback for ${row.agentDomain.replace(/\/$/, '')}`}
 											onClick={() => {
 												const cleanDomain = row.agentDomain.replace(/\/$/, '');
 												const domain = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
@@ -764,7 +1149,7 @@ export function AgentTable() {
 											}}
 										>
 											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-												<path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+												<path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z" />
 											</svg>
 										</IconButton>
 									</Stack>
@@ -793,6 +1178,7 @@ export function AgentTable() {
 										{owned[row.agentId] && (
 											<>
 												<Button size="small" onClick={() => viewOrCreateCard(row)}>Card</Button>
+												<Button size="small" onClick={() => openEnsFor(row)}>ENS</Button>
 												<Button size="small" onClick={() => openSessionFor(row)} disabled={sessionLoading}>
 													{sessionLoading ? 'Loading...' : 'Session'}
 												</Button>
@@ -809,6 +1195,31 @@ export function AgentTable() {
 								<TableCell>
 									{owned[row.agentId] ? <Chip label="Mine" color="primary" size="small" /> : null}
 								</TableCell>
+								{eoa && (
+									<TableCell>
+										<IconButton
+											size="small"
+											sx={{ 
+												p: 0.5,
+												color: 'primary.main',
+												'&:hover': {
+													color: 'primary.dark',
+													backgroundColor: 'action.hover'
+												}
+											}}
+											title={`Give feedback to ${row.agentDomain.replace(/\/$/, '')}`}
+											onClick={() => {
+												const cleanDomain = row.agentDomain.replace(/\/$/, '');
+												const url = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
+												window.open(url, '_blank');
+											}}
+										>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+												<path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M11,16.5L18,9.5L16.5,8L11,13.5L7.5,10L6,11.5L11,16.5Z" />
+											</svg>
+										</IconButton>
+									</TableCell>
+								)}
 							</TableRow>
 						))}
 					</TableBody>
@@ -1029,6 +1440,227 @@ export function AgentTable() {
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={() => setFeedbackOpen(false)}>Close</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* ENS Dialog */}
+			<Dialog open={ensOpen} onClose={() => setEnsOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					ENS Information for {ensCurrentAgent?.agentAddress}
+				</DialogTitle>
+				<DialogContent>
+					{ensLoading && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+							<Typography>Loading ENS data...</Typography>
+						</Box>
+					)}
+					
+					{isCheckingWrapStatus && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+							<Typography>Checking parent domain status...</Typography>
+						</Box>
+					)}
+					
+					{ensError && (
+						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
+							<Typography color="error">{ensError}</Typography>
+						</Box>
+					)}
+
+					{/* Parent Domain Status */}
+					{!ensLoading && !isCheckingWrapStatus && (
+						<Box sx={{ mb: 2 }}>
+							<Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+								Parent Domain Status
+							</Typography>
+							{isParentWrapped === true && (
+								<Paper sx={{ p: 2, bgcolor: 'success.light' }}>
+									<Typography variant="body2" color="success.dark" sx={{ fontWeight: 600 }}>
+										✅ Parent domain is wrapped
+									</Typography>
+									<Typography variant="body2" sx={{ mt: 1 }}>
+										Domain: {ensParentName}
+									</Typography>
+									<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+										Owner: {parentEnsOwner}
+									</Typography>
+								</Paper>
+							)}
+							{isParentWrapped === false && (
+								<Paper sx={{ p: 2, bgcolor: 'warning.light' }}>
+									<Typography variant="body2" color="warning.dark" sx={{ fontWeight: 600 }}>
+										⚠️ Parent domain is not wrapped
+									</Typography>
+									<Typography variant="body2" sx={{ mt: 1 }}>
+										Domain: {ensParentName}
+									</Typography>
+									<Typography variant="body2" sx={{ mt: 1 }}>
+										Please wrap the parent domain before creating subdomains.
+									</Typography>
+								</Paper>
+							)}
+						</Box>
+					)}
+					
+					{!ensLoading && !ensError && ensData && (
+						<Stack spacing={2}>
+							{ensData.name ? (
+								<>
+									<Paper sx={{ p: 2, bgcolor: 'success.light' }}>
+										<Typography variant="h6" color="success.dark" sx={{ fontWeight: 600 }}>
+											✅ ENS Name Found
+										</Typography>
+										<Typography variant="h5" sx={{ fontFamily: 'ui-monospace, monospace', mt: 1 }}>
+											{ensData.name}
+										</Typography>
+									</Paper>
+									
+									{ensData.avatar && (
+										<Box>
+											<Typography variant="subtitle2" color="primary" sx={{ fontWeight: 600, mb: 1 }}>
+												Avatar:
+											</Typography>
+											<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+												<img 
+													src={ensData.avatar} 
+													alt="ENS Avatar" 
+													style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
+													onError={(e) => {
+														e.currentTarget.style.display = 'none';
+													}}
+												/>
+												<Typography variant="body2" sx={{ 
+													fontFamily: 'ui-monospace, monospace',
+													wordBreak: 'break-all'
+												}}>
+													{ensData.avatar}
+												</Typography>
+											</Box>
+										</Box>
+									)}
+									
+									{(ensData.website || ensData.email || ensData.twitter || ensData.github || ensData.discord) && (
+										<Box>
+											<Typography variant="subtitle2" color="primary" sx={{ fontWeight: 600, mb: 1 }}>
+												Additional Records:
+											</Typography>
+											<Stack spacing={1}>
+												{ensData.website && (
+													<Box>
+														<Typography variant="body2" sx={{ fontWeight: 600 }}>Website:</Typography>
+														<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+															{ensData.website}
+														</Typography>
+													</Box>
+												)}
+												{ensData.email && (
+													<Box>
+														<Typography variant="body2" sx={{ fontWeight: 600 }}>Email:</Typography>
+														<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+															{ensData.email}
+														</Typography>
+													</Box>
+												)}
+												{ensData.twitter && (
+													<Box>
+														<Typography variant="body2" sx={{ fontWeight: 600 }}>Twitter:</Typography>
+														<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+															{ensData.twitter}
+														</Typography>
+													</Box>
+												)}
+												{ensData.github && (
+													<Box>
+														<Typography variant="body2" sx={{ fontWeight: 600 }}>GitHub:</Typography>
+														<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+															{ensData.github}
+														</Typography>
+													</Box>
+												)}
+												{ensData.discord && (
+													<Box>
+														<Typography variant="body2" sx={{ fontWeight: 600 }}>Discord:</Typography>
+														<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+															{ensData.discord}
+														</Typography>
+													</Box>
+												)}
+											</Stack>
+										</Box>
+									)}
+								</>
+							) : (
+								<>
+									<Paper sx={{ p: 2, bgcolor: 'warning.light' }}>
+										<Typography variant="h6" color="warning.dark" sx={{ fontWeight: 600 }}>
+											⚠️ No ENS Name Found
+										</Typography>
+										<Typography variant="body2" sx={{ mt: 1 }}>
+											This address doesn't have an ENS name associated with it.
+										</Typography>
+									</Paper>
+									
+									<Divider sx={{ my: 2 }} />
+									
+									<Box>
+										<Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+											Create ENS Subdomain
+										</Typography>
+										<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+											You can create a subdomain for this agent address if you own a parent ENS domain.
+										</Typography>
+										
+										<Stack spacing={2}>
+											<TextField
+												label="Parent Domain"
+												value={ensParentName}
+												placeholder="mydomain.eth"
+												size="small"
+												fullWidth
+												disabled
+												helperText="Parent domain from environment configuration"
+											/>
+											<TextField
+												label="Subdomain Name"
+												value={ensSubdomainName}
+												onChange={(e) => setEnsSubdomainName(e.target.value)}
+												placeholder="agent1"
+												size="small"
+												fullWidth
+												helperText="Enter the subdomain name (without .eth)"
+											/>
+											<Button
+												variant="contained"
+												onClick={createEnsSubdomain}
+												disabled={
+													ensCreating || 
+													!ensSubdomainName.trim() || 
+													!ensParentName.trim() || 
+													!isParentWrapped
+												}
+												sx={{ alignSelf: 'flex-start' }}
+											>
+												{ensCreating ? 'Creating...' : 'Create Subdomain'}
+											</Button>
+											{!isParentWrapped && (
+												<Typography variant="body2" color="error" sx={{ mt: 1 }}>
+													⚠️ Cannot create subdomain: Parent domain is not wrapped
+												</Typography>
+											)}
+											{isParentWrapped && (
+												<Typography variant="body2" color="success.dark" sx={{ mt: 1 }}>
+													✅ Parent domain is wrapped. The ENS owner's account abstraction will create the subdomain for the agent.
+												</Typography>
+											)}
+										</Stack>
+									</Box>
+								</>
+							)}
+						</Stack>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setEnsOpen(false)}>Close</Button>
 				</DialogActions>
 			</Dialog>
 
