@@ -5,7 +5,7 @@ import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
+import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveat } from '@metamask/delegation-toolkit';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
@@ -936,17 +936,14 @@ export function AgentTable() {
 			// Preferred DTK flow: AA signs delegation with caveats
 			let signedDelegation: any;
 			
-			// Go back to CaveatBuilder but fix the address issue
-			console.log('Creating caveats using CaveatBuilder');
+			// Create caveats with allowed targets
+			console.log('Creating caveats with allowed targets');
 			console.log('reputationRegistry:', reputationRegistry, typeof reputationRegistry);
-			const environment = (smartAccount as any).environment;
 			const registryAddress = String(reputationRegistry).toLowerCase() as `0x${string}`;
 			console.log('registryAddress:', registryAddress);
-			const caveatBuilder = createCaveatBuilder(environment as any);
-			const caveats = caveatBuilder
-				.addCaveat("allowedTargets", [registryAddress] as any)
-				// Remove method restriction for now - just restrict to address
-				.build();
+			const caveats = [
+				createCaveat("0x0000000000000000000000000000000000000000000000000000000000000001", [registryAddress] as any)
+			];
 			
 			const del = await (createDelegation as any)({ 
 				from: aa as `0x${string}`, 
@@ -1624,10 +1621,11 @@ export function AgentTable() {
 												label="Subdomain Name"
 												value={ensSubdomainName}
 												onChange={(e) => setEnsSubdomainName(e.target.value)}
-												placeholder="agent1"
+												placeholder="finder"
 												size="small"
 												fullWidth
-												helperText="Enter the subdomain name (without .eth)"
+												helperText="Enter a single label (no dots). Example: 'finder' creates 'finder.orgtrust.eth'"
+												error={ensSubdomainName.includes('.')}
 											/>
 											<Button
 												variant="contained"
@@ -1636,7 +1634,8 @@ export function AgentTable() {
 													ensCreating || 
 													!ensSubdomainName.trim() || 
 													!ensParentName.trim() || 
-													!isParentWrapped
+													!isParentWrapped ||
+													ensSubdomainName.includes('.')
 												}
 												sx={{ alignSelf: 'flex-start' }}
 											>
@@ -1647,7 +1646,12 @@ export function AgentTable() {
 													⚠️ Cannot create subdomain: Parent domain is not wrapped
 												</Typography>
 											)}
-											{isParentWrapped && (
+											{ensSubdomainName.includes('.') && (
+												<Typography variant="body2" color="error" sx={{ mt: 1 }}>
+													❌ Invalid subdomain name: Cannot contain dots. Use a single label like "finder" instead of "finder.airbnb.org"
+												</Typography>
+											)}
+											{isParentWrapped && !ensSubdomainName.includes('.') && (
 												<Typography variant="body2" color="success.dark" sx={{ mt: 1 }}>
 													✅ Parent domain is wrapped. The ENS owner's account abstraction will create the subdomain for the agent.
 												</Typography>

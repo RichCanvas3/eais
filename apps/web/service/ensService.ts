@@ -1212,8 +1212,24 @@ class ensService {
     ): Promise<string> {
       console.log("Creating subdomain for ORG AA:", label + "." + parentName + ".eth");
       console.log("ORG AA address:", orgAccountAddress);
+      console.log("subdomain name:", label + "." + parentName + ".eth");
 
       validateSepoliaChain(chain);
+
+      // Validate that the label is a single label (no dots)
+      if (label.includes('.')) {
+        throw new Error(`Invalid subdomain label: "${label}". ENS subdomain labels cannot contain dots. Please use a single label like "finder" instead of "finder.airbnb.org".`);
+      }
+
+      // Validate that the label is not empty and contains only valid characters
+      if (!label || label.length === 0) {
+        throw new Error('Subdomain label cannot be empty');
+      }
+
+      // Validate label format (alphanumeric and hyphens only)
+      if (!/^[a-zA-Z0-9-]+$/.test(label)) {
+        throw new Error(`Invalid subdomain label: "${label}". Only alphanumeric characters and hyphens are allowed.`);
+      }
 
             try {
         const ensOwnerAddress = await ensOwnerClient.getAddress();
@@ -1382,7 +1398,7 @@ class ensService {
         // Wait and verify
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-                 // Verify subdomain creation
+        // Verify subdomain creation
          let subdomainOwner;
          // Since we know the parent is wrapped, check NameWrapper
          subdomainOwner = await nameWrapper.ownerOf(subnode);
