@@ -1204,7 +1204,8 @@ class ensService {
      */
     static async createSubdomainForOrg(
       signer: ethers.JsonRpcSigner, 
-      ensOwnerClient: MetaMaskSmartAccount, 
+      ensOwnerClient: MetaMaskSmartAccount,
+      orgAccountClient: MetaMaskSmartAccount,
       orgAccountAddress: `0x${string}`, 
       parentName: string, 
       label: string, 
@@ -1310,19 +1311,23 @@ class ensService {
          console.log('Parent node:', parentNode);
          console.log('Subnode:', subnode);
 
-         // Check if subdomain already exists
-         try {
-           let subdomainOwner;
-           // Since we know the parent is wrapped (we checked above), check NameWrapper
-           subdomainOwner = await nameWrapper.ownerOf(subnode);
+        // Check if subdomain already exists
+        let subdomainExists = false;
+        let existingSubdomainOwner = null;
+        try {
+          let subdomainOwner;
+          // Since we know the parent is wrapped (we checked above), check NameWrapper
+          subdomainOwner = await nameWrapper.ownerOf(subnode);
 
-           if (subdomainOwner !== '0x0000000000000000000000000000000000000000') {
-             console.log('Subdomain already exists, owner:', subdomainOwner);
-             throw new Error(`Subdomain "${label}.${parentName}.eth" already exists and is owned by ${subdomainOwner}`);
-           }
-         } catch (error) {
-           console.log('Subdomain does not exist yet, proceeding with creation');
-         }
+          if (subdomainOwner !== '0x0000000000000000000000000000000000000000') {
+            console.log('Subdomain already exists, owner:', subdomainOwner);
+            subdomainExists = true;
+            existingSubdomainOwner = subdomainOwner;
+            console.log(`ℹ️ Subdomain "${label}.${parentName}.eth" already exists, skipping creation but will attempt reverse record setup`);
+          }
+        } catch (error) {
+          console.log('Subdomain does not exist yet, proceeding with creation');
+        }
 
         // Create bundler client and get gas prices (with paymaster like the test)
         const bundlerClient = createBundlerClient({
@@ -1347,66 +1352,156 @@ class ensService {
           verificationGasLimit: 500000n
         };
 
-        // Create subdomain using NameWrapper's setSubnodeRecord
-        // This creates the subdomain and sets the ORG AA as the owner
-        console.log('Creating subdomain via NameWrapper...');
-        const subdomainData = encodeFunctionData({
-          abi: NameWrapperABI.abi,
-          functionName: 'setSubnodeRecord',
-          args: [
-            parentNode, // parent node
-            label, // label (string, not hash)
-            orgAccountAddress, // owner (ORG AA address)
-            publicResolver.target as `0x${string}`, // resolver
-            0n, // TTL (0 = no expiration) - uint64
-            0, // fuses (0 = no restrictions) - uint32
-            0n // expiry (0 = no expiration) - uint64
-          ]
-        });
+        let subdomainOpHash = null;
+        let receipt = null;
 
-        console.log('Create subdomain call details:', {
-          to: nameWrapper.target,
-          data: subdomainData,
-          parentNode,
-          label: label,
-          owner: orgAccountAddress,
-          resolver: publicResolver.target,
-          ttl: 0n,
-          fuses: 0,
-          expiry: 0n
-        });
+        if (!subdomainExists) {
+          // Create subdomain using NameWrapper's setSubnodeRecord
+          // This creates the subdomain and sets the ORG AA as the owner
+          console.log('Creating subdomain via NameWrapper...');
+          const subdomainData = encodeFunctionData({
+            abi: NameWrapperABI.abi,
+            functionName: 'setSubnodeRecord',
+            args: [
+              parentNode, // parent node
+              label, // label (string, not hash)
+              orgAccountAddress, // owner (ORG AA address)
+              publicResolver.target as `0x${string}`, // resolver
+              0n, // TTL (0 = no expiration) - uint64
+              0, // fuses (0 = no restrictions) - uint32
+              0n // expiry (0 = no expiration) - uint64
+            ]
+          });
 
-        const subdomainOpHash = await bundlerClient.sendUserOperation({
-          account: ensOwnerClient,
-          calls: [{
-            to: nameWrapper.target as `0x${string}`,
+          console.log('Create subdomain call details:', {
+            to: nameWrapper.target,
             data: subdomainData,
-            value: 0n
-          }],
-          ...gasConfig
-        });
+            parentNode,
+            label: label,
+            owner: orgAccountAddress,
+            resolver: publicResolver.target,
+            ttl: 0n,
+            fuses: 0,
+            expiry: 0n
+          });
 
-        console.log('Subdomain creation transaction sent:', subdomainOpHash);
+          subdomainOpHash = await bundlerClient.sendUserOperation({
+            account: ensOwnerClient,
+            calls: [{
+              to: nameWrapper.target as `0x${string}`,
+              data: subdomainData,
+              value: 0n
+            }],
+            ...gasConfig
+          });
 
-        // Wait for confirmation
-        const { receipt } = await bundlerClient.waitForUserOperationReceipt({
-          hash: subdomainOpHash,
-        });
+          console.log('Subdomain creation transaction sent:', subdomainOpHash);
 
-        console.log('Subdomain created successfully:', receipt);
+          // Wait for confirmation
+          receipt = await bundlerClient.waitForUserOperationReceipt({
+            hash: subdomainOpHash,
+          });
 
-        // Wait and verify
-        await new Promise(resolve => setTimeout(resolve, 5000));
+          console.log('Subdomain created successfully:', receipt);
 
-        // Verify subdomain creation
-         let subdomainOwner;
-         // Since we know the parent is wrapped, check NameWrapper
-         subdomainOwner = await nameWrapper.ownerOf(subnode);
+          // Wait and verify
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+          console.log('Skipping subdomain creation - already exists');
+        }
 
-        console.log('New subdomain owner:', subdomainOwner);
+        // Verify subdomain ownership
+        let subdomainOwner;
+        // Since we know the parent is wrapped, check NameWrapper
+        subdomainOwner = await nameWrapper.ownerOf(subnode);
 
+        console.log('Subdomain owner:', subdomainOwner);
+
+        if (subdomainExists) {
+          console.log(`ℹ️ Subdomain "${label}.${parentName}.eth" already exists and is owned by ${subdomainOwner}`);
+        } else {
+          console.log(`✅ Subdomain "${label}.${parentName}.eth" created successfully and owned by ${subdomainOwner}!`);
+        }
+
+        // Proceed with reverse record setup regardless of whether subdomain was created or already existed
         if (subdomainOwner.toLowerCase() === orgAccountAddress.toLowerCase()) {
-          console.log(`✅ Subdomain "${label}.${parentName}.eth" created successfully and owned by ORG AA!`);
+          console.log(`✅ Subdomain ownership verified - proceeding with reverse record setup`);
+          
+          // Set reverse address record for the subdomain
+          // Note: This needs to be done by the agent's account abstraction, not the ENS owner
+          // because the agent owns the address that needs the reverse record
+          try {
+            console.log("Setting reverse address record for subdomain...");
+            const ensFullName = label + '.' + parentName + '.eth';
+            
+            // Set reverse record
+            const reverseNode = namehash(orgAccountAddress.slice(2).toLowerCase() + '.addr.reverse');
+            console.log("Reverse node:", reverseNode);
+
+            let currentReverseName;
+            try {
+                currentReverseName = await publicClient.readContract({
+                    address: publicResolver.target as `0x${string}`,
+                    abi: PublicResolverABI.abi,
+                    functionName: 'name',
+                    args: [reverseNode]
+                });
+                console.log("Current reverse name record:", currentReverseName);
+            } catch (error) {
+                console.log("Could not read current reverse name:", error);
+                currentReverseName = '';
+            }
+
+            console.log("Current reverse name:", currentReverseName);
+            if (currentReverseName !== ensFullName) {
+                console.log("Setting reverse name record using agent's account abstraction...");
+                const setNameData = encodeFunctionData({
+                    abi: PublicResolverABI.abi,
+                    functionName: 'setName',
+                    args: [reverseNode, ensFullName]
+                });
+
+
+                // Now set the reverse record using the agent's AA
+
+
+                const resolverAddress = await publicClient.readContract({
+                    address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+                    abi: [{
+                        name: 'resolver',
+                        type: 'function',
+                        stateMutability: 'view',
+                        inputs: [{ name: 'node', type: 'bytes32' }],
+                        outputs: [{ name: '', type: 'address' }]
+                    }],
+                    functionName: 'resolver',
+                    args: [subnode]
+                });
+
+                console.log("Setting reverse name record using agent's AA...");
+                console.log("subdomain Resolver address:", resolverAddress);
+                const reverseUserOperationHash = await bundlerClient.sendUserOperation({
+                    account: orgAccountClient,
+                    calls: [{
+                        to: resolverAddress as `0x${string}`,
+                        data: setNameData,
+                        value: 0n
+                    }],
+                    ...gasConfig
+                });
+
+                const { receipt: reverseReceipt } = await bundlerClient.waitForUserOperationReceipt({
+                    hash: reverseUserOperationHash,
+                });
+                console.log("✅ Reverse name record set successfully");
+            } else {
+                console.log("✅ Reverse name record already set correctly");
+            }
+          } catch (reverseError) {
+            console.error("⚠️ Warning: Failed to set reverse address record:", reverseError);
+            // Don't throw here - subdomain creation was successful, reverse record is optional
+          }
+          
           return label + '.' + parentName + '.eth';
         } else {
           throw new Error(

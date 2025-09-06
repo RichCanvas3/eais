@@ -804,11 +804,24 @@ export function AgentTable() {
 			const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
 			const ensOwnerSigner = ensOwnerWallet.connect(ethersProvider);
 
+			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+
+			const deploySalt = BigInt(keccak256(stringToHex(ensCurrentAgent.agentDomain.trim().toLowerCase())));
+			const agentAA = await toMetaMaskSmartAccount({
+				client: publicClient,
+				implementation: Implementation.Hybrid,
+				deployParams: [eoa as `0x${string}`, [], [], []],
+				signatory: { walletClient },
+				deploySalt: toHex(deploySalt) as `0x${string}`,
+			} as any);
+			console.log('🔧 **************8888 Agent AA Address:', await agentAA.getAddress());
+
 			// Create subdomain using ENS owner AA with paymaster
 			// The agent address will be the owner of the subdomain
 			const result = await ensService.createSubdomainForOrg(
 				ensOwnerSigner as any, // Cast to any to bypass type issues
-				ensOwnerAA, 
+				ensOwnerAA,
+				agentAA,
 				ensCurrentAgent.agentAddress as `0x${string}`, // Agent address as subdomain owner
 				cleanParentName, 
 				subdomainName, 
