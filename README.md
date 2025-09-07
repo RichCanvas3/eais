@@ -15,6 +15,10 @@ Just as **EAS (Ethereum Attestation Service)** serves as an explorer and interfa
 * **ERC-8004 Identity Registry**  
 Agents are registered in a decentralized **Identity Registry**, each receiving an immutable `agentId`, `agentDomain`, and on-chain `agentAddress`. This makes agents universally discoverable and verifiable across the agent economy.
 
+* **Web3Auth Embedded Wallet, Bundler, and Paymaster.  Simplified UI with zero gas or auth popups**
+User never see's a traditional ethereum wallet UI engagagement for creating EOA, creating Account Abstraction, creating an ENS entry/Wrapped NFT/reverse looking, and Delegations.  All gas fees are covered by paymaster. 
+
+
 * **Multi-Agent Management via Account Abstraction (ERC-4337)**  
 EAIS leverages **Account Abstraction (AA)** to let a single embedded wallet manage multiple agents. Each registered agent is automatically assigned its own **dedicated AA smart account**, giving it isolated signing authority and preventing exposure of the primary EOA.
 
