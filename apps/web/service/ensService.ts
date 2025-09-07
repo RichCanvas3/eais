@@ -212,6 +212,21 @@ class ensService {
                         args: [reverseNode]
                     });
                     console.log("Current reverse name record:", currentReverseName);
+
+                    const reverseRegistrar = await publicClient.readContract({
+                        address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+                        abi: [{
+                          name: "owner",
+                          type: "function",
+                          stateMutability: "view",
+                          inputs: [{ name: "node", type: "bytes32" }],
+                          outputs: [{ name: "", type: "address" }],
+                        }],
+                        functionName: "owner",
+                        args: [reverseNode],
+                      });
+                    console.log("*********** Reverse registrar:", reverseRegistrar);
+
                 } catch (error) {
                     console.log("Could not read current reverse name:", error);
                     currentReverseName = '';
@@ -1439,7 +1454,9 @@ class ensService {
             console.log("Reverse node:", reverseNode);
 
             let currentReverseName;
+            let reverseRegistrar;
             try {
+                /*
                 currentReverseName = await publicClient.readContract({
                     address: publicResolver.target as `0x${string}`,
                     abi: PublicResolverABI.abi,
@@ -1447,24 +1464,87 @@ class ensService {
                     args: [reverseNode]
                 });
                 console.log("Current reverse name record:", currentReverseName);
+                */
+
+                const ourReverseRegistrar = await publicClient.readContract({
+                    address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+                    abi: [{
+                      name: "owner",
+                      type: "function",
+                      stateMutability: "view",  
+                      inputs: [{ name: "node", type: "bytes32" }],
+                      outputs: [{ name: "", type: "address" }],
+                    }],
+                    functionName: "owner",
+                    args: [reverseNode],
+                  });
+                console.log("*********** Reverse registrar for our reverse node:", ourReverseRegistrar);
+
+                const resolverAbi = [
+                    // reverse: get primary name
+                    { name: "name", stateMutability: "view", type: "function",
+                      inputs: [{ name: "node", type: "bytes32" }], outputs: [{ type: "string" }] },
+                    // forward: get ETH addr (overload 1)
+                    { name: "addr", stateMutability: "view", type: "function",
+                      inputs: [{ name: "node", type: "bytes32" }], outputs: [{ type: "address" }] },
+                    // forward: multi-coin (overload 2)
+                    { name: "addr", stateMutability: "view", type: "function",
+                      inputs: [{ name: "node", type: "bytes32" }, { name: "coinType", type: "uint256" }],
+                      outputs: [{ type: "bytes" }] },
+                  ];
+                  currentReverseName = await publicClient.readContract({
+                    address: ourReverseRegistrar, abi: resolverAbi, functionName: "name", args: [reverseNode],
+                  });
+                  console.log("*********** Current reverse name:", currentReverseName);
+
+
+                const BASE_REVERSE_NODE = namehash("addr.reverse");
+                reverseRegistrar = await publicClient.readContract({
+                    address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+                    abi: [{
+                      name: "owner",
+                      type: "function",
+                      stateMutability: "view",
+                      inputs: [{ name: "node", type: "bytes32" }],
+                      outputs: [{ name: "", type: "address" }],
+                    }],
+                    functionName: "owner",
+                    args: [BASE_REVERSE_NODE],
+                  });
+                console.log("*********** Reverse registrar:", reverseRegistrar);
             } catch (error) {
                 console.log("Could not read current reverse name:", error);
-                currentReverseName = '';
+                reverseRegistrar = '';
             }
 
             console.log("Current reverse name:", currentReverseName);
             if (currentReverseName !== ensFullName) {
                 console.log("Setting reverse name record using agent's account abstraction...");
+
+                /*
                 const setNameData = encodeFunctionData({
                     abi: PublicResolverABI.abi,
                     functionName: 'setName',
                     args: [reverseNode, ensFullName]
                 });
+                */
+
+                const setNameData = encodeFunctionData({
+                    abi: [{
+                      name: "setName",
+                      type: "function",
+                      stateMutability: "nonpayable",
+                      inputs: [{ name: "name", type: "string" }],
+                      outputs: [{ name: "node", type: "bytes32" }],
+                    }],
+                    functionName: "setName",
+                    args: [ensFullName], // e.g. "finder-airbnb-com.orgtrust.eth"
+                  });
 
 
                 // Now set the reverse record using the agent's AA
 
-
+/*
                 const resolverAddress = await publicClient.readContract({
                     address: ENS_REGISTRY_ADDRESS as `0x${string}`,
                     abi: [{
@@ -1477,13 +1557,14 @@ class ensService {
                     functionName: 'resolver',
                     args: [subnode]
                 });
+                */
 
                 console.log("Setting reverse name record using agent's AA...");
-                console.log("subdomain Resolver address:", resolverAddress);
+                console.log("reverseRegistrar:", reverseRegistrar);
                 const reverseUserOperationHash = await bundlerClient.sendUserOperation({
                     account: orgAccountClient,
                     calls: [{
-                        to: resolverAddress as `0x${string}`,
+                        to: reverseRegistrar as `0x${string}`,
                         data: setNameData,
                         value: 0n
                     }],
