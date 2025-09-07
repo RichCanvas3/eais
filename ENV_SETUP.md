@@ -7,6 +7,9 @@ Add the following environment variable to your `.env.local` file in the `apps/we
 ```bash
 # ENS Identity Wrapper Contract Address
 NEXT_PUBLIC_ENS_IDENTITY_WRAPPER=0x0635513f179D50A207757E05759CbD106d7dFcE8
+
+# ENS Registry Contract Address
+NEXT_PUBLIC_ENS_REGISTRY=0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e
 ```
 
 ## How to Add
@@ -18,13 +21,15 @@ NEXT_PUBLIC_ENS_IDENTITY_WRAPPER=0x0635513f179D50A207757E05759CbD106d7dFcE8
 
 ## Fallback
 
-If the environment variable is not set, the code will fallback to the hardcoded address `0x0635513f179D50A207757E05759CbD106d7dFcE8`.
+If the environment variables are not set, the code will fallback to the hardcoded addresses:
+- `NEXT_PUBLIC_ENS_IDENTITY_WRAPPER` → `0x0635513f179D50A207757E05759CbD106d7dFcE8`
+- `NEXT_PUBLIC_ENS_REGISTRY` → `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
 
 ## Files Updated
 
-The following files have been updated to use the environment variable:
+The following files have been updated to use the environment variables:
 
 - `apps/web/components/AgentTable.tsx`
 - `apps/web/service/ensService.ts`
 
-All references to the hardcoded ENS Identity Wrapper address have been replaced with the environment variable with fallback to the original address.
+All references to the hardcoded ENS contract addresses have been replaced with environment variables with fallback to the original addresses.

@@ -79,7 +79,7 @@ class ensService {
         console.log("Current ENS address:", ensAddress);
 
 
-        const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
         const ENSRegistryABI = ['function resolver(bytes32 node) view returns (address)'];
 
 
@@ -133,7 +133,7 @@ class ensService {
                 console.log("Smart Account Address for ENS records:", smartAccountAddress);
 
                 // Get resolver address first
-                const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+                const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
                 const node = namehash(ensFullName);
 
 
@@ -898,7 +898,7 @@ class ensService {
         provider
       );
 
-      const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+                const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
       const ensRegistry = new ethers.Contract(
         ENS_REGISTRY_ADDRESS,
         ['function owner(bytes32 node) view returns (address)'],
@@ -1045,7 +1045,7 @@ class ensService {
           signer
         );
 
-        const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
         const ensRegistry = new ethers.Contract(
           ENS_REGISTRY_ADDRESS,
           ['function owner(bytes32 node) view returns (address)', 'function setSubnodeRecord(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl) external'],
@@ -1259,7 +1259,7 @@ class ensService {
         });
 
         // Check if the parent domain is wrapped by checking if ENS Registry owner is NameWrapper
-        const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
         const parentNode = namehash(parentName + '.eth');
         
         const parentOwner = await publicClient.readContract({
@@ -1457,20 +1457,7 @@ class ensService {
             let currentReverseName;
             let reverseRegistrar;
             try {
-                /*
-                currentReverseName = await publicClient.readContract({
-                    address: publicResolver.target as `0x${string}`,
-                    abi: PublicResolverABI.abi,
-                    functionName: 'name',
-                    args: [reverseNode]
-                });
-                console.log("Current reverse name record:", currentReverseName);
-                */
-                console.log("*********** Our reverse name or ens address::", await this.getEnsName("orgtrust.eth", chain));
-                console.log("*********** Our reverse name or agent address::", await this.getEnsName("finder-airbnb-com.orgtrust.eth", chain));
-                
-                console.log("*********** Our reverse name or ens owner::", await this.getEnsName(ensOwnerClient.address, chain));
-                console.log("*********** Our reverse name:", await this.getEnsName(orgAccountAddress, chain));
+
                 const ourReverseRegistrar = await publicClient.readContract({
                     address: ENS_REGISTRY_ADDRESS as `0x${string}`,
                     abi: [{
@@ -1640,7 +1627,7 @@ class ensService {
                 transport: http(process.env.NEXT_PUBLIC_RPC_URL),
             });
 
-            const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
 
 
             // 1a) Get current resolver for the name
@@ -1664,12 +1651,6 @@ class ensService {
                 console.log("........... owner:", owner);
 
 
-            // finder-airbnb-com.orgtrust.eth
-            // tokenId: 74342745848248901885787098128425663590331074765106361805774616024450061013558
-            // ownership manager: 0x9BB3810939339E589c55b7357B2057286CaBe760
-            // parent owner: 0x905f406Ad2D097565297980660657Ab9Dca827EA
-
-            // actual owner: 0x9BB3810939339E589c55b7357B2057286CaBe760
 
             console.log("........... agent address:", agentAA.address);
 
@@ -1759,7 +1740,7 @@ class ensService {
 
 
                 const BASE_REVERSE_NODE = namehash("addr.reverse");
-                const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+                const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
                 const reverseRegistrar = await publicClient.readContract({
                     address: ENS_REGISTRY_ADDRESS as `0x${string}`,
                     abi: [{
@@ -1886,7 +1867,7 @@ class ensService {
                 transport: http(process.env.NEXT_PUBLIC_RPC_URL),
             });
 
-            const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
 
 
             // 1a) Get current resolver for the name
@@ -1909,13 +1890,6 @@ class ensService {
                 });
                 console.log("........... owner:", owner);
 
-
-            // finder-airbnb-com.orgtrust.eth
-            // tokenId: 74342745848248901885787098128425663590331074765106361805774616024450061013558
-            // ownership manager: 0x9BB3810939339E589c55b7357B2057286CaBe760
-            // parent owner: 0x905f406Ad2D097565297980660657Ab9Dca827EA
-
-            // actual owner: 0x9BB3810939339E589c55b7357B2057286CaBe760
 
             console.log("........... agent address:", agentAA.address);
 
@@ -2112,7 +2086,7 @@ class ensService {
                 transport: http(process.env.NEXT_PUBLIC_RPC_URL),
             });
 
-            const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
             const node = namehash(ensFullName);
 
             // Get resolver address
@@ -2213,7 +2187,7 @@ class ensService {
             // Use fixed gas fees like in your codebase
             const fee = {maxFeePerGas: 412596685n, maxPriorityFeePerGas: 412596676n};
 
-            const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
             const node = namehash(ensFullName);
 
             // First check if the ENS name exists by getting its owner
