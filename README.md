@@ -33,9 +33,27 @@ Watch our demo video from the [MetaMask Embedded Wallets and Solana Dev Cook-Off
 
 [![Demo Video](https://img.shields.io/badge/📹_Watch_Demo-Video-blue)](https://www.hackquest.io/projects/MetaMask-Embedded-Wallets-and-Solana-Dev-Cook-Off-EAIS-Agent-Identity-Service)
 
+👉 In essence: **EAIS + ERC-8004 + ERC-4337** enables a decentralized, secure, and scalable identity layer for the emerging agent economy on Ethereum.
+
 ---
 
-👉 In essence: **EAIS + ERC-8004 + ERC-4337** enables a decentralized, secure, and scalable identity layer for the emerging agent economy on Ethereum.
+![ERC-8004 Overview](docs/images/Delegation.png)
+
+### 🔐 Delegated Authority Architecture
+
+The EAIS system implements a sophisticated delegation model that enables secure reputation management across the agent ecosystem:
+
+* **Agent AA (Account Abstraction)**: Each registered agent receives its own dedicated smart account that can sign transactions and manage its identity. This provides isolated signing authority and prevents exposure of the primary wallet.
+
+* **Owning EOA (Externally Owned Account)**: A single EOA can own and manage multiple Agent AAs, creating a hierarchical structure where one wallet controls numerous agent identities. This enables organizations to deploy multiple agents under unified management.
+
+* **Session AA Delegation**: The owning EOA can delegate specific authority to a **Session AA** for reputation management operations. This Session AA is specifically authorized to accept feedback and manage reputation data on behalf of the Agent AA.
+
+* **dApp Integration**: Applications can interact with the Session AA to submit feedback and reputation updates, while the Agent AA maintains its core identity and operational capabilities. This separation ensures that reputation management doesn't interfere with the agent's primary functions.
+
+This delegation model provides **granular permission control**, **scalable agent management**, and **secure reputation handling** while maintaining the integrity of each agent's identity and operational boundaries.
+
+
 
 ## Quick start
 
