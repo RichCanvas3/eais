@@ -1048,28 +1048,28 @@ export function AgentTable() {
 					</Stack>
 
 					{/* Search Form */}
-					<Box component="form" onSubmit={handleSubmit}>
-						<Grid container spacing={2}>
-							<Grid item xs={12} md={3}>
+				<Box component="form" onSubmit={handleSubmit}>
+					<Grid container spacing={2}>
+						<Grid item xs={12} md={3}>
 								<TextField fullWidth label="Agent domain" placeholder="Filter by agent domain" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
-							</Grid>
-							<Grid item xs={12} md={3}>
-								<TextField fullWidth label="Agent address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
-							</Grid>
-							<Grid item xs={12} md={3}>
-								<TextField fullWidth label="AgentId" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
-							</Grid>
-							<Grid item xs={12} md={1}>
-								<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
-							</Grid>
-							<Grid item xs={12} md={2}>
-								<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
-									<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={isLoading}>{isLoading ? 'Searching…' : 'Search'}</Button>
-									<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={isLoading} onClick={clearFilters}>Clear</Button>
-								</Stack>
-							</Grid>
 						</Grid>
-					</Box>
+						<Grid item xs={12} md={3}>
+							<TextField fullWidth label="Agent address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
+						</Grid>
+						<Grid item xs={12} md={3}>
+							<TextField fullWidth label="AgentId" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
+						</Grid>
+						<Grid item xs={12} md={1}>
+							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
+						</Grid>
+						<Grid item xs={12} md={2}>
+							<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
+								<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={isLoading}>{isLoading ? 'Searching…' : 'Search'}</Button>
+								<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={isLoading} onClick={clearFilters}>Clear</Button>
+							</Stack>
+						</Grid>
+					</Grid>
+				</Box>
 				</Stack>
 			</Paper>
 
@@ -1230,7 +1230,7 @@ export function AgentTable() {
 											onClick={() => openEnsFor(row)}
 											title={`Manage ENS for ${agentEnsNames[row.agentAddress]}`}
 										/>
-									) : (
+									) : eoa ? (
 										<Chip 
 											label="Set ENS" 
 											size="small" 
@@ -1247,6 +1247,10 @@ export function AgentTable() {
 											onClick={() => openEnsFor(row)}
 											title="Set up ENS for this agent"
 										/>
+									) : (
+										<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+											No ENS
+										</Typography>
 									)}
 								</TableCell>
 								<TableCell>
@@ -1505,74 +1509,128 @@ export function AgentTable() {
 
 			{/* ENS Dialog */}
 			<Dialog open={ensOpen} onClose={() => setEnsOpen(false)} maxWidth="md" fullWidth>
-				<DialogTitle>
-					ENS Information for {ensCurrentAgent?.agentAddress}
+				<DialogTitle sx={{ pb: 1 }}>
+					<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+						<Box>
+							<Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+								Agent ENS Domain
+							</Typography>
+							{ensData?.name && (
+								<Typography 
+									variant="h6" 
+									sx={{ 
+										fontFamily: 'ui-monospace, monospace', 
+										color: 'primary.main',
+										fontWeight: 500,
+										cursor: 'pointer',
+										'&:hover': {
+											textDecoration: 'underline'
+										}
+									}}
+									onClick={() => {
+										window.open(`https://sepolia.app.ens.domains/${ensData.name}`, '_blank');
+									}}
+								>
+									{ensData.name}
+								</Typography>
+							)}
+						</Box>
+					</Box>
 				</DialogTitle>
 				<DialogContent>
 					{ensLoading && (
-						<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
 							<Typography>Loading ENS data...</Typography>
 						</Box>
 					)}
 					
 					{isCheckingWrapStatus && (
-						<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
 							<Typography>Checking parent domain status...</Typography>
 						</Box>
 					)}
 					
 					{ensError && (
-						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
+						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 2, mb: 3 }}>
 							<Typography color="error">{ensError}</Typography>
-						</Box>
-					)}
-
-					{/* Parent Domain Status */}
-					{!ensLoading && !isCheckingWrapStatus && (
-						<Box sx={{ mb: 2 }}>
-							<Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
-								Parent Domain Status
-							</Typography>
-							{isParentWrapped === true && (
-								<Paper sx={{ p: 2, bgcolor: 'success.light' }}>
-									<Typography variant="body2" color="success.dark" sx={{ fontWeight: 600 }}>
-										✅ Parent domain is wrapped
-									</Typography>
-									<Typography variant="body2" sx={{ mt: 1 }}>
-										Domain: {ensParentName}
-									</Typography>
-									<Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
-										Owner: {parentEnsOwner}
-									</Typography>
-								</Paper>
-							)}
-							{isParentWrapped === false && (
-								<Paper sx={{ p: 2, bgcolor: 'warning.light' }}>
-									<Typography variant="body2" color="warning.dark" sx={{ fontWeight: 600 }}>
-										⚠️ Parent domain is not wrapped
-									</Typography>
-									<Typography variant="body2" sx={{ mt: 1 }}>
-										Domain: {ensParentName}
-									</Typography>
-									<Typography variant="body2" sx={{ mt: 1 }}>
-										Please wrap the parent domain before creating subdomains.
-									</Typography>
-								</Paper>
-							)}
 						</Box>
 					)}
 					
 					{!ensLoading && !ensError && ensData && (
-						<Stack spacing={2}>
+						<Stack spacing={3}>
 							{ensData.name ? (
 								<>
-									<Paper sx={{ p: 2, bgcolor: 'success.light' }}>
-										<Typography variant="h6" color="success.dark" sx={{ fontWeight: 600 }}>
-											✅ ENS Name Found
-										</Typography>
-										<Typography variant="h5" sx={{ fontFamily: 'ui-monospace, monospace', mt: 1 }}>
-											{ensData.name}
-										</Typography>
+									{/* ENS Domain Information */}
+									<Paper sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+										<Stack spacing={2}>
+
+											{/* Owner Address */}
+											<Box>
+												<Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+													Owner
+												</Typography>
+												<Typography 
+													variant="body1" 
+													sx={{ 
+														fontFamily: 'ui-monospace, monospace',
+														color: 'primary.main',
+														cursor: 'pointer',
+														'&:hover': {
+															textDecoration: 'underline'
+														}
+													}}
+													onClick={() => window.open(`https://sepolia.etherscan.io/address/${ensCurrentAgent?.agentAddress}`, '_blank')}
+												>
+													{ensCurrentAgent?.agentAddress}
+												</Typography>
+											</Box>
+
+											{/* NFT Wrapper Link */}
+											<Box>
+												<Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+													NFT Wrapper
+												</Typography>
+												<Box sx={{ 
+													p: 2, 
+													bgcolor: 'white', 
+													borderRadius: 1,
+													border: '1px solid',
+													borderColor: 'info.main',
+													display: 'flex',
+													alignItems: 'center',
+													gap: 1,
+													cursor: 'pointer',
+													'&:hover': {
+														bgcolor: 'grey.50',
+														'& .nft-icon': {
+															filter: 'brightness(0) invert(1)'
+														}
+													}
+												}}
+												onClick={() => {
+													if (ensData.name) {
+														const tokenId = BigInt(namehash(ensData.name as string));
+														const nftUrl = `https://sepolia.etherscan.io/nft/${(process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8'}/${tokenId}`;
+														window.open(nftUrl, '_blank');
+													}
+												}}
+												>
+													<img 
+														src="https://sepolia.etherscan.io/images/main/nft-placeholder.svg" 
+														alt="NFT" 
+														className="nft-icon"
+														style={{ 
+															width: 24, 
+															height: 24,
+															transition: 'filter 0.2s ease'
+														}} 
+													/>
+													<Typography variant="body2" sx={{ fontWeight: 500 }}>
+														View on Etherscan
+													</Typography>
+												</Box>
+											</Box>
+										</Stack>
 									</Paper>
 									
 									{ensData.avatar && (
@@ -1651,26 +1709,38 @@ export function AgentTable() {
 								</>
 							) : (
 								<>
-									<Paper sx={{ p: 2, bgcolor: 'warning.light' }}>
-										<Typography variant="h6" color="warning.dark" sx={{ fontWeight: 600 }}>
-											⚠️ No ENS Name Found
-										</Typography>
-										<Typography variant="body2" sx={{ mt: 1 }}>
-											This address doesn't have an ENS name associated with it.
-										</Typography>
+									{/* No ENS Name Found */}
+									<Paper sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+										<Stack spacing={2}>
+											<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+												<Box sx={{ 
+													width: 8, 
+													height: 8, 
+													borderRadius: '50%', 
+													bgcolor: 'warning.main' 
+												}} />
+												<Typography variant="h6" sx={{ fontWeight: 600 }}>
+													No ENS Domain Found
+												</Typography>
+											</Box>
+											
+											<Typography variant="body2" color="text.secondary">
+												This agent address doesn't have an ENS domain associated with it. You can create a subdomain if you own a parent ENS domain.
+											</Typography>
+										</Stack>
 									</Paper>
 									
-									<Divider sx={{ my: 2 }} />
-									
-									<Box>
-										<Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-											Create ENS Subdomain
-										</Typography>
-										<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-											You can create a subdomain for this agent address if you own a parent ENS domain.
-										</Typography>
-										
+									{/* Create ENS Subdomain Section */}
+									<Paper sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
 										<Stack spacing={2}>
+											<Typography variant="h6" sx={{ fontWeight: 600 }}>
+												Create ENS Subdomain
+											</Typography>
+											<Typography variant="body2" color="text.secondary">
+												Create a subdomain for this agent address using your parent ENS domain.
+											</Typography>
+											
+											<Stack spacing={2}>
 											<TextField
 												label="Parent Domain"
 												value={ensParentName}
@@ -1719,11 +1789,114 @@ export function AgentTable() {
 													✅ Parent domain is wrapped. The ENS owner's account abstraction will create the subdomain for the agent.
 												</Typography>
 											)}
+											</Stack>
 										</Stack>
-									</Box>
+									</Paper>
 								</>
 							)}
 						</Stack>
+					)}
+
+					{/* Parent Domain */}
+					{!ensLoading && !isCheckingWrapStatus && (
+						<Box sx={{ mt: 3 }}>
+							<Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+								Parent Domain
+							</Typography>
+							{isParentWrapped === true && (
+								<Paper sx={{ p: 3, border: '1px solid', borderColor: 'success.main', borderRadius: 2 }}>
+
+												<Box>
+													<Typography variant="body2" color="text.secondary">
+														Domain
+													</Typography>
+													<Typography 
+														variant="body1" 
+														sx={{ 
+															fontFamily: 'ui-monospace, monospace',
+															color: 'primary.main',
+															cursor: 'pointer',
+															'&:hover': {
+																textDecoration: 'underline'
+															}
+														}}
+														onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
+													>
+														{ensParentName}
+													</Typography>
+												</Box>
+												<Box>
+													<Typography variant="body2" color="text.secondary">
+														Owner
+													</Typography>
+													<Typography 
+														variant="body1" 
+														sx={{ 
+															fontFamily: 'ui-monospace, monospace',
+															color: 'primary.main',
+															cursor: 'pointer',
+															'&:hover': {
+																textDecoration: 'underline'
+															}
+														}}
+														onClick={() => window.open(`https://sepolia.etherscan.io/address/${parentEnsOwner}`, '_blank')}
+													>
+														{parentEnsOwner}
+													</Typography>
+												</Box>
+	
+								</Paper>
+							)}
+							{isParentWrapped === false && (
+								<Paper sx={{ p: 3, border: '1px solid', borderColor: 'warning.main', borderRadius: 2 }}>
+									<Stack spacing={2}>
+										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+											<Box sx={{ 
+												width: 8, 
+												height: 8, 
+												borderRadius: '50%', 
+												bgcolor: 'warning.main' 
+											}} />
+											<Typography variant="h6" color="warning.dark" sx={{ fontWeight: 600 }}>
+												Parent Domain Not Wrapped
+											</Typography>
+										</Box>
+										<Box sx={{ 
+											p: 2, 
+											bgcolor: 'warning.light', 
+											borderRadius: 1,
+											border: '1px solid',
+											borderColor: 'warning.main'
+										}}>
+											<Stack spacing={1}>
+												<Box>
+													<Typography variant="body2" color="text.secondary">
+														Domain
+													</Typography>
+													<Typography 
+														variant="body1" 
+														sx={{ 
+															fontFamily: 'ui-monospace, monospace',
+															color: 'primary.main',
+															cursor: 'pointer',
+															'&:hover': {
+																textDecoration: 'underline'
+															}
+														}}
+														onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
+													>
+														{ensParentName}
+													</Typography>
+												</Box>
+												<Typography variant="body2" color="warning.dark">
+													Please wrap the parent domain before creating subdomains.
+												</Typography>
+											</Stack>
+										</Box>
+									</Stack>
+								</Paper>
+							)}
+						</Box>
 					)}
 
 				</DialogContent>
