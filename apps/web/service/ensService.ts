@@ -1624,14 +1624,14 @@ class ensService {
         }
     }
 
-    static async forwardFromEnsName(name: string, chain: Chain, ensOwnerAA: any, agentAA: any): Promise<string | null> {
+    static async forwardFromEnsName(name: string, chain: Chain, ensOwnerAA: any, agentAA: any, subdomainName: string): Promise<string | null> {
         try {
             console.log("inside Forwarding from ENS Name ...");
-            console.log("name:", name);
+            console.log("subdomainName:", subdomainName);
             console.log("chain:", chain);
             console.log("ensOwnerAA:", ensOwnerAA);
             console.log("agentAA:", agentAA);
-            const ensFullName = name + ".orgtrust.eth";
+            const ensFullName = subdomainName + ".orgtrust.eth";
 
             const node = namehash(ensFullName);
 
@@ -1735,14 +1735,14 @@ class ensService {
         }
     }
 
-    static async reverseFromEnsAddress(name: string, chain: Chain, ensOwnerAA: any, agentAA: any): Promise<string | null> {
+    static async reverseFromEnsAddress(name: string, chain: Chain, ensOwnerAA: any, agentAA: any, subdomainName: string): Promise<string | null> {
         try {
             console.log("inside reverse from ENS address...");
-            console.log("name:", name);
+            console.log("name:", subdomainName);
             console.log("chain:", chain);
             console.log("ensOwnerAA:", ensOwnerAA);
             console.log("agentAA:", agentAA);
-            const ensFullName = name + ".orgtrust.eth";
+            const ensFullName = subdomainName + ".orgtrust.eth";
 
 
             // Set reverse record

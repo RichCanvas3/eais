@@ -40,6 +40,34 @@ export function AgentTable() {
 		return name.replace(/^ENS:\s*/, '').replace(/\.eth$/i, '').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
 	};
 
+	// Function to fetch ENS name for an agent address
+	const fetchEnsName = async (agentAddress: string) => {
+		try {
+			const ensName = await ensService.getEnsName(agentAddress, sepolia);
+			setAgentEnsNames(prev => ({
+				...prev,
+				[agentAddress]: ensName
+			}));
+		} catch (error) {
+			console.error(`Error fetching ENS name for ${agentAddress}:`, error);
+			setAgentEnsNames(prev => ({
+				...prev,
+				[agentAddress]: null
+			}));
+		}
+	};
+
+	// Fetch ENS names when data changes
+	React.useEffect(() => {
+		if (data?.rows) {
+			data.rows.forEach(row => {
+				if (!agentEnsNames[row.agentAddress]) {
+					fetchEnsName(row.agentAddress);
+				}
+			});
+		}
+	}, [data]);
+
 	// Get expected ENS owner AA details
 	const getExpectedEnsOwnerAA = () => {
 		const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
@@ -200,6 +228,7 @@ export function AgentTable() {
 	const [feedbackError, setFeedbackError] = React.useState<string | null>(null);
 	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
 	const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
+	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
 
 	const [ensOpen, setEnsOpen] = React.useState(false);
 	const [ensData, setEnsData] = React.useState<{
@@ -828,6 +857,9 @@ export function AgentTable() {
 				sepolia
 			);
 
+			await ensService.forwardFromEnsName(result, sepolia, ensOwnerAA, agentAA, subdomainName);
+			await ensService.reverseFromEnsAddress(result, sepolia, ensOwnerAA, agentAA, subdomainName);
+
 			console.log('✅ ENS subdomain created successfully:', result);
 			
 			// Refresh ENS data to show the new subdomain
@@ -1103,6 +1135,7 @@ export function AgentTable() {
 						<TableRow>
 							<TableCell>Domain</TableCell>
 							<TableCell>Agent Address</TableCell>
+							<TableCell>ENS Name</TableCell>
 							<TableCell>AgentId</TableCell>
 							<TableCell>Mine</TableCell>
 							{eoa && <TableCell></TableCell>}
@@ -1116,14 +1149,14 @@ export function AgentTable() {
 							return (!mineOnly || owned[row.agentId]);
 						}).length ?? 0) === 0 && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 5 : 4} align="center">
+								<TableCell colSpan={eoa ? 6 : 5} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 5 : 4} align="center">
+								<TableCell colSpan={eoa ? 6 : 5} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -1198,6 +1231,34 @@ export function AgentTable() {
 											<Button size="small" onClick={() => openFeedbackFor(row)}>Feedback</Button>
 										)}
 									</Stack>
+								</TableCell>
+								<TableCell>
+									{agentEnsNames[row.agentAddress] ? (
+										<Chip 
+											label={agentEnsNames[row.agentAddress]} 
+											size="small" 
+											color="secondary"
+											sx={{ 
+												fontFamily: 'ui-monospace, monospace',
+												cursor: 'pointer',
+												'&:hover': {
+													backgroundColor: 'secondary.dark',
+													color: 'secondary.contrastText'
+												}
+											}}
+											onClick={() => {
+												const ensName = agentEnsNames[row.agentAddress];
+												if (ensName) {
+													window.open(`https://sepolia.app.ens.domains/${ensName}?tab=more`, '_blank');
+												}
+											}}
+											title={`View ${agentEnsNames[row.agentAddress]} on ENS`}
+										/>
+									) : (
+										<Typography variant="body2" color="text.secondary">
+											No ENS
+										</Typography>
+									)}
 								</TableCell>
 								<TableCell>
 									<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
