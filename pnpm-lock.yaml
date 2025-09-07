@@ -39,8 +39,8 @@ importers:
         specifier: 4.0.2
         version: 4.0.2(typescript@5.9.2)(viem@2.37.1(typescript@5.9.2))
       '@metamask/delegation-toolkit':
-        specifier: 0.13.0-rc.3
-        version: 0.13.0-rc.3(viem@2.37.1(typescript@5.9.2))
+        specifier: 0.12.0
+        version: 0.12.0(viem@2.37.1(typescript@5.9.2))
       '@mui/icons-material':
         specifier: ^6.1.2
         version: 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.1.12)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.1.12)(react@18.3.1))(@types/react@19.1.12)(react@18.3.1))(@types/react@19.1.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@types/react@19.1.12)(react@18.3.1)
@@ -379,26 +379,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@ethereumjs/common@3.2.0':
-    resolution: {integrity: sha512-pksvzI0VyLgmuEF2FA/JR/4/y6hcPq8OUail3/AvycBaW1d5VSauOZzqGvJ3RTmR4MU35lWE8KseKOsEhrFRBA==}
-
-  '@ethereumjs/rlp@4.0.1':
-    resolution: {integrity: sha512-tqsQiBQDQdmPWE1xkkBq4rlSW5QZpLOUJ5RJh2/9fug+q9tnUhuZoVLk7s0scUIKTOzEtR72DFBXI4WiZcMpvw==}
-    engines: {node: '>=14'}
-    hasBin: true
-
   '@ethereumjs/rlp@5.0.2':
     resolution: {integrity: sha512-DziebCdg4JpGlEqEdGgXmjqcFoJi+JGulUXwEjsZGAscAQ7MyD/7LE/GVCP29vEQxKc7AAwjT3A2ywHp2xfoCA==}
     engines: {node: '>=18'}
     hasBin: true
-
-  '@ethereumjs/tx@4.2.0':
-    resolution: {integrity: sha512-1nc6VO4jtFd172BbSnTnDQVr9IYBFl1y4xPzZdtkrkKIncBCkdbgfdRV+MiTkJYAtTxvV12GRZLqBFT1PNK6Yw==}
-    engines: {node: '>=14'}
-
-  '@ethereumjs/util@8.1.0':
-    resolution: {integrity: sha512-zQ0IqbdX8FZ9aw11vP+dZkKDkS+kgIvQPHnSAXzP9pLu+Rfu3D3XEeLbicvoXJTYnhZiPmsZUxgdzXwNKxRPbA==}
-    engines: {node: '>=14'}
 
   '@ethereumjs/util@9.1.0':
     resolution: {integrity: sha512-XBEKsYqLGXLah9PNJbgdkigthkG7TAGvlD/sH12beMXEyHDyigfcbdvHhmLyDWgDyOJn4QwiQUaF7yeuhnjdog==}
@@ -429,39 +413,19 @@ packages:
   '@leichtgewicht/ip-codec@2.0.5':
     resolution: {integrity: sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw==}
 
-  '@metamask/7715-permission-types@0.2.0':
-    resolution: {integrity: sha512-RfKE5PKWviyNZf+yFJCwmKHy1NTeswyrjNtaQdrd7zSgIJUp8CtKZYRPFQl9n9gCaeVsa7fw4VnhMVHIdxuu3w==}
-    engines: {node: ^18.18 || >=20}
-
-  '@metamask/abi-utils@3.0.0':
-    resolution: {integrity: sha512-a/l0DiSIr7+CBYVpHygUa3ztSlYLFCQMsklLna+t6qmNY9+eIO5TedNxhyIyvaJ+4cN7TLy0NQFbp9FV3X2ktg==}
-    engines: {node: ^18.18 || ^20.14 || >=22}
-
   '@metamask/delegation-abis@0.11.0':
     resolution: {integrity: sha512-tnNGFDLQ5jfgPhHJaT5JwvF759nja1iGAG00REbk1Ufir+TxjxTmF8L9MbJifZmUh4fnyqV4Ik6NAOYVNBPVBg==}
-    engines: {node: ^18.18 || >=20}
-
-  '@metamask/delegation-core@0.2.0-rc.1':
-    resolution: {integrity: sha512-BM0CHo9a4uZwFRvZFxXxTfDX5xpxkdJjK9Qw1a2lf/GWnWSOZW95vIo3pC6ppkqzdaV2miqCMSW+0yvMnKWswA==}
     engines: {node: ^18.18 || >=20}
 
   '@metamask/delegation-deployments@0.12.0':
     resolution: {integrity: sha512-9SB5DhLAnbpIWbFxP3UKPXLhCt8iiRjBBjZ7hqF5dMXy9buBEDpCRg+FJYRxYRecwporrTVrv+NfKUyCbL2ncw==}
     engines: {node: ^18.18 || >=20}
 
-  '@metamask/delegation-toolkit@0.13.0-rc.3':
-    resolution: {integrity: sha512-Qs3M1p+Azk/HFxPF2oZJzWD3MleFQjFVb7HhiELSKs4Y6wFa7w849I8oBHlOUT8iBvl3feyWKMo7qjoRpQFIFQ==}
+  '@metamask/delegation-toolkit@0.12.0':
+    resolution: {integrity: sha512-vk6X4iTARLpMdES6CYiABYSOpeXYPzCKV3xDOP/nRbnFp/CxeYQBa/fT28SDj318V92CQzCI6WrKlEnF/9Y/1Q==}
     engines: {node: ^18.18 || >=20}
     peerDependencies:
-      viem: ^2.31.4
-
-  '@metamask/superstruct@3.2.1':
-    resolution: {integrity: sha512-fLgJnDOXFmuVlB38rUN5SmU7hAFQcCjrg3Vrxz67KTY7YHFnSNEKvX4avmEBdOI0yTCxZjwMCFEqsC8k2+Wd3g==}
-    engines: {node: '>=16.0.0'}
-
-  '@metamask/utils@11.7.0':
-    resolution: {integrity: sha512-IamqpZF8Lr4WeXJ84fD+Sy+v1Zo05SYuMPHHBrZWpzVbnHAmXQpL4ckn9s5dfA+zylp3WGypaBPb6SBZdOhuNQ==}
-    engines: {node: ^18.18 || ^20.14 || >=22}
+      viem: '>=2.18.2 <3.0.0'
 
   '@mui/core-downloads-tracker@6.5.0':
     resolution: {integrity: sha512-LGb8t8i6M2ZtS3Drn3GbTI1DVhDY6FJ9crEey2lZ0aN2EMZo8IZBZj9wRf4vqbZHaWjsYgtbOnJw5V8UWbmK2Q==}
@@ -771,15 +735,6 @@ packages:
   '@toruslabs/tweetnacl-js@1.0.4':
     resolution: {integrity: sha512-h8fVemW5pstsKbm/fTx+y61dZkh5Pepy/92lsyKp83KErf96jT+w4LGx4nEgeAVrdYQDTLg2tO7vu/boEb23Iw==}
 
-  '@types/debug@4.1.12':
-    resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
-
-  '@types/lodash@4.17.20':
-    resolution: {integrity: sha512-H3MHACvFUEiujabxhaI/ImO6gUrd8oOurg7LQtS7mbwIXA/cUqWrvBsaeJ23aZEPk1TAYkurjfMbSELfoCXlGA==}
-
-  '@types/ms@2.1.0':
-    resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
-
   '@types/node@22.7.5':
     resolution: {integrity: sha512-jML7s2NAzMWc//QSJ1a3prpk78cOPchGvXJsC3C6R6PSMoooztvRVQEz89gmBTBY1SPMaqo5teB4uNHPdetShQ==}
 
@@ -1064,11 +1019,6 @@ packages:
   cosmiconfig@7.1.0:
     resolution: {integrity: sha512-AdmX6xUzdNASswsFtmwSt7Vj8po9IuqXm0UXz7QKPuEUmPB4XyjGfaAr2PSuELMwkRMVH1EpIkX5bTZGRB3eCA==}
     engines: {node: '>=10'}
-
-  crc-32@1.2.2:
-    resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
-    engines: {node: '>=0.8'}
-    hasBin: true
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
@@ -1470,9 +1420,6 @@ packages:
     resolution: {integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==}
     deprecated: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
 
-  lodash@4.17.21:
-    resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
-
   loglevel@1.9.2:
     resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
     engines: {node: '>= 0.6.0'}
@@ -1491,9 +1438,6 @@ packages:
   merge2@1.4.1:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
     engines: {node: '>= 8'}
-
-  micro-ftch@0.3.1:
-    resolution: {integrity: sha512-/0LLxhzP0tfiR5hcQebtudP56gUurs2CLkGarnCiB/OqEyUFQ6U3paQi/tgLv0hBJYt2rnr9MNpxz4fiiugstg==}
 
   micromatch@4.0.8:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
@@ -1666,10 +1610,6 @@ packages:
   pirates@4.0.7:
     resolution: {integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==}
     engines: {node: '>= 6'}
-
-  pony-cause@2.1.11:
-    resolution: {integrity: sha512-M7LhCsdNbNgiLYiP4WjsfLUuFmCfnjdF6jKe2R9NKl4WFN+HZPGHJZ9lnLP7f9ZnKe3U9nuWD0szirmj+migUg==}
-    engines: {node: '>=12.0.0'}
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -2037,10 +1977,6 @@ packages:
   util@0.12.5:
     resolution: {integrity: sha512-kZf/K6hEIrWHI6XqOFUiiMa+79wE/D8Q+NCNAWclkyg3b4d2k7s0QGepNjiABc+aR3N1PAyHL7p6UcLY6LmrnA==}
 
-  uuid@9.0.1:
-    resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
-    hasBin: true
-
   viem@2.37.1:
     resolution: {integrity: sha512-IzacdIXYlOvzDJwNKIVa53LP/LaP70qvBGAIoGH6R+n06S/ru/nnQxLNZ6+JImvIcxwNwgAl0jUA6FZEIQQWSw==}
     peerDependencies:
@@ -2386,27 +2322,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.9':
     optional: true
 
-  '@ethereumjs/common@3.2.0':
-    dependencies:
-      '@ethereumjs/util': 8.1.0
-      crc-32: 1.2.2
-
-  '@ethereumjs/rlp@4.0.1': {}
-
   '@ethereumjs/rlp@5.0.2': {}
-
-  '@ethereumjs/tx@4.2.0':
-    dependencies:
-      '@ethereumjs/common': 3.2.0
-      '@ethereumjs/rlp': 4.0.1
-      '@ethereumjs/util': 8.1.0
-      ethereum-cryptography: 2.2.1
-
-  '@ethereumjs/util@8.1.0':
-    dependencies:
-      '@ethereumjs/rlp': 4.0.1
-      ethereum-cryptography: 2.2.1
-      micro-ftch: 0.3.1
 
   '@ethereumjs/util@9.1.0':
     dependencies:
@@ -2442,56 +2358,17 @@ snapshots:
 
   '@leichtgewicht/ip-codec@2.0.5': {}
 
-  '@metamask/7715-permission-types@0.2.0': {}
-
-  '@metamask/abi-utils@3.0.0':
-    dependencies:
-      '@metamask/superstruct': 3.2.1
-      '@metamask/utils': 11.7.0
-    transitivePeerDependencies:
-      - supports-color
-
   '@metamask/delegation-abis@0.11.0': {}
-
-  '@metamask/delegation-core@0.2.0-rc.1':
-    dependencies:
-      '@metamask/abi-utils': 3.0.0
-      '@metamask/utils': 11.7.0
-      '@noble/hashes': 1.8.0
-    transitivePeerDependencies:
-      - supports-color
 
   '@metamask/delegation-deployments@0.12.0': {}
 
-  '@metamask/delegation-toolkit@0.13.0-rc.3(viem@2.37.1(typescript@5.9.2))':
+  '@metamask/delegation-toolkit@0.12.0(viem@2.37.1(typescript@5.9.2))':
     dependencies:
-      '@metamask/7715-permission-types': 0.2.0
       '@metamask/delegation-abis': 0.11.0
-      '@metamask/delegation-core': 0.2.0-rc.1
       '@metamask/delegation-deployments': 0.12.0
       buffer: 6.0.3
       viem: 2.37.1(typescript@5.9.2)
       webauthn-p256: 0.0.10
-    transitivePeerDependencies:
-      - supports-color
-
-  '@metamask/superstruct@3.2.1': {}
-
-  '@metamask/utils@11.7.0':
-    dependencies:
-      '@ethereumjs/tx': 4.2.0
-      '@metamask/superstruct': 3.2.1
-      '@noble/hashes': 1.8.0
-      '@scure/base': 1.2.6
-      '@types/debug': 4.1.12
-      '@types/lodash': 4.17.20
-      debug: 4.4.1
-      lodash: 4.17.21
-      pony-cause: 2.1.11
-      semver: 7.7.2
-      uuid: 9.0.1
-    transitivePeerDependencies:
-      - supports-color
 
   '@mui/core-downloads-tracker@6.5.0': {}
 
@@ -2794,14 +2671,6 @@ snapshots:
       hash.js: 1.1.7
 
   '@toruslabs/tweetnacl-js@1.0.4': {}
-
-  '@types/debug@4.1.12':
-    dependencies:
-      '@types/ms': 2.1.0
-
-  '@types/lodash@4.17.20': {}
-
-  '@types/ms@2.1.0': {}
 
   '@types/node@22.7.5':
     dependencies:
@@ -3183,8 +3052,6 @@ snapshots:
       parse-json: 5.2.0
       path-type: 4.0.0
       yaml: 1.10.2
-
-  crc-32@1.2.2: {}
 
   cross-fetch@3.2.0:
     dependencies:
@@ -3612,8 +3479,6 @@ snapshots:
 
   lodash.isequal@4.5.0: {}
 
-  lodash@4.17.21: {}
-
   loglevel@1.9.2: {}
 
   loose-envify@1.4.0:
@@ -3625,8 +3490,6 @@ snapshots:
   math-intrinsics@1.1.0: {}
 
   merge2@1.4.1: {}
-
-  micro-ftch@0.3.1: {}
 
   micromatch@4.0.8:
     dependencies:
@@ -3778,8 +3641,6 @@ snapshots:
   pify@2.3.0: {}
 
   pirates@4.0.7: {}
-
-  pony-cause@2.1.11: {}
 
   possible-typed-array-names@1.1.0: {}
 
@@ -4193,8 +4054,6 @@ snapshots:
       is-generator-function: 1.1.0
       is-typed-array: 1.1.15
       which-typed-array: 1.1.19
-
-  uuid@9.0.1: {}
 
   viem@2.37.1(typescript@5.9.2):
     dependencies:

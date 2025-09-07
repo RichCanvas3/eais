@@ -9,20 +9,20 @@
   "dependencies": {
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.0",
+    "@ensdomains/ensjs": "4.0.2",
+    "@metamask/delegation-toolkit": "0.12.0",
     "@mui/icons-material": "^6.1.2",
     "@mui/material": "^6.1.2",
     "@mui/material-nextjs": "^6.1.2",
-    "better-sqlite3": "^9.4.0",
-    "next": "^14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "viem": "^2.21.16",
-    "@web3auth/modal": "^9.4.2",
     "@web3auth/base": "^9.4.2",
     "@web3auth/ethereum-provider": "^9.4.2",
+    "@web3auth/modal": "^9.4.2",
+    "better-sqlite3": "^9.4.0",
+    "next": "^14.2.5",
     "permissionless": "^0.2.4",
-    "@metamask/delegation-toolkit": "0.13.0-rc.3",
-    "@ensdomains/ensjs": "4.0.2"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "viem": "^2.21.16"
   },
   "devDependencies": {
     "@types/react": "19.1.12",

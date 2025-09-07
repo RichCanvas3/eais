@@ -5,7 +5,7 @@ import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveat } from '@metamask/delegation-toolkit';
+import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
@@ -924,16 +924,19 @@ export function AgentTable() {
 
 			// Preferred DTK flow: AA signs delegation with caveats
 			let signedDelegation: any;
-			
-			// Create caveats with allowed targets
-			console.log('Creating caveats with allowed targets');
+
+			// Go back to CaveatBuilder but fix the address issue
+			console.log('Creating caveats using CaveatBuilder');
 			console.log('reputationRegistry:', reputationRegistry, typeof reputationRegistry);
+			const environment = (smartAccount as any).environment;
 			const registryAddress = String(reputationRegistry).toLowerCase() as `0x${string}`;
 			console.log('registryAddress:', registryAddress);
-			const caveats = [
-				createCaveat("0x0000000000000000000000000000000000000000000000000000000000000001", [registryAddress] as any)
-			];
-			
+			const caveatBuilder = createCaveatBuilder(environment as any);
+			const caveats = caveatBuilder
+				.addCaveat("allowedTargets", [registryAddress] as any)
+				.build();
+
+
 			const del = await (createDelegation as any)({ 
 				from: aa as `0x${string}`, 
 				to: sessionAA as `0x${string}`, 
