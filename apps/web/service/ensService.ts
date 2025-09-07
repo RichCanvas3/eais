@@ -1624,9 +1624,9 @@ class ensService {
         }
     }
 
-    static async forwardFromEnsAddress(name: string, chain: Chain, ensOwnerAA: any, agentAA: any): Promise<string | null> {
+    static async forwardFromEnsName(name: string, chain: Chain, ensOwnerAA: any, agentAA: any): Promise<string | null> {
         try {
-            console.log("inside Forwarding from ENS address...");
+            console.log("inside Forwarding from ENS Name ...");
             console.log("name:", name);
             console.log("chain:", chain);
             console.log("ensOwnerAA:", ensOwnerAA);
@@ -1652,6 +1652,35 @@ class ensService {
             args: [node],
             });
             console.log("........... resolver:", resolver);
+
+
+            const owner = await publicClient.readContract({
+                address: ENS_REGISTRY_ADDRESS,
+                abi: [{ name: "owner", stateMutability: "view", type: "function",
+                        inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+                functionName: "owner",
+                args: [node],
+                });
+                console.log("........... owner:", owner);
+
+
+            // finder-airbnb-com.orgtrust.eth
+            // tokenId: 74342745848248901885787098128425663590331074765106361805774616024450061013558
+            // ownership manager: 0x9BB3810939339E589c55b7357B2057286CaBe760
+            // parent owner: 0x905f406Ad2D097565297980660657Ab9Dca827EA
+
+            // actual owner: 0x9BB3810939339E589c55b7357B2057286CaBe760
+
+            console.log("........... agent address:", agentAA.address);
+
+            const tokenId = BigInt(node);
+            const actualOwner = await publicClient.readContract({
+                address: '0x0635513f179D50A207757E05759CbD106d7dFcE8' as `0x${string}`,
+                abi: NameWrapperABI.abi,
+                functionName: 'ownerOf',
+                args: [tokenId]
+              }) as `0x${string}`;
+            console.log("........... actual owner:", actualOwner);
 
             // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you’re the name owner,
             // or NameWrapper.setResolver if the name is wrapped.)
@@ -1694,8 +1723,255 @@ class ensService {
                 transport: http(process.env.NEXT_PUBLIC_RPC_URL),
             });
 
+            const fullEnsName = name + ".orgtrust.eth";
             const address = await ensClient.getAddressRecord({
-                name: name
+                name: fullEnsName
+            });
+
+            return address?.value || null;
+        } catch (error) {
+            console.error("Error getting ENS address:", error);
+            return null;
+        }
+    }
+
+    static async reverseFromEnsAddress(name: string, chain: Chain, ensOwnerAA: any, agentAA: any): Promise<string | null> {
+        try {
+            console.log("inside reverse from ENS address...");
+            console.log("name:", name);
+            console.log("chain:", chain);
+            console.log("ensOwnerAA:", ensOwnerAA);
+            console.log("agentAA:", agentAA);
+            const ensFullName = name + ".orgtrust.eth";
+
+
+            // Set reverse record
+            const reverseNode = namehash(agentAA.address.slice(2).toLowerCase() + '.addr.reverse');
+            console.log("Reverse node:", reverseNode);
+
+            let currentReverseName;
+            try {
+
+                const publicClient = createPublicClient({
+                    chain: chain,
+                    transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+                });
+
+
+                const BASE_REVERSE_NODE = namehash("addr.reverse");
+                const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+                const reverseRegistrar = await publicClient.readContract({
+                    address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+                    abi: [{
+                      name: "owner",
+                      type: "function",
+                      stateMutability: "view",
+                      inputs: [{ name: "node", type: "bytes32" }],
+                      outputs: [{ name: "", type: "address" }],
+                    }],
+                    functionName: "owner",
+                    args: [BASE_REVERSE_NODE],
+                  });
+                console.log("*********** Reverse registrar:", reverseRegistrar);
+
+
+                const ourReverseRegistrar = await publicClient.readContract({
+                    address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+                    abi: [{
+                      name: "owner",
+                      type: "function",
+                      stateMutability: "view",  
+                      inputs: [{ name: "node", type: "bytes32" }],
+                      outputs: [{ name: "", type: "address" }],
+                    }],
+                    functionName: "owner",
+                    args: [reverseNode],
+                  });
+                console.log("*********** Reverse registrar for our reverse node:", ourReverseRegistrar);
+
+
+                const setNameData = encodeFunctionData({
+                    abi: [{
+                      name: "setName",
+                      type: "function",
+                      stateMutability: "nonpayable",
+                      inputs: [{ name: "name", type: "string" }],
+                      outputs: [{ name: "node", type: "bytes32" }],
+                    }],
+                    functionName: "setName",
+                    args: [ensFullName], // e.g. "finder-airbnb-com.orgtrust.eth"
+                  });
+
+
+                  const bundlerClient = createBundlerClient({
+                    transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                    paymaster: true,
+                    chain: chain,
+                    paymasterContext: {
+                        mode: 'SPONSORED',
+                    },
+                });
+    
+
+                console.log("Setting reverse name record using agent's AA...");
+                console.log("reverseRegistrar:", reverseRegistrar);
+
+                const fee = {maxFeePerGas: 412596685n, maxPriorityFeePerGas: 412596676n};
+                const reverseUserOperationHash = await bundlerClient.sendUserOperation({
+                    account: agentAA,
+                    calls: [{
+                        to: reverseRegistrar as `0x${string}`,
+                        data: setNameData,
+                        value: 0n
+                    }],
+                    ...fee
+                });
+
+                const { receipt: reverseReceipt } = await bundlerClient.waitForUserOperationReceipt({
+                    hash: reverseUserOperationHash,
+                });
+                console.log("*********** Reverse name record set successfully xxxxxx");
+
+
+                const ensClient = createEnsPublicClient({
+                    chain: chain as any,
+                    transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+                });
+    
+                const name = await ensClient.getName({
+                    address: agentAA.address as `0x${string}`,
+                });
+
+                console.log("*********** done reverse from ens address:  ", name);
+
+                return name?.name || null;
+
+            } catch (error) {
+                console.log("Could not read current reverse name:", error);
+                currentReverseName = '';
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            const node = namehash(ensFullName);
+
+            const publicClient = createPublicClient({
+                chain: chain,
+                transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+            });
+
+            const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+
+
+            // 1a) Get current resolver for the name
+            const resolver = await publicClient.readContract({
+            address: ENS_REGISTRY_ADDRESS,
+            abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                    inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+            functionName: "resolver",
+            args: [node],
+            });
+            console.log("........... resolver:", resolver);
+
+
+            const owner = await publicClient.readContract({
+                address: ENS_REGISTRY_ADDRESS,
+                abi: [{ name: "owner", stateMutability: "view", type: "function",
+                        inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+                functionName: "owner",
+                args: [node],
+                });
+                console.log("........... owner:", owner);
+
+
+            // finder-airbnb-com.orgtrust.eth
+            // tokenId: 74342745848248901885787098128425663590331074765106361805774616024450061013558
+            // ownership manager: 0x9BB3810939339E589c55b7357B2057286CaBe760
+            // parent owner: 0x905f406Ad2D097565297980660657Ab9Dca827EA
+
+            // actual owner: 0x9BB3810939339E589c55b7357B2057286CaBe760
+
+            console.log("........... agent address:", agentAA.address);
+
+            const tokenId = BigInt(node);
+            const actualOwner = await publicClient.readContract({
+                address: '0x0635513f179D50A207757E05759CbD106d7dFcE8' as `0x${string}`,
+                abi: NameWrapperABI.abi,
+                functionName: 'ownerOf',
+                args: [tokenId]
+              }) as `0x${string}`;
+            console.log("........... actual owner:", actualOwner);
+
+            // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you’re the name owner,
+            // or NameWrapper.setResolver if the name is wrapped.)
+
+            // 1b) Set the addr record on the resolver
+            const setAddrData = encodeFunctionData({
+            abi: [{ name: "setAddr", type: "function", stateMutability: "nonpayable",
+                    inputs: [{ name: "node", type: "bytes32" }, { name: "a", type: "address" }]}],
+            functionName: "setAddr",
+            args: [node, agentAA.address],
+            });
+
+            const bundlerClient = createBundlerClient({
+                transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                paymaster: true,
+                chain: chain,
+                paymasterContext: {
+                    mode: 'SPONSORED',
+                },
+            });
+
+            
+            const fee = {maxFeePerGas: 412596685n, maxPriorityFeePerGas: 412596676n};
+
+            console.info("sending user operation to set addr record");
+            const avatarUserOperationHash = await bundlerClient.sendUserOperation({
+                account: agentAA,
+                calls: [{ to: resolver as `0x${string}`, data: setAddrData }],
+                ...fee,
+            });
+
+            console.info("get address record receipt");
+            const { receipt: avatarReceipt } = await bundlerClient.waitForUserOperationReceipt({
+                hash: avatarUserOperationHash,
+            });
+            console.info("get address record");
+
+            const ensClient = createEnsPublicClient({
+                chain: chain as any,
+                transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+            });
+
+            const fullEnsName = name + ".orgtrust.eth";
+            const address = await ensClient.getAddressRecord({
+                name: fullEnsName
             });
 
             return address?.value || null;

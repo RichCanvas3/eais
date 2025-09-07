@@ -1696,14 +1696,14 @@ export function AgentTable() {
 										// Create ENS owner EOA from private key
 										const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
 										const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
+										console.info(">>>>>>>>>>> ensOwnerEOA address:", ensOwnerEOA.address);
 										
 										// Create public client
 										const publicClient = createPublicClient({
 											chain: sepolia,
 											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
 										});
-										
-										// Create ENS owner account abstraction
+
 										const ensOwnerAA = await toMetaMaskSmartAccount({
 											client: publicClient,
 											implementation: Implementation.Hybrid,
@@ -1711,27 +1711,28 @@ export function AgentTable() {
 											signatory: { account: ensOwnerEOA },
 											deploySalt: `0x${(10000).toString(16)}` as `0x${string}`,
 										} as any);
+										console.info(">>>>>>>>>>> ensOwnerAA address:", ensOwnerAA.address);
 										
-										// Create agent account abstraction (using current agent)
-										const eoa = privateKeyToAccount(generatePrivateKey());
-										const walletClient = createWalletClient({
-											account: eoa,
-											chain: sepolia,
-											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-										});
-										
-										const deploySalt = BigInt(keccak256(stringToHex("test-agent")));
+
+										const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+			
+										const deploySalt = BigInt(keccak256(stringToHex("finder.airbnb.com")));
 										const agentAA = await toMetaMaskSmartAccount({
 											client: publicClient,
 											implementation: Implementation.Hybrid,
-											deployParams: [eoa.address as `0x${string}`, [], [], []],
+											deployParams: [eoa as `0x${string}`, [], [], []], // Use connected user's address
 											signatory: { walletClient },
 											deploySalt: toHex(deploySalt) as `0x${string}`,
 										} as any);
+										console.info(">>>>>>>>>>> agentAA address:", agentAA.address);
+										console.info(">>>>>>>>>>> connected user address: ", eoa);
 
 										console.log("Forwarding from ENS address...");
-										const address = await ensService.forwardFromEnsAddress("finder-airbnb-com", sepolia, ensOwnerAA, agentAA);
-
+										//const address = await ensService.forwardFromEnsName("finder-airbnb-com", sepolia, ensOwnerAA, agentAA);
+										const address = await ensService.reverseFromEnsAddress("finder-airbnb-com", sepolia, ensOwnerAA, agentAA);
+										
+										
+										
 										console.log("Forward lookup result:", address);
 										alert(`Forward lookup for "finder-airbnb-com": ${address || "No address found"}`);
 									} catch (error) {
@@ -1769,19 +1770,19 @@ export function AgentTable() {
 											deploySalt: `0x${(10000).toString(16)}` as `0x${string}`,
 										} as any);
 										
-										// Create agent account abstraction (using current agent)
-										const eoa = privateKeyToAccount(generatePrivateKey());
+										// Create agent account abstraction (using connected user's address)
+										const userAccount = privateKeyToAccount(generatePrivateKey()); // This will be replaced with actual user account
 										const walletClient = createWalletClient({
-											account: eoa,
+											account: userAccount,
 											chain: sepolia,
 											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
 										});
 										
-										const deploySalt = BigInt(keccak256(stringToHex("test-agent")));
+										const deploySalt = BigInt(keccak256(stringToHex("finder.airbnb.com")));
 										const agentAA = await toMetaMaskSmartAccount({
 											client: publicClient,
 											implementation: Implementation.Hybrid,
-											deployParams: [eoa.address as `0x${string}`, [], [], []],
+											deployParams: [eoa as `0x${string}`, [], [], []], // Use connected user's address
 											signatory: { walletClient },
 											deploySalt: toHex(deploySalt) as `0x${string}`,
 										} as any);
@@ -1824,19 +1825,19 @@ export function AgentTable() {
 											deploySalt: `0x${(10000).toString(16)}` as `0x${string}`,
 										} as any);
 										
-										// Create agent account abstraction (using current agent)
-										const eoa = privateKeyToAccount(generatePrivateKey());
+										// Create agent account abstraction (using connected user's address)
+										const userAccount = privateKeyToAccount(generatePrivateKey()); // This will be replaced with actual user account
 										const walletClient = createWalletClient({
-											account: eoa,
+											account: userAccount,
 											chain: sepolia,
 											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
 										});
 										
-										const deploySalt = BigInt(keccak256(stringToHex("test-agent")));
+										const deploySalt = BigInt(keccak256(stringToHex("finder.airbnb.com")));
 										const agentAA = await toMetaMaskSmartAccount({
 											client: publicClient,
 											implementation: Implementation.Hybrid,
-											deployParams: [eoa.address as `0x${string}`, [], [], []],
+											deployParams: [eoa as `0x${string}`, [], [], []], // Use connected user's address
 											signatory: { walletClient },
 											deploySalt: toHex(deploySalt) as `0x${string}`,
 										} as any);
