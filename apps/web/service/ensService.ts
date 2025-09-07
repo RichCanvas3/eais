@@ -136,6 +136,7 @@ class ensService {
                 const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
                 const node = namehash(ensFullName);
 
+
                 const resolverAddress = await publicClient.readContract({
                     address: ENS_REGISTRY_ADDRESS as `0x${string}`,
                     abi: [{
@@ -1465,7 +1466,11 @@ class ensService {
                 });
                 console.log("Current reverse name record:", currentReverseName);
                 */
-
+                console.log("*********** Our reverse name or ens address::", await this.getEnsName("orgtrust.eth", chain));
+                console.log("*********** Our reverse name or agent address::", await this.getEnsName("finder-airbnb-com.orgtrust.eth", chain));
+                
+                console.log("*********** Our reverse name or ens owner::", await this.getEnsName(ensOwnerClient.address, chain));
+                console.log("*********** Our reverse name:", await this.getEnsName(orgAccountAddress, chain));
                 const ourReverseRegistrar = await publicClient.readContract({
                     address: ENS_REGISTRY_ADDRESS as `0x${string}`,
                     abi: [{
@@ -1479,6 +1484,7 @@ class ensService {
                     args: [reverseNode],
                   });
                 console.log("*********** Reverse registrar for our reverse node:", ourReverseRegistrar);
+                
 
                 const resolverAbi = [
                     // reverse: get primary name
@@ -1618,6 +1624,104 @@ class ensService {
         }
     }
 
+    static async forwardFromEnsAddress(name: string, chain: Chain, ensOwnerAA: any, agentAA: any): Promise<string | null> {
+        try {
+            console.log("inside Forwarding from ENS address...");
+            console.log("name:", name);
+            console.log("chain:", chain);
+            console.log("ensOwnerAA:", ensOwnerAA);
+            console.log("agentAA:", agentAA);
+            const ensFullName = name + ".orgtrust.eth";
+
+            const node = namehash(ensFullName);
+
+            const publicClient = createPublicClient({
+                chain: chain,
+                transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+            });
+
+            const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+
+
+            // 1a) Get current resolver for the name
+            const resolver = await publicClient.readContract({
+            address: ENS_REGISTRY_ADDRESS,
+            abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                    inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+            functionName: "resolver",
+            args: [node],
+            });
+            console.log("........... resolver:", resolver);
+
+            // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you’re the name owner,
+            // or NameWrapper.setResolver if the name is wrapped.)
+
+            // 1b) Set the addr record on the resolver
+            const setAddrData = encodeFunctionData({
+            abi: [{ name: "setAddr", type: "function", stateMutability: "nonpayable",
+                    inputs: [{ name: "node", type: "bytes32" }, { name: "a", type: "address" }]}],
+            functionName: "setAddr",
+            args: [node, agentAA.address],
+            });
+
+            const bundlerClient = createBundlerClient({
+                transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                paymaster: true,
+                chain: chain,
+                paymasterContext: {
+                    mode: 'SPONSORED',
+                },
+            });
+
+            
+            const fee = {maxFeePerGas: 412596685n, maxPriorityFeePerGas: 412596676n};
+
+            console.info("sending user operation to set addr record");
+            const avatarUserOperationHash = await bundlerClient.sendUserOperation({
+                account: agentAA,
+                calls: [{ to: resolver as `0x${string}`, data: setAddrData }],
+                ...fee,
+            });
+
+            console.info("get address record receipt");
+            const { receipt: avatarReceipt } = await bundlerClient.waitForUserOperationReceipt({
+                hash: avatarUserOperationHash,
+            });
+            console.info("get address record");
+
+            const ensClient = createEnsPublicClient({
+                chain: chain as any,
+                transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+            });
+
+            const address = await ensClient.getAddressRecord({
+                name: name
+            });
+
+            return address?.value || null;
+        } catch (error) {
+            console.error("Error getting ENS address:", error);
+            return null;
+        }
+    }
+
+    static async getEnsAddress(name: string, chain: Chain): Promise<string | null> {
+        try {
+            const ensClient = createEnsPublicClient({
+                chain: chain as any,
+                transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+            });
+
+            const address = await ensClient.getAddressRecord({
+                name: name
+            });
+
+            return address?.value || null;
+        } catch (error) {
+            console.error("Error getting ENS address:", error);
+            return null;
+        }
+    }
     /**
      * Get ENS name and basic data for an address
      */
