@@ -530,7 +530,7 @@ class ensService {
       )
 
       const nameWrapper = new ethers.Contract(
-        '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+        (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
         NameWrapperABI.abi,
         signer
       )
@@ -893,7 +893,7 @@ class ensService {
       );
 
       const nameWrapper = new ethers.Contract(
-        '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+        (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
         NameWrapperABI.abi,
         provider
       );
@@ -947,7 +947,7 @@ class ensService {
           result.exists = true;
           
           // Check if the owner is NameWrapper (meaning it's wrapped)
-          if (ensOwner.toLowerCase() === '0x0635513f179D50A207757E05759CbD106d7dFcE8'.toLowerCase()) {
+          if (ensOwner.toLowerCase() === ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8').toLowerCase()) {
             console.log('✅ Domain is wrapped, checking NameWrapper owner...');
             
             try {
@@ -1034,7 +1034,7 @@ class ensService {
 
         // Set up contracts
         const nameWrapper = new ethers.Contract(
-          '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+          (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
           NameWrapperABI.abi,
           signer
         );
@@ -1279,13 +1279,13 @@ class ensService {
         
         // For wrapped ENS records, we need to get the actual owner from NameWrapper
         let actualOwner: string;
-        if (parentOwner.toLowerCase() === '0x0635513f179D50A207757E05759CbD106d7dFcE8'.toLowerCase()) {
+        if (parentOwner.toLowerCase() === ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8').toLowerCase()) {
           console.log('✅ Parent domain is wrapped, getting NameWrapper owner...');
           
           try {
             const tokenId = BigInt(parentNode);
             actualOwner = await publicClient.readContract({
-              address: '0x0635513f179D50A207757E05759CbD106d7dFcE8' as `0x${string}`,
+              address: ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
               abi: NameWrapperABI.abi,
               functionName: 'ownerOf',
               args: [tokenId]
@@ -1311,7 +1311,7 @@ class ensService {
 
                  // Set up contracts
          const nameWrapper = new ethers.Contract(
-           '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+           (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
            NameWrapperABI.abi,
            signer
          );
@@ -1675,7 +1675,7 @@ class ensService {
 
             const tokenId = BigInt(node);
             const actualOwner = await publicClient.readContract({
-                address: '0x0635513f179D50A207757E05759CbD106d7dFcE8' as `0x${string}`,
+                address: ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
                 abi: NameWrapperABI.abi,
                 functionName: 'ownerOf',
                 args: [tokenId]
@@ -1921,7 +1921,7 @@ class ensService {
 
             const tokenId = BigInt(node);
             const actualOwner = await publicClient.readContract({
-                address: '0x0635513f179D50A207757E05759CbD106d7dFcE8' as `0x${string}`,
+                address: ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
                 abi: NameWrapperABI.abi,
                 functionName: 'ownerOf',
                 args: [tokenId]

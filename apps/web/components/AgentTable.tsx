@@ -68,34 +68,6 @@ export function AgentTable() {
 		}
 	}, [data]);
 
-	// Get expected ENS owner AA details
-	const getExpectedEnsOwnerAA = () => {
-		const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
-		if (!ensPrivateKey) {
-			console.log('❌ NEXT_PUBLIC_ENS_PRIVATE_KEY not configured');
-			return null;
-		}
-		
-		try {
-			const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
-			console.log('🔍 ENS Owner EOA:', ensOwnerEOA.address);
-			console.log('🔧 Expected AA Parameters:', {
-				owner: ensOwnerEOA.address,
-				salt: 200,
-				saltHex: `0x${(200).toString(16)}`,
-				implementation: 'Hybrid'
-			});
-			
-			return {
-				eoaAddress: ensOwnerEOA.address,
-				expectedSalt: 200,
-				expectedSaltHex: `0x${(200).toString(16)}`
-			};
-		} catch (error) {
-			console.error('❌ Error calculating expected AA:', error);
-			return null;
-		}
-	};
 
 	// Check if parent ENS domain is already wrapped
 	const checkParentWrapStatus = async () => {
@@ -129,7 +101,7 @@ export function AgentTable() {
 			
 			// Check if the parent domain is wrapped by checking if ENS Registry owner is NameWrapper
 			const ENS_REGISTRY_ADDRESS = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-			const NAME_WRAPPER_ADDRESS = '0x0635513f179D50A207757E05759CbD106d7dFcE8';
+			const NAME_WRAPPER_ADDRESS = (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8';
 			const parentNode = namehash(cleanName + '.eth');
 			
 			console.log('🔍 Checking ENS Registry for parent domain owner...');
@@ -558,34 +530,6 @@ export function AgentTable() {
 		}
 	}
 
-	async function saveCard() {
-		if (!cardDomain) return;
-		try {
-			const base = cardJson ? JSON.parse(cardJson) : {};
-			const merged = {
-				...base,
-				name: cardFields.name || undefined,
-				description: cardFields.description || undefined,
-				homepage: cardFields.homepage || undefined,
-				trustModels: Array.isArray(cardFields.trustModels)
-					? cardFields.trustModels
-					: String(cardFields.trustModels || '')
-						.split(',')
-						.map((x: string) => x.trim())
-						.filter(Boolean),
-			};
-			await fetch('/api/agent-cards', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ domain: cardDomain, card: merged }),
-			});
-			const json = JSON.stringify(merged, null, 2);
-			setStoredCard(cardDomain, json);
-			setCardJson(json);
-		} catch (e: any) {
-			setCardError(e?.message ?? 'Save failed');
-		}
-	}
 
 	async function openFeedbackFor(row: Agent) {
 		setCurrentAgent(row);
@@ -753,7 +697,7 @@ export function AgentTable() {
 						
 						// Create NameWrapper contract instance
 						const nameWrapper = new ethers.Contract(
-							'0x0635513f179D50A207757E05759CbD106d7dFcE8',
+							(process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
 							[
 								{
 									"inputs": [
@@ -1107,7 +1051,7 @@ export function AgentTable() {
 					<Box component="form" onSubmit={handleSubmit}>
 						<Grid container spacing={2}>
 							<Grid item xs={12} md={3}>
-								<TextField fullWidth label="Domain" placeholder="Filter by domain" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
+								<TextField fullWidth label="Agent domain" placeholder="Filter by agent domain" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
 							</Grid>
 							<Grid item xs={12} md={3}>
 								<TextField fullWidth label="Agent address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
@@ -1133,9 +1077,9 @@ export function AgentTable() {
 				<Table size="small" sx={{ minWidth: 600 }}>
 					<TableHead>
 						<TableRow>
-							<TableCell>Domain</TableCell>
+							<TableCell>Agent Domain</TableCell>
 							<TableCell>Agent Address</TableCell>
-							<TableCell>ENS Name</TableCell>
+							<TableCell>ENS Domain</TableCell>
 							<TableCell>AgentId</TableCell>
 							<TableCell>Mine</TableCell>
 							{eoa && <TableCell></TableCell>}
@@ -1198,7 +1142,7 @@ export function AgentTable() {
 									</Stack>
 								</TableCell>
 								<TableCell>
-									<Stack direction="row" spacing={1} alignItems="center">
+									<Stack direction="row" spacing={0.25} alignItems="center">
 										<Typography 
 											component="span" 
 											variant="body2" 
@@ -1216,19 +1160,56 @@ export function AgentTable() {
 											title={`Click to view on Etherscan: ${row.agentAddress}`}
 											onClick={() => window.open(`https://sepolia.etherscan.io/address/${row.agentAddress}`, '_blank')}
 										>
-											{row.agentAddress}
+											{`${row.agentAddress.slice(0, 6)}...${row.agentAddress.slice(-4)}`}
 										</Typography>
 										{owned[row.agentId] && (
 											<>
-												<Button size="small" onClick={() => viewOrCreateCard(row)}>Card</Button>
-												<Button size="small" onClick={() => openEnsFor(row)}>ENS</Button>
-												<Button size="small" onClick={() => openSessionFor(row)} disabled={sessionLoading}>
+												<Button 
+													size="small" 
+													onClick={() => viewOrCreateCard(row)}
+													sx={{ 
+														minWidth: 'auto',
+														px: 0.5,
+														py: 0.25,
+														fontSize: '0.65rem',
+														lineHeight: 1,
+														height: 'auto'
+													}}
+												>
+													Card
+												</Button>
+												<Button 
+													size="small" 
+													onClick={() => openSessionFor(row)} 
+													disabled={sessionLoading}
+													sx={{ 
+														minWidth: 'auto',
+														px: 0.5,
+														py: 0.25,
+														fontSize: '0.65rem',
+														lineHeight: 1,
+														height: 'auto'
+													}}
+												>
 													{sessionLoading ? 'Loading...' : 'Session'}
 												</Button>
 											</>
 										)}
 										{agentFeedbackURIs[row.agentId] && (
-											<Button size="small" onClick={() => openFeedbackFor(row)}>Feedback</Button>
+											<Button 
+												size="small" 
+												onClick={() => openFeedbackFor(row)}
+												sx={{ 
+													minWidth: 'auto',
+													px: 0.5,
+													py: 0.25,
+													fontSize: '0.65rem',
+													lineHeight: 1,
+													height: 'auto'
+												}}
+											>
+												Feedback
+											</Button>
 										)}
 									</Stack>
 								</TableCell>
@@ -1246,18 +1227,26 @@ export function AgentTable() {
 													color: 'secondary.contrastText'
 												}
 											}}
-											onClick={() => {
-												const ensName = agentEnsNames[row.agentAddress];
-												if (ensName) {
-													window.open(`https://sepolia.app.ens.domains/${ensName}?tab=more`, '_blank');
-												}
-											}}
-											title={`View ${agentEnsNames[row.agentAddress]} on ENS`}
+											onClick={() => openEnsFor(row)}
+											title={`Manage ENS for ${agentEnsNames[row.agentAddress]}`}
 										/>
 									) : (
-										<Typography variant="body2" color="text.secondary">
-											No ENS
-										</Typography>
+										<Chip 
+											label="Set ENS" 
+											size="small" 
+											color="primary"
+											variant="outlined"
+											sx={{ 
+												fontFamily: 'ui-monospace, monospace',
+												cursor: 'pointer',
+												'&:hover': {
+													backgroundColor: 'primary.light',
+													color: 'primary.contrastText'
+												}
+											}}
+											onClick={() => openEnsFor(row)}
+											title="Set up ENS for this agent"
+										/>
 									)}
 								</TableCell>
 								<TableCell>
@@ -1737,186 +1726,6 @@ export function AgentTable() {
 						</Stack>
 					)}
 
-					{/* Testing Section */}
-					<Divider sx={{ my: 2 }} />
-					<Box>
-						<Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-							🧪 Test Forward & Reverse Lookups
-						</Typography>
-						<Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-							Test ENS forward and reverse lookups independently with the test subdomain "finder.airbnb.com"
-						</Typography>
-						
-						<Stack spacing={2}>
-							<Button
-								variant="outlined"
-								onClick={async () => {
-									try {
-										console.log("Testing forward lookup for finder.airbnb.com...");
-										
-										// Create ENS owner EOA from private key
-										const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
-										const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
-										console.info(">>>>>>>>>>> ensOwnerEOA address:", ensOwnerEOA.address);
-										
-										// Create public client
-										const publicClient = createPublicClient({
-											chain: sepolia,
-											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-										});
-
-										const ensOwnerAA = await toMetaMaskSmartAccount({
-											client: publicClient,
-											implementation: Implementation.Hybrid,
-											deployParams: [ensOwnerEOA.address, [], [], []],
-											signatory: { account: ensOwnerEOA },
-											deploySalt: `0x${(10000).toString(16)}` as `0x${string}`,
-										} as any);
-										console.info(">>>>>>>>>>> ensOwnerAA address:", ensOwnerAA.address);
-										
-
-										const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
-			
-										const deploySalt = BigInt(keccak256(stringToHex("finder.airbnb.com")));
-										const agentAA = await toMetaMaskSmartAccount({
-											client: publicClient,
-											implementation: Implementation.Hybrid,
-											deployParams: [eoa as `0x${string}`, [], [], []], // Use connected user's address
-											signatory: { walletClient },
-											deploySalt: toHex(deploySalt) as `0x${string}`,
-										} as any);
-										console.info(">>>>>>>>>>> agentAA address:", agentAA.address);
-										console.info(">>>>>>>>>>> connected user address: ", eoa);
-
-										console.log("Forwarding from ENS address...");
-										//const address = await ensService.forwardFromEnsName("finder-airbnb-com", sepolia, ensOwnerAA, agentAA);
-										const address = await ensService.reverseFromEnsAddress("finder-airbnb-com", sepolia, ensOwnerAA, agentAA);
-										
-										
-										
-										console.log("Forward lookup result:", address);
-										alert(`Forward lookup for "finder-airbnb-com": ${address || "No address found"}`);
-									} catch (error) {
-										console.error("Forward lookup error:", error);
-										alert(`Forward lookup error: ${error instanceof Error ? error.message : String(error)}`);
-									}
-								}}
-								sx={{ alignSelf: 'flex-start' }}
-							>
-								Test Forward Lookup (finder-airbnb-com → address)
-							</Button>
-							
-							<Button
-								variant="outlined"
-								onClick={async () => {
-									try {
-										console.log("Testing reverse lookup for agent address...");
-										
-										// Create ENS owner EOA from private key
-										const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
-										const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
-										
-										// Create public client
-										const publicClient = createPublicClient({
-											chain: sepolia,
-											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-										});
-										
-										// Create ENS owner account abstraction
-										const ensOwnerAA = await toMetaMaskSmartAccount({
-											client: publicClient,
-											implementation: Implementation.Hybrid,
-											deployParams: [ensOwnerEOA.address, [], [], []],
-											signatory: { account: ensOwnerEOA },
-											deploySalt: `0x${(10000).toString(16)}` as `0x${string}`,
-										} as any);
-										
-										// Create agent account abstraction (using connected user's address)
-										const userAccount = privateKeyToAccount(generatePrivateKey()); // This will be replaced with actual user account
-										const walletClient = createWalletClient({
-											account: userAccount,
-											chain: sepolia,
-											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-										});
-										
-										const deploySalt = BigInt(keccak256(stringToHex("finder.airbnb.com")));
-										const agentAA = await toMetaMaskSmartAccount({
-											client: publicClient,
-											implementation: Implementation.Hybrid,
-											deployParams: [eoa as `0x${string}`, [], [], []], // Use connected user's address
-											signatory: { walletClient },
-											deploySalt: toHex(deploySalt) as `0x${string}`,
-										} as any);
-										
-										const name = await ensService.getEnsName(ensCurrentAgent?.agentAddress || "", sepolia);
-										console.log("Reverse lookup result:", name);
-										alert(`Reverse lookup for "${ensCurrentAgent?.agentAddress}": ${name || "No name found"}`);
-									} catch (error) {
-										console.error("Reverse lookup error:", error);
-										alert(`Reverse lookup error: ${error instanceof Error ? error.message : String(error)}`);
-									}
-								}}
-								sx={{ alignSelf: 'flex-start' }}
-							>
-								Test Reverse Lookup (address → name)
-							</Button>
-
-							<Button
-								variant="outlined"
-								onClick={async () => {
-									try {
-										console.log("Testing comprehensive ENS data...");
-										
-										// Create ENS owner EOA from private key
-										const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
-										const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
-										
-										// Create public client
-										const publicClient = createPublicClient({
-											chain: sepolia,
-											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-										});
-										
-										// Create ENS owner account abstraction
-										const ensOwnerAA = await toMetaMaskSmartAccount({
-											client: publicClient,
-											implementation: Implementation.Hybrid,
-											deployParams: [ensOwnerEOA.address, [], [], []],
-											signatory: { account: ensOwnerEOA },
-											deploySalt: `0x${(10000).toString(16)}` as `0x${string}`,
-										} as any);
-										
-										// Create agent account abstraction (using connected user's address)
-										const userAccount = privateKeyToAccount(generatePrivateKey()); // This will be replaced with actual user account
-										const walletClient = createWalletClient({
-											account: userAccount,
-											chain: sepolia,
-											transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-										});
-										
-										const deploySalt = BigInt(keccak256(stringToHex("finder.airbnb.com")));
-										const agentAA = await toMetaMaskSmartAccount({
-											client: publicClient,
-											implementation: Implementation.Hybrid,
-											deployParams: [eoa as `0x${string}`, [], [], []], // Use connected user's address
-											signatory: { walletClient },
-											deploySalt: toHex(deploySalt) as `0x${string}`,
-										} as any);
-										
-										const data = await ensService.getEnsComprehensiveData(ensCurrentAgent?.agentAddress || "", sepolia);
-										console.log("Comprehensive ENS data:", data);
-										alert(`Comprehensive ENS data: ${JSON.stringify(data, null, 2)}`);
-									} catch (error) {
-										console.error("Comprehensive ENS data error:", error);
-										alert(`Comprehensive ENS data error: ${error instanceof Error ? error.message : String(error)}`);
-									}
-								}}
-								sx={{ alignSelf: 'flex-start' }}
-							>
-								Test Comprehensive ENS Data
-							</Button>
-						</Stack>
-					</Box>
 				</DialogContent>
 				<DialogActions>
 					<Button onClick={() => setEnsOpen(false)}>Close</Button>
