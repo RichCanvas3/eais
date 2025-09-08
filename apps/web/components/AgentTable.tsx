@@ -779,6 +779,7 @@ export function AgentTable() {
 
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
+			console.info("*********** agent domain name: ", ensCurrentAgent.agentDomain);
 			const deploySalt = BigInt(keccak256(stringToHex(ensCurrentAgent.agentDomain.trim().toLowerCase())));
 			const agentAA = await toMetaMaskSmartAccount({
 				client: publicClient,
@@ -827,6 +828,8 @@ export function AgentTable() {
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
 			// Build AA address derived from domain same as ownership check
+			console.info("*********** agent domain name: ", row.agentDomain);
+			console.info("********* eoa: ", eoa)
 			const deploySalt = BigInt(keccak256(stringToHex(row.agentDomain.trim().toLowerCase())));
 			const smartAccount = await toMetaMaskSmartAccount({
 				client: publicClient,
@@ -836,6 +839,8 @@ export function AgentTable() {
 				deploySalt: toHex(deploySalt) as `0x${string}`,
 			} as any);
 			const aa = await smartAccount.getAddress() as `0x${string}`;
+
+			console.info("*********** ai agent address: ", aa);
 			const entryPoint = (await (smartAccount as any).getEntryPointAddress?.()) as `0x${string}` || '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 			const chainId = 11155111; // sepolia
 
