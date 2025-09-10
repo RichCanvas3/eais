@@ -9,10 +9,12 @@ import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatB
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
+import { DidWebModal } from './DidWebModal';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import WebIcon from '@mui/icons-material/Web';
 import ensService from '@/service/ensService';
 
 export type Agent = {
@@ -223,6 +225,9 @@ export function AgentTable() {
 	const [parentEnsOwner, setParentEnsOwner] = React.useState<string | null>(null);
 	
 	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
+	const [didWebOpen, setDidWebOpen] = React.useState(false);
+	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
+	const [currentAgentEnsName, setCurrentAgentEnsName] = React.useState<string | null>(null);
 
 	function scheduleAutoSave() {
 		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -528,6 +533,13 @@ export function AgentTable() {
 		} finally {
 			setCardLoading(false);
 		}
+	}
+
+	function openDidWebModal(row: Agent) {
+		if (!owned[row.agentId]) return; // only mine
+		setCurrentAgentForDid(row);
+		setCurrentAgentEnsName(agentEnsNames[row.agentAddress] || null);
+		setDidWebOpen(true);
 	}
 
 
@@ -1185,6 +1197,21 @@ export function AgentTable() {
 													}}
 												>
 													Card
+												</Button>
+												<Button 
+													size="small" 
+													onClick={() => openDidWebModal(row)}
+													sx={{ 
+														minWidth: 'auto',
+														px: 0.5,
+														py: 0.25,
+														fontSize: '0.65rem',
+														lineHeight: 1,
+														height: 'auto'
+													}}
+													startIcon={<WebIcon sx={{ fontSize: '0.75rem' }} />}
+												>
+													DID:Web
 												</Button>
 												<Button 
 													size="small" 
@@ -1919,6 +1946,14 @@ export function AgentTable() {
 				onClose={() => setAddAgentOpen(false)}
 				registryAddress={process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`}
 				rpcUrl={process.env.NEXT_PUBLIC_RPC_URL as string}
+			/>
+
+			{/* DID:Web Modal */}
+			<DidWebModal
+				open={didWebOpen}
+				onClose={() => setDidWebOpen(false)}
+				agent={currentAgentForDid || { agentId: '', agentAddress: '', agentDomain: '' }}
+				ensName={currentAgentEnsName}
 			/>
 
 			<Stack direction="row" alignItems="center" justifyContent="space-between">

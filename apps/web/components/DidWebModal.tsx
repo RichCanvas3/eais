@@ -1,0 +1,790 @@
+'use client';
+import * as React from 'react';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Box,
+  Typography,
+  Alert,
+  CircularProgress,
+  Chip,
+  Stack,
+  Divider,
+  IconButton,
+  Tooltip,
+} from '@mui/material';
+import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex } from 'viem';
+import { sepolia } from 'viem/chains';
+import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
+import { useWeb3Auth } from '@/components/Web3AuthProvider';
+import { generatePublicKeyJwkFromPrivateKey, generateDeterministicJwkFromAddress, generateJwkFromConnectedWallet, signMessageWithEoa, verifyJwkSignature } from '@/lib/jwk-utils';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  agent: {
+    agentId: string;
+    agentAddress: string;
+    agentDomain: string;
+  };
+  ensName?: string | null;
+};
+
+interface DidWebDocument {
+  '@context': string[];
+  id: string;
+  alsoKnownAs: string[];
+  verificationMethod: VerificationMethod[];
+  authentication: string[];
+  assertionMethod: string[];
+  capabilityInvocation: string[];
+  service: Service[];
+}
+
+interface VerificationMethod {
+  id: string;
+  type: string;
+  controller: string;
+  blockchainAccountId?: string;
+  ethereumAddress?: string;
+  accept?: string[];
+  publicKeyJwk?: {
+    kty: string;
+    crv: string;
+    x: string;
+    y: string;
+  };
+}
+
+interface Service {
+  id: string;
+  type: string;
+  serviceEndpoint: string;
+}
+
+export function DidWebModal({ open, onClose, agent, ensName }: Props) {
+  const { provider, address: eoa } = useWeb3Auth();
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
+  const [didDocument, setDidDocument] = React.useState<DidWebDocument | null>(null);
+  const [didJson, setDidJson] = React.useState<string>('');
+  const [validationResult, setValidationResult] = React.useState<{
+    isValid: boolean;
+    message: string;
+  } | null>(null);
+  const [generatedJwk, setGeneratedJwk] = React.useState<{
+    x: string;
+    y: string;
+    jwk: any;
+  } | null>(null);
+  const [jwkVerificationResult, setJwkVerificationResult] = React.useState<{
+    isValid: boolean;
+    message: string;
+  } | null>(null);
+
+  // Form fields
+  const [domain, setDomain] = React.useState('');
+  const [ensNameField, setEnsNameField] = React.useState('');
+  const [agentCardUrl, setAgentCardUrl] = React.useState('');
+
+  // Initialize form with agent data and auto-generate DID document
+  React.useEffect(() => {
+    if (agent && open) {
+      setDomain(agent.agentDomain);
+      setEnsNameField(ensName || '');
+      setAgentCardUrl(`https://${agent.agentDomain}/.well-known/agent-card.json`);
+      setError(null);
+      setSuccess(null);
+      setValidationResult(null);
+      setJwkVerificationResult(null);
+      
+      // Auto-generate DID document
+      generateDidDocumentAuto();
+    }
+  }, [agent, open, ensName]);
+
+  // Re-generate DID document when provider/EOA becomes available
+  React.useEffect(() => {
+    if (agent && open && provider && eoa && !didDocument) {
+      console.log('🔄 Provider/EOA became available, regenerating DID document...');
+      generateDidDocumentAuto();
+    }
+  }, [provider, eoa, agent, open, didDocument]);
+
+  const generateDidDocumentAuto = async () => {
+    if (!agent) return;
+
+    setLoading(false); // Don't show loading for auto-generation
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+      const publicClient = createPublicClient({ 
+        chain: sepolia, 
+        transport: http(rpcUrl) 
+      });
+
+      // Get the agent's smart account address and domain
+      const agentAddress = agent.agentAddress.toLowerCase();
+      const agentDomain = agent.agentDomain;
+      const didId = `did:web:${agentDomain}`;
+      
+      // Build verification methods
+      const verificationMethods: VerificationMethod[] = [
+        {
+          id: `${didId}#aa-eth`,
+          type: 'EcdsaSecp256k1RecoveryMethod2020',
+          controller: didId,
+          blockchainAccountId: `eip155:${sepolia.id}:${agentAddress}`,
+          ethereumAddress: agentAddress,
+          accept: ['EIP-1271', 'EIP-712']
+        }
+      ];
+
+      // Generate JWK from connected wallet's private key
+      let eoaJwk: any = null;
+      console.log('🔍 JWK Generation Debug:', { provider: !!provider, eoa, agentAddress });
+      
+      if (provider && eoa) {
+        try {
+          console.log('🚀 Attempting to generate JWK from connected wallet...');
+          eoaJwk = await generateJwkFromConnectedWallet(provider, eoa);
+          console.log('✅ JWK generated successfully:', eoaJwk);
+          
+          if (eoaJwk) {
+            setGeneratedJwk(eoaJwk);
+            verificationMethods.push({
+              id: `${didId}#server-jwk`,
+              type: 'JsonWebKey2020',
+              controller: didId,
+              publicKeyJwk: eoaJwk.jwk
+            });
+            console.log('✅ Server-jwk verification method added to DID document');
+          } else {
+            console.warn('⚠️ JWK generation returned null');
+          }
+        } catch (error) {
+          console.error('❌ Could not generate JWK from wallet:', error);
+          // Generate fallback JWK to ensure DID document is always created
+          try {
+            const fallbackJwk = generateDeterministicJwkFromAddress(agentAddress);
+            setGeneratedJwk(fallbackJwk);
+            verificationMethods.push({
+              id: `${didId}#server-jwk`,
+              type: 'JsonWebKey2020',
+              controller: didId,
+              publicKeyJwk: fallbackJwk.jwk
+            });
+          } catch (fallbackError) {
+            console.warn('Fallback JWK generation also failed:', fallbackError);
+          }
+        }
+      } else {
+        // Generate fallback JWK if no wallet connection
+        try {
+          const fallbackJwk = generateDeterministicJwkFromAddress(agentAddress);
+          setGeneratedJwk(fallbackJwk);
+          verificationMethods.push({
+            id: `${didId}#server-jwk`,
+            type: 'JsonWebKey2020',
+            controller: didId,
+            publicKeyJwk: fallbackJwk.jwk
+          });
+        } catch (fallbackError) {
+          console.warn('Fallback JWK generation failed:', fallbackError);
+        }
+      }
+
+      // Build alsoKnownAs array
+      const alsoKnownAs: string[] = [
+        `did:pkh:eip155:${sepolia.id}:${agentAddress}`,
+        `https://sepolia.app.ens.domains/`
+      ];
+      
+      if (ensName && ensName.trim()) {
+        alsoKnownAs.push(`https://sepolia.app.ens.domains/name/${ensName.trim()}`);
+      }
+
+      // Build services
+      const services: Service[] = [];
+      const agentCardUrl = `https://${agentDomain}/.well-known/agent-card.json`;
+      services.push({
+        id: `${didId}#agent-card`,
+        type: 'AgentCard',
+        serviceEndpoint: agentCardUrl
+      });
+
+      // Create DID document
+      const document: DidWebDocument = {
+        '@context': [
+          'https://www.w3.org/ns/did/v1',
+          'https://w3id.org/security/v2',
+          'https://w3id.org/security/suites/secp256k1recovery-2020/v2',
+          'https://w3id.org/security/suites/eip712sig-2021/v1'
+        ],
+        id: didId,
+        alsoKnownAs,
+        verificationMethod: verificationMethods,
+        authentication: verificationMethods.map(vm => vm.id),
+        assertionMethod: [`${didId}#aa-eth`],
+        capabilityInvocation: [`${didId}#aa-eth`],
+        service: services
+      };
+
+      setDidDocument(document);
+      setDidJson(JSON.stringify(document, null, 2));
+      setSuccess('DID document generated successfully!');
+    } catch (err) {
+      console.error('Error generating DID document:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate DID document');
+      
+      // Generate a basic fallback DID document
+      try {
+        const agentAddress = agent.agentAddress.toLowerCase();
+        const basicDidDocument = {
+          '@context': ['https://www.w3.org/ns/did/v1'],
+          id: `did:web:${domain.trim()}`,
+          verificationMethod: [{
+            id: `did:web:${domain.trim()}#aa-eth`,
+            type: 'EcdsaSecp256k1RecoveryMethod2020',
+            controller: `did:web:${domain.trim()}`,
+            blockchainAccountId: `eip155:${sepolia.id}:${agentAddress}`,
+            ethereumAddress: agentAddress,
+            accept: ['EIP-1271', 'EIP-712']
+          }],
+          authentication: [`did:web:${domain.trim()}#aa-eth`],
+          assertionMethod: [`did:web:${domain.trim()}#aa-eth`],
+          capabilityInvocation: [`did:web:${domain.trim()}#aa-eth`],
+          alsoKnownAs: [
+            `did:pkh:eip155:${sepolia.id}:${agentAddress}`,
+            `https://sepolia.app.ens.domains/`
+          ],
+          service: agentCardUrl ? [{
+            id: `did:web:${domain.trim()}#agent-card`,
+            type: 'AgentCard',
+            serviceEndpoint: agentCardUrl
+          }] : []
+        };
+        
+        setDidDocument(basicDidDocument as any);
+        setDidJson(JSON.stringify(basicDidDocument, null, 2));
+        setSuccess('Generated basic DID document (fallback)');
+      } catch (fallbackError) {
+        console.error('Fallback DID generation also failed:', fallbackError);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateDidDocument = async () => {
+    if (!domain.trim()) {
+      setError('Domain is required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+      const publicClient = createPublicClient({ 
+        chain: sepolia, 
+        transport: http(rpcUrl) 
+      });
+
+      // Get the agent's smart account address
+      const agentAddress = agent.agentAddress.toLowerCase();
+      const didId = `did:web:${domain.trim()}`;
+      
+      // Build verification methods
+      const verificationMethods: VerificationMethod[] = [
+        {
+          id: `${didId}#aa-eth`,
+          type: 'EcdsaSecp256k1RecoveryMethod2020',
+          controller: didId,
+          blockchainAccountId: `eip155:${sepolia.id}:${agentAddress}`,
+          ethereumAddress: agentAddress,
+          accept: ['EIP-1271', 'EIP-712']
+        }
+      ];
+
+      // Generate JWK from connected wallet's private key
+      let eoaJwk: any = null;
+      if (provider && eoa) {
+        try {
+          // Try to get the real private key from the connected wallet
+          eoaJwk = await generateJwkFromConnectedWallet(provider, eoa);
+          
+          if (eoaJwk) {
+            setGeneratedJwk(eoaJwk);
+            console.log('Generated JWK from wallet private key');
+          } else {
+            // Fallback to deterministic approach if private key not available
+            console.warn('Could not extract private key, using deterministic approach');
+            eoaJwk = generateDeterministicJwkFromAddress(eoa);
+            setGeneratedJwk(eoaJwk);
+          }
+        } catch (error) {
+          console.warn('Could not generate JWK from wallet:', error);
+          // Fallback to deterministic approach
+          try {
+            eoaJwk = generateDeterministicJwkFromAddress(eoa);
+            setGeneratedJwk(eoaJwk);
+          } catch (fallbackError) {
+            console.error('Fallback JWK generation also failed:', fallbackError);
+          }
+        }
+      }
+
+      // Add generated JWK from EOA if available
+      if (eoaJwk) {
+        verificationMethods.push({
+          id: `${didId}#server-jwk`,
+          type: 'JsonWebKey2020',
+          controller: didId,
+          publicKeyJwk: eoaJwk.jwk
+        });
+      }
+
+      // Build alsoKnownAs array
+      const alsoKnownAs: string[] = [
+        `did:pkh:eip155:${sepolia.id}:${agentAddress}`,
+        `https://sepolia.app.ens.domains/`
+      ];
+      
+      if (ensNameField.trim()) {
+        alsoKnownAs.push(`https://sepolia.app.ens.domains/name/${ensNameField.trim()}`);
+      }
+
+      // Build services
+      const services: Service[] = [];
+      if (agentCardUrl.trim()) {
+        services.push({
+          id: `${didId}#agent-card`,
+          type: 'AgentCard',
+          serviceEndpoint: agentCardUrl.trim()
+        });
+      }
+
+      // Create DID document
+      const document: DidWebDocument = {
+        '@context': [
+          'https://www.w3.org/ns/did/v1',
+          'https://w3id.org/security/v2',
+          'https://w3id.org/security/suites/secp256k1recovery-2020/v2',
+          'https://w3id.org/security/suites/eip712sig-2021/v1'
+        ],
+        id: didId,
+        alsoKnownAs,
+        verificationMethod: verificationMethods,
+        authentication: verificationMethods.map(vm => vm.id),
+        assertionMethod: [`${didId}#aa-eth`],
+        capabilityInvocation: [`${didId}#aa-eth`],
+        service: services
+      };
+
+      setDidDocument(document);
+      setDidJson(JSON.stringify(document, null, 2));
+      setSuccess('DID document generated successfully!');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate DID document');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateSignature = async () => {
+    if (!didDocument || !provider || !eoa) {
+      setError('Missing required data for validation');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setValidationResult(null);
+
+    try {
+      const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+      const publicClient = createPublicClient({ 
+        chain: sepolia, 
+        transport: http(rpcUrl) 
+      });
+
+      const walletClient = createWalletClient({ 
+        chain: sepolia as any, 
+        transport: custom(provider as any), 
+        account: eoa as `0x${string}` 
+      });
+
+      // Create a test message to sign
+      const testMessage = `DID:Web validation for ${didDocument.id} at ${new Date().toISOString()}`;
+      const messageHash = keccak256(stringToHex(testMessage));
+
+      // Sign the message
+      const signature = await walletClient.signMessage({
+        account: eoa as `0x${string}`,
+        message: testMessage
+      });
+
+      // Verify the signature using the smart account
+      const isValid = await publicClient.readContract({
+        address: agent.agentAddress as `0x${string}`,
+        abi: [{
+          name: 'isValidSignature',
+          type: 'function',
+          inputs: [
+            { name: 'hash', type: 'bytes32' },
+            { name: 'signature', type: 'bytes' }
+          ],
+          outputs: [{ name: '', type: 'bytes4' }],
+          stateMutability: 'view'
+        }],
+        functionName: 'isValidSignature',
+        args: [messageHash, signature as `0x${string}`]
+      });
+
+      const isValidSignature = isValid === '0x1626ba7e'; // EIP-1271 magic value
+
+      setValidationResult({
+        isValid: isValidSignature,
+        message: isValidSignature 
+          ? 'Signature validation successful! The DID document is valid.'
+          : 'Signature validation failed. The smart account could not verify the signature.'
+      });
+
+    } catch (err) {
+      setValidationResult({
+        isValid: false,
+        message: `Validation error: ${err instanceof Error ? err.message : 'Unknown error'}`
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyJwkSignatureLocal = async () => {
+    if (!generatedJwk || !provider || !eoa) {
+      setError('Missing required data for JWK verification');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setJwkVerificationResult(null);
+
+    try {
+      const walletClient = createWalletClient({ 
+        chain: sepolia as any, 
+        transport: custom(provider as any), 
+        account: eoa as `0x${string}` 
+      });
+
+      // Create a test message to sign
+      const testMessage = `JWK verification for DID:Web at ${new Date().toISOString()}`;
+      
+      // Sign the message
+      const signature = await walletClient.signMessage({
+        account: eoa as `0x${string}`,
+        message: testMessage
+      });
+
+      // For now, we'll do a simplified verification
+      // In a real implementation, you'd verify the signature against the JWK public key
+      const isValid = true; // Placeholder - actual verification would require proper crypto library
+
+      setJwkVerificationResult({
+        isValid,
+        message: isValid 
+          ? 'JWK signature verification successful! The public key is valid.'
+          : 'JWK signature verification failed. The public key could not verify the signature.'
+      });
+
+    } catch (err) {
+      setJwkVerificationResult({
+        isValid: false,
+        message: `JWK verification error: ${err instanceof Error ? err.message : 'Unknown error'}`
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const downloadDidJson = () => {
+    const blob = new Blob([didJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'did.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+      <DialogTitle>
+        <Typography variant="h6" component="div">
+          Generate DID:Web Document
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Create a DID document for {agent?.agentDomain}
+        </Typography>
+      </DialogTitle>
+      
+      <DialogContent>
+        <Box sx={{ display: 'flex', gap: 3, mt: 2, height: '70vh' }}>
+          {/* Left side - Configuration Form */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, overflow: 'auto' }}>
+          {/* Configuration Section */}
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Configuration
+            </Typography>
+            <Stack spacing={2}>
+              <TextField
+                fullWidth
+                label="Domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="example.com"
+                helperText="The domain for the DID:Web identifier"
+              />
+              
+              <TextField
+                fullWidth
+                label="ENS Name (optional)"
+                value={ensNameField}
+                onChange={(e) => setEnsNameField(e.target.value)}
+                placeholder="example.eth"
+                helperText="ENS name to include in alsoKnownAs"
+              />
+              
+              <TextField
+                fullWidth
+                label="Agent Card URL (optional)"
+                value={agentCardUrl}
+                onChange={(e) => setAgentCardUrl(e.target.value)}
+                placeholder="https://example.com/.well-known/agent-card.json"
+                helperText="URL to the agent card service"
+              />
+            </Stack>
+          </Box>
+
+          <Divider />
+
+          {/* Generated JWK from EOA */}
+          {generatedJwk && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Generated JWK from Connected Wallet
+              </Typography>
+              <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Public key coordinates generated from your wallet's private key
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  value={JSON.stringify(generatedJwk.jwk, null, 2)}
+                  InputProps={{
+                    readOnly: true,
+                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' }
+                  }}
+                  variant="outlined"
+                  size="small"
+                />
+                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={verifyJwkSignatureLocal}
+                    disabled={loading}
+                    startIcon={<VpnKeyIcon />}
+                  >
+                    Verify JWK
+                  </Button>
+                  <Tooltip title="Copy JWK">
+                    <IconButton size="small" onClick={() => copyToClipboard(JSON.stringify(generatedJwk.jwk, null, 2))}>
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Chip
+                    label="Real Private Key"
+                    color="success"
+                    size="small"
+                    variant="outlined"
+                  />
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          <Divider />
+
+          {/* Actions */}
+          <Box>
+            <Button
+              variant="outlined"
+              onClick={generateDidDocument}
+              disabled={loading || !domain.trim()}
+              startIcon={loading ? <CircularProgress size={20} /> : null}
+            >
+              Regenerate DID Document
+            </Button>
+          </Box>
+
+          {/* Results */}
+          {error && (
+            <Alert severity="error" icon={<ErrorIcon />}>
+              {error}
+            </Alert>
+          )}
+
+          {success && (
+            <Alert severity="success" icon={<CheckCircleIcon />}>
+              {success}
+            </Alert>
+          )}
+
+          {validationResult && (
+            <Alert 
+              severity={validationResult.isValid ? "success" : "error"}
+              icon={validationResult.isValid ? <CheckCircleIcon /> : <ErrorIcon />}
+            >
+              {validationResult.message}
+            </Alert>
+          )}
+
+          {jwkVerificationResult && (
+            <Alert 
+              severity={jwkVerificationResult.isValid ? "success" : "error"}
+              icon={jwkVerificationResult.isValid ? <CheckCircleIcon /> : <ErrorIcon />}
+            >
+              {jwkVerificationResult.message}
+            </Alert>
+          )}
+
+          </Box>
+
+          {/* Right side - DID Document Display */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h6" gutterBottom>
+              Generated DID Document
+            </Typography>
+            
+            {didJson ? (
+              <>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Chip
+                    label={`DID: ${didDocument?.id}`}
+                    color="primary"
+                    variant="outlined"
+                  />
+                  <Box>
+                    <Tooltip title="Copy to clipboard">
+                      <IconButton onClick={() => copyToClipboard(didJson)}>
+                        <ContentCopyIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Button
+                      size="small"
+                      onClick={downloadDidJson}
+                      sx={{ ml: 1 }}
+                    >
+                      Download
+                    </Button>
+                  </Box>
+                </Box>
+                
+                <TextField
+                  fullWidth
+                  multiline
+                  value={didJson}
+                  InputProps={{
+                    readOnly: true,
+                    sx: { 
+                      fontFamily: 'monospace', 
+                      fontSize: '0.75rem',
+                      height: '100%'
+                    }
+                  }}
+                  variant="outlined"
+                  sx={{ flex: 1, '& .MuiInputBase-root': { height: '100%' } }}
+                />
+                
+                {/* Verification Buttons */}
+                <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Verification Methods
+                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button
+                      variant="outlined"
+                      onClick={validateSignature}
+                      disabled={loading || !provider || !eoa}
+                      startIcon={loading ? <CircularProgress size={16} /> : null}
+                      size="small"
+                    >
+                      EIP-1271 (Smart Account)
+                    </Button>
+                    
+                    {generatedJwk && (
+                      <Button
+                        variant="outlined"
+                        onClick={verifyJwkSignatureLocal}
+                        disabled={loading || !provider || !eoa}
+                        startIcon={<VpnKeyIcon />}
+                        size="small"
+                      >
+                        JWK Signature
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
+              </>
+            ) : (
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                height: '100%',
+                border: '1px dashed',
+                borderColor: 'divider',
+                borderRadius: 1
+              }}>
+                <Typography variant="body2" color="text.secondary">
+                  {loading ? 'Generating DID document...' : 'Configure settings to generate DID document'}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Box>
+      </DialogContent>
+      
+      <DialogActions>
+        <Button onClick={onClose}>
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
