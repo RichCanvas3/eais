@@ -155,54 +155,40 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
       let eoaJwk: any = null;
       console.log('🔍 JWK Generation Debug:', { provider: !!provider, eoa, agentAddress });
       
+      // Always generate JWK first, before creating the DID document
       if (provider && eoa) {
         try {
           console.log('🚀 Attempting to generate JWK from connected wallet...');
           eoaJwk = await generateJwkFromConnectedWallet(provider, eoa);
           console.log('✅ JWK generated successfully:', eoaJwk);
-          
-          if (eoaJwk) {
-            setGeneratedJwk(eoaJwk);
-            verificationMethods.push({
-              id: `${didId}#server-jwk`,
-              type: 'JsonWebKey2020',
-              controller: didId,
-              publicKeyJwk: eoaJwk.jwk
-            });
-            console.log('✅ Server-jwk verification method added to DID document');
-          } else {
-            console.warn('⚠️ JWK generation returned null');
-          }
         } catch (error) {
           console.error('❌ Could not generate JWK from wallet:', error);
-          // Generate fallback JWK to ensure DID document is always created
-          try {
-            const fallbackJwk = generateDeterministicJwkFromAddress(agentAddress);
-            setGeneratedJwk(fallbackJwk);
-            verificationMethods.push({
-              id: `${didId}#server-jwk`,
-              type: 'JsonWebKey2020',
-              controller: didId,
-              publicKeyJwk: fallbackJwk.jwk
-            });
-          } catch (fallbackError) {
-            console.warn('Fallback JWK generation also failed:', fallbackError);
-          }
         }
-      } else {
-        // Generate fallback JWK if no wallet connection
+      }
+      
+      // If no JWK from wallet, generate fallback
+      if (!eoaJwk) {
         try {
-          const fallbackJwk = generateDeterministicJwkFromAddress(agentAddress);
-          setGeneratedJwk(fallbackJwk);
-          verificationMethods.push({
-            id: `${didId}#server-jwk`,
-            type: 'JsonWebKey2020',
-            controller: didId,
-            publicKeyJwk: fallbackJwk.jwk
-          });
+          console.log('🔄 Generating fallback JWK...');
+          eoaJwk = generateDeterministicJwkFromAddress(agentAddress);
+          console.log('✅ Fallback JWK generated:', eoaJwk);
         } catch (fallbackError) {
-          console.warn('Fallback JWK generation failed:', fallbackError);
+          console.warn('❌ Fallback JWK generation failed:', fallbackError);
         }
+      }
+      
+      // Set the JWK and add to verification methods
+      if (eoaJwk) {
+        setGeneratedJwk(eoaJwk);
+        verificationMethods.push({
+          id: `${didId}#server-jwk`,
+          type: 'JsonWebKey2020',
+          controller: didId,
+          publicKeyJwk: eoaJwk.jwk
+        });
+        console.log('✅ Server-jwk verification method added to DID document');
+      } else {
+        console.warn('⚠️ No JWK available for server-jwk verification method');
       }
 
       // Build alsoKnownAs array
@@ -548,10 +534,19 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
         </Typography>
       </DialogTitle>
       
-      <DialogContent>
-        <Box sx={{ display: 'flex', gap: 3, mt: 2, height: '70vh' }}>
+      <DialogContent sx={{ height: '80vh', display: 'flex', flexDirection: 'column', p: 0 }}>
+        <Box sx={{ display: 'flex', gap: 3, flex: 1, overflow: 'hidden' }}>
           {/* Left side - Configuration Form */}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, overflow: 'auto' }}>
+          <Box sx={{ 
+            flex: 1, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: 3, 
+            overflow: 'auto',
+            p: 3,
+            borderRight: '1px solid',
+            borderColor: 'divider'
+          }}>
           {/* Configuration Section */}
           <Box>
             <Typography variant="h6" gutterBottom>
@@ -586,56 +581,6 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
               />
             </Stack>
           </Box>
-
-          <Divider />
-
-          {/* Generated JWK from EOA */}
-          {generatedJwk && (
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Generated JWK from Connected Wallet
-              </Typography>
-              <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Public key coordinates generated from your wallet's private key
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  value={JSON.stringify(generatedJwk.jwk, null, 2)}
-                  InputProps={{
-                    readOnly: true,
-                    sx: { fontFamily: 'monospace', fontSize: '0.875rem' }
-                  }}
-                  variant="outlined"
-                  size="small"
-                />
-                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={verifyJwkSignatureLocal}
-                    disabled={loading}
-                    startIcon={<VpnKeyIcon />}
-                  >
-                    Verify JWK
-                  </Button>
-                  <Tooltip title="Copy JWK">
-                    <IconButton size="small" onClick={() => copyToClipboard(JSON.stringify(generatedJwk.jwk, null, 2))}>
-                      <ContentCopyIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Chip
-                    label="Real Private Key"
-                    color="success"
-                    size="small"
-                    variant="outlined"
-                  />
-                </Box>
-              </Box>
-            </Box>
-          )}
 
           <Divider />
 
@@ -685,7 +630,13 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
           </Box>
 
           {/* Right side - DID Document Display */}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ 
+            flex: 1, 
+            display: 'flex', 
+            flexDirection: 'column',
+            overflow: 'hidden',
+            p: 3
+          }}>
             <Typography variant="h6" gutterBottom>
               Generated DID Document
             </Typography>
@@ -714,21 +665,29 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
                   </Box>
                 </Box>
                 
-                <TextField
-                  fullWidth
-                  multiline
-                  value={didJson}
-                  InputProps={{
-                    readOnly: true,
-                    sx: { 
-                      fontFamily: 'monospace', 
-                      fontSize: '0.75rem',
-                      height: '100%'
-                    }
-                  }}
-                  variant="outlined"
-                  sx={{ flex: 1, '& .MuiInputBase-root': { height: '100%' } }}
-                />
+                <Box sx={{ 
+                  height: '400px',
+                  overflow: 'auto', 
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 1,
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  <pre style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.75rem',
+                    margin: 0,
+                    padding: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    flex: 1,
+                    minHeight: '350px'
+                  }}>
+                    {didJson}
+                  </pre>
+                </Box>
                 
                 {/* Verification Buttons */}
                 <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -766,10 +725,11 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center', 
-                height: '100%',
+                flex: 1,
                 border: '1px dashed',
                 borderColor: 'divider',
-                borderRadius: 1
+                borderRadius: 1,
+                minHeight: '400px'
               }}>
                 <Typography variant="body2" color="text.secondary">
                   {loading ? 'Generating DID document...' : 'Configure settings to generate DID document'}
