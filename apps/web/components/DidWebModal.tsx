@@ -480,24 +480,31 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
       // Create a test message to sign
       const testMessage = `JWK verification for DID:Web at ${new Date().toISOString()}`;
       
+      console.log('🔍 Signing test message for JWK verification:', testMessage);
+      
       // Sign the message
       const signature = await walletClient.signMessage({
         account: eoa as `0x${string}`,
         message: testMessage
       });
 
-      // For now, we'll do a simplified verification
-      // In a real implementation, you'd verify the signature against the JWK public key
-      const isValid = true; // Placeholder - actual verification would require proper crypto library
+      console.log('✅ Test message signed:', signature);
+
+      // Now verify the signature using the JWK public key
+      console.log('🔍 Verifying signature against JWK public key...');
+      const isValid = await verifyJwkSignature(testMessage, signature, generatedJwk.jwk);
+
+      console.log('✅ JWK verification result:', isValid);
 
       setJwkVerificationResult({
         isValid,
         message: isValid 
-          ? 'JWK signature verification successful! The public key is valid.'
-          : 'JWK signature verification failed. The public key could not verify the signature.'
+          ? 'JWK signature verification successful! The JsonWebKey2020 verification method is valid and can verify signatures.'
+          : 'JWK signature verification failed. The JsonWebKey2020 verification method could not verify the signature.'
       });
 
     } catch (err) {
+      console.error('❌ JWK verification error:', err);
       setJwkVerificationResult({
         isValid: false,
         message: `JWK verification error: ${err instanceof Error ? err.message : 'Unknown error'}`
