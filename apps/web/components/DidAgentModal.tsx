@@ -21,7 +21,6 @@ import { createPublicClient, createWalletClient, http, custom, keccak256, string
 import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
-import { generatePublicKeyJwkFromPrivateKey, generateDeterministicJwkFromAddress, generateJwkFromConnectedWallet, signMessageWithEoa, verifyJwkSignature } from '@/lib/jwk-utils';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -68,14 +67,12 @@ interface Props {
 export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }) => {
   const { provider, address: eoa } = useWeb3Auth();
   const [didDocument, setDidDocument] = useState<DidAgentDocument | null>(null);
-  const [eoaJwk, setEoaJwk] = useState<any>(null);
   const [mcpEndpoint, setMcpEndpoint] = useState('');
   const [a2aEndpoint, setA2aEndpoint] = useState('');
   const [ensEndpoint, setEnsEndpoint] = useState('');
   const [controllerAddress, setControllerAddress] = useState('0x8004Contract');
   const [agentCardUrl, setAgentCardUrl] = useState('');
   const [eip1271Result, setEip1271Result] = useState<string | null>(null);
-  const [jwkResult, setJwkResult] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Auto-generate DID document when modal opens
@@ -364,63 +361,6 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
     }
   };
 
-  const verifyAASignatureLocal = async () => {
-    if (!provider || !eoa || !agent) return;
-
-    try {
-      console.log('🔍 Starting Account Abstraction signature verification for DID:Agent...');
-      
-      const testMessage = `DID:Agent AA Verification for ${agent.agentId}`;
-      
-      // Get signature using personal_sign
-      const signature = await provider.request({
-        method: 'personal_sign',
-        params: [testMessage, eoa]
-      }) as string;
-
-      console.log('🔍 AA verification - test message:', testMessage);
-      console.log('🔍 AA verification - signature:', signature);
-
-      // Verify the signature using the account abstraction address (EIP-1271)
-      const messageHash = keccak256(stringToHex(testMessage));
-      
-      const publicClient = createPublicClient({
-        chain: sepolia,
-        transport: http()
-      });
-
-      const isValid = await publicClient.readContract({
-        address: agent.agentAddress as `0x${string}`,
-        abi: [{
-          name: 'isValidSignature',
-          type: 'function',
-          inputs: [
-            { name: 'hash', type: 'bytes32' },
-            { name: 'signature', type: 'bytes' }
-          ],
-          outputs: [{ name: '', type: 'bytes4' }],
-          stateMutability: 'view'
-        }],
-        functionName: 'isValidSignature',
-        args: [messageHash, signature as `0x${string}`]
-      });
-
-      const isValidSignature = isValid === '0x1626ba7e';
-      console.log('🔍 AA verification result:', isValidSignature);
-
-      if (isValidSignature) {
-        setJwkResult('success');
-        console.log('✅ Account Abstraction signature verification successful!');
-      } else {
-        setJwkResult('failure');
-        console.log('❌ Account Abstraction signature verification failed');
-      }
-
-    } catch (error) {
-      console.error('❌ Error verifying Account Abstraction signature:', error);
-      setJwkResult('error');
-    }
-  };
 
   return (
     <Dialog 
@@ -567,7 +507,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
               </pre>
             </Box>
 
-            {/* Verification Buttons */}
+            {/* Verification Button */}
             <Box mt={2} display="flex" gap={2}>
               <Button
                 variant="contained"
@@ -577,16 +517,6 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
                 startIcon={eip1271Result === 'success' ? <CheckCircleIcon /> : eip1271Result === 'failure' ? <ErrorIcon /> : undefined}
               >
                 EIP-1271 (Smart Account)
-              </Button>
-              
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={verifyAASignatureLocal}
-                disabled={!provider || !eoa}
-                startIcon={jwkResult === 'success' ? <CheckCircleIcon /> : jwkResult === 'failure' ? <ErrorIcon /> : undefined}
-              >
-                AA Signature
               </Button>
             </Box>
 
@@ -602,16 +532,6 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
               </Alert>
             )}
 
-            {jwkResult && (
-              <Alert 
-                severity={jwkResult === 'success' ? 'success' : jwkResult === 'failure' ? 'error' : 'warning'}
-                sx={{ mt: 2 }}
-              >
-                {jwkResult === 'success' && 'Account Abstraction signature verification successful!'}
-                {jwkResult === 'failure' && 'Account Abstraction signature verification failed. Check console for details.'}
-                {jwkResult === 'error' && 'Error during Account Abstraction verification. Check console for details.'}
-              </Alert>
-            )}
           </Box>
         </Box>
       </DialogContent>
