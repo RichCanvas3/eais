@@ -14,20 +14,28 @@ export function generatePublicKeyJwkFromPrivateKey(privateKey: `0x${string}`): {
     y: string;
   };
 } {
+  console.log('🔍 generatePublicKeyJwkFromPrivateKey called with:', privateKey.slice(0, 10) + '...');
+  
   // Create account from private key
   const account = privateKeyToAccount(privateKey);
   
   // Get the public key (this is the uncompressed public key)
   const publicKey = account.publicKey;
   
+  console.log('🔍 Generated public key from private key:', publicKey);
+  
   // Remove the 0x04 prefix and split into x and y coordinates
   const publicKeyHex = publicKey.slice(2); // Remove 0x
   const xHex = publicKeyHex.slice(0, 64); // First 32 bytes
   const yHex = publicKeyHex.slice(64, 128); // Next 32 bytes
   
+  console.log('🔍 Extracted coordinates:', { xHex, yHex });
+  
   // Convert hex to base64url encoding
   const x = hexToBase64Url(xHex);
   const y = hexToBase64Url(yHex);
+  
+  console.log('🔍 Base64URL coordinates:', { x, y });
   
   return {
     x,
@@ -55,10 +63,14 @@ export function generateDeterministicJwkFromAddress(address: string): {
     y: string;
   };
 } {
+  console.log('🔍 generateDeterministicJwkFromAddress called with:', address);
+  
   // Create a deterministic "private key" based on the address
   // This is for demonstration only - not cryptographically secure
   const addressHash = keccak256(stringToHex(address));
   const mockPrivateKey = `0x${addressHash.slice(2)}` as `0x${string}`;
+  
+  console.log('🔍 Generated deterministic private key:', mockPrivateKey.slice(0, 10) + '...');
   
   return generatePublicKeyJwkFromPrivateKey(mockPrivateKey);
 }
@@ -93,7 +105,12 @@ export async function generateJwkFromMetaMask(
     const message = `DID:Web JWK Generation for ${address}`;
     const messageHash = keccak256(stringToHex(message));
     
-    console.log('📝 Requesting signature from wallet...', { message, messageHash });
+    console.log('📝 Requesting signature from wallet...', { 
+      message, 
+      messageHash,
+      address,
+      messageLength: message.length
+    });
     
     // Request signature from wallet - this will pop up the wallet for user approval
     const signature = await provider.request({
@@ -101,7 +118,12 @@ export async function generateJwkFromMetaMask(
       params: [message, address]
     });
     
-    console.log('✅ Wallet signature received:', signature);
+    console.log('✅ Wallet signature received:', {
+      signature,
+      address,
+      message,
+      signatureLength: signature.length
+    });
     
     // Extract r, s, v from signature
     const sig = signature.slice(2); // Remove 0x
@@ -123,9 +145,9 @@ export async function generateJwkFromMetaMask(
     
     console.log('✅ Public key recovered:', publicKey);
     
-    // Extract X and Y coordinates (first 32 bytes each)
-    const xHex = publicKey.slice(2, 66);
-    const yHex = publicKey.slice(66, 130);
+    // Extract X and Y coordinates (first 32 bytes each after 0x04 prefix)
+    const xHex = publicKey.slice(4, 68);  // Skip 0x04 prefix (4 chars), take next 64 chars
+    const yHex = publicKey.slice(68, 132); // Take next 64 chars
     
     // Convert to Base64URL encoding
     const x = hexToBase64Url(xHex);
@@ -207,12 +229,25 @@ export async function verifyJwkSignature(
     const xHex = base64UrlToHex(publicKeyJwk.x);
     const yHex = base64UrlToHex(publicKeyJwk.y);
     
-    console.log('🔍 Converted coordinates:', { xHex, yHex });
+    console.log('🔍 Converted coordinates:', { 
+      xHex, 
+      yHex,
+      xHexLength: xHex.length,
+      yHexLength: yHex.length,
+      expectedLength: 64 // 32 bytes = 64 hex chars
+    });
     
     // Reconstruct the uncompressed public key (0x04 prefix + x + y)
     const expectedPublicKey = `0x04${xHex}${yHex}` as `0x${string}`;
     
-    console.log('🔍 Expected public key from JWK:', expectedPublicKey);
+    console.log('🔍 Expected public key from JWK:', {
+      publicKey: expectedPublicKey,
+      length: expectedPublicKey.length,
+      expectedLength: 131, // 0x04 + 64 + 64 = 131 chars
+      xHexLength: xHex.length,
+      yHexLength: yHex.length,
+      totalHexLength: xHex.length + yHex.length
+    });
     
     // Import viem's recoverPublicKey function
     const { recoverPublicKey } = await import('viem');
@@ -238,17 +273,40 @@ export async function verifyJwkSignature(
       }
     });
     
-    console.log('🔍 Recovered public key from signature:', recoveredPublicKey);
+    console.log('🔍 Recovered public key from signature:', {
+      publicKey: recoveredPublicKey,
+      length: recoveredPublicKey.length,
+      expectedLength: 131
+    });
     
     // Compare the recovered public key with our expected JWK public key
     const isValid = recoveredPublicKey.toLowerCase() === expectedPublicKey.toLowerCase();
     
     console.log('✅ JWK signature verification result:', isValid);
-    console.log('🔍 Comparison:', {
+    console.log('🔍 Detailed Comparison:', {
       recovered: recoveredPublicKey.toLowerCase(),
       expected: expectedPublicKey.toLowerCase(),
-      match: isValid
+      recoveredLength: recoveredPublicKey.length,
+      expectedLength: expectedPublicKey.length,
+      exactMatch: recoveredPublicKey.toLowerCase() === expectedPublicKey.toLowerCase(),
+      recoveredStartsWith: recoveredPublicKey.startsWith('0x04'),
+      expectedStartsWith: expectedPublicKey.startsWith('0x04')
     });
+    
+    // If they don't match, let's see if it's a format issue
+    if (!isValid) {
+      console.log('❌ Public keys don\'t match! Let\'s debug further...');
+      console.log('🔍 Recovered public key format:', {
+        prefix: recoveredPublicKey.slice(0, 4),
+        xCoord: recoveredPublicKey.slice(4, 68),
+        yCoord: recoveredPublicKey.slice(68, 132)
+      });
+      console.log('🔍 Expected public key format:', {
+        prefix: expectedPublicKey.slice(0, 4),
+        xCoord: expectedPublicKey.slice(4, 68),
+        yCoord: expectedPublicKey.slice(68, 132)
+      });
+    }
     
     return isValid;
   } catch (error) {
@@ -359,15 +417,19 @@ export async function generateJwkFromConnectedWallet(
     const privateKey = await extractPrivateKeyFromWallet(provider, address);
     
     if (privateKey) {
-      console.log('✅ Using private key from Web3Auth');
-      return generatePublicKeyJwkFromPrivateKey(privateKey);
+      console.log('✅ Using private key from Web3Auth:', privateKey.slice(0, 10) + '...');
+      const result = generatePublicKeyJwkFromPrivateKey(privateKey);
+      console.log('✅ Generated JWK from private key:', result.jwk);
+      return result;
     }
     
     // If no private key available, try signature-based approach for any provider with request method
     if (provider && provider.request && typeof provider.request === 'function') {
       console.log('🔍 Provider has request method, attempting signature-based approach');
       try {
-        return await generateJwkFromMetaMask(provider, address);
+        const result = await generateJwkFromMetaMask(provider, address);
+        console.log('✅ Generated JWK from signature:', result?.jwk);
+        return result;
       } catch (signatureError) {
         console.warn('❌ Signature-based approach failed:', signatureError);
         // Fall through to deterministic fallback
@@ -376,7 +438,9 @@ export async function generateJwkFromConnectedWallet(
     
     // If neither method works, fall back to deterministic generation
     console.log('⚠️ No private key or signature method available, using deterministic fallback');
-    return generateDeterministicJwkFromAddress(address);
+    const result = generateDeterministicJwkFromAddress(address);
+    console.log('✅ Generated deterministic JWK:', result.jwk);
+    return result;
   } catch (error) {
     console.error('❌ Error generating JWK from wallet:', error);
     return null;

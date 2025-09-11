@@ -477,18 +477,32 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
         account: eoa as `0x${string}` 
       });
 
-      // Create a test message to sign
-      const testMessage = `JWK verification for DID:Web at ${new Date().toISOString()}`;
+      // Create a test message to sign - use the same message format as JWK generation
+      const testMessage = `DID:Web JWK Generation for ${eoa}`;
       
-      console.log('🔍 Signing test message for JWK verification:', testMessage);
+      console.log('🔍 Signing test message for JWK verification:', {
+        message: testMessage,
+        eoa,
+        messageLength: testMessage.length,
+        timestamp: new Date().toISOString(),
+        provider: !!provider,
+        providerType: provider?.constructor?.name,
+        providerKeys: provider ? Object.keys(provider) : 'no provider'
+      });
       
-      // Sign the message
-      const signature = await walletClient.signMessage({
-        account: eoa as `0x${string}`,
-        message: testMessage
+      // Sign the message using personal_sign (same method as JWK generation)
+      // This ensures consistent message format
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [testMessage, eoa]
       });
 
-      console.log('✅ Test message signed:', signature);
+      console.log('✅ Test message signed:', {
+        signature,
+        eoa,
+        testMessage,
+        signatureLength: signature.length
+      });
 
       // Now verify the signature using the JWK public key
       console.log('🔍 Verifying signature against JWK public key...');
