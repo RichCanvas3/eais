@@ -418,28 +418,129 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
       const testMessage = `DID:Web validation for ${didDocument.id} at ${new Date().toISOString()}`;
       const messageHash = keccak256(stringToHex(testMessage));
 
-      // Sign the message
-      const signature = await walletClient.signMessage({
-        account: eoa as `0x${string}`,
-        message: testMessage
+      console.log('🔍 EIP-1271 Validation Debug:', {
+        testMessage,
+        messageHash,
+        eoa,
+        agentAddress: agent.agentAddress,
+        smartAccountAddress: agent.agentAddress
       });
 
-      // Verify the signature using the smart account
-      const isValid = await publicClient.readContract({
-        address: agent.agentAddress as `0x${string}`,
-        abi: [{
-          name: 'isValidSignature',
-          type: 'function',
-          inputs: [
-            { name: 'hash', type: 'bytes32' },
-            { name: 'signature', type: 'bytes' }
-          ],
-          outputs: [{ name: '', type: 'bytes4' }],
-          stateMutability: 'view'
-        }],
-        functionName: 'isValidSignature',
-        args: [messageHash, signature as `0x${string}`]
+      // Sign the message using personal_sign (raw signature for EIP-1271)
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [testMessage, eoa]
       });
+
+      console.log('✅ EOA signature created:', signature);
+
+      // Verify the signature using the smart account
+      console.log('🔍 Calling isValidSignature on smart account:', agent.agentAddress);
+      
+      // First, let's check if the smart account is deployed and get its owner
+      try {
+        const code = await publicClient.getBytecode({ address: agent.agentAddress as `0x${string}` });
+        console.log('🔍 Smart account code length:', code?.length || 0);
+        console.log('🔍 Smart account is deployed:', (code?.length || 0) > 2);
+        
+        if (code && code.length > 2) {
+          const owner = await publicClient.readContract({
+            address: agent.agentAddress as `0x${string}`,
+            abi: [{
+              name: 'owner',
+              type: 'function',
+              inputs: [],
+              outputs: [{ name: '', type: 'address' }],
+              stateMutability: 'view'
+            }],
+            functionName: 'owner'
+          });
+          console.log('🔍 Smart account owner:', owner);
+          console.log('🔍 EOA matches owner:', owner.toLowerCase() === eoa.toLowerCase());
+        }
+      } catch (ownerError) {
+        console.log('⚠️ Could not read owner or code (might not be a standard ERC-4337 account):', ownerError);
+      }
+      
+      // Use MetaMask delegation toolkit approach for signature validation
+      console.log('🔍 Using MetaMask delegation toolkit approach for signature validation...');
+      
+      let isValid;
+      try {
+        // Since we can't access the private key directly, let's try a different approach
+        // The issue might be that the smart account expects a different signature format
+        // Let's try using the delegation toolkit's signature format expectations
+        
+        console.log('🔍 Attempting EIP-1271 validation with delegation toolkit considerations...');
+        
+        // For MetaMask delegation toolkit AAs, we might need to use a different approach
+        // Let's try the standard EIP-1271 validation but with the correct smart account address
+        isValid = await publicClient.readContract({
+          address: agent.agentAddress as `0x${string}`,
+          abi: [{
+            name: 'isValidSignature',
+            type: 'function',
+            inputs: [
+              { name: 'hash', type: 'bytes32' },
+              { name: 'signature', type: 'bytes' }
+            ],
+            outputs: [{ name: '', type: 'bytes4' }],
+            stateMutability: 'view'
+          }],
+          functionName: 'isValidSignature',
+          args: [messageHash, signature as `0x${string}`]
+        });
+        
+        console.log('🔍 Standard EIP-1271 validation result:', isValid);
+        
+        // If standard validation fails, try with EIP-191 prefixed message
+        if (isValid !== '0x1626ba7e') {
+          console.log('🔍 Standard validation failed, trying EIP-191 prefixed message...');
+          
+          const prefixedMessage = `\x19Ethereum Signed Message:\n${testMessage.length}${testMessage}`;
+          const prefixedHash = keccak256(stringToHex(prefixedMessage));
+          
+          isValid = await publicClient.readContract({
+            address: agent.agentAddress as `0x${string}`,
+            abi: [{
+              name: 'isValidSignature',
+              type: 'function',
+              inputs: [
+                { name: 'hash', type: 'bytes32' },
+                { name: 'signature', type: 'bytes' }
+              ],
+              outputs: [{ name: '', type: 'bytes4' }],
+              stateMutability: 'view'
+            }],
+            functionName: 'isValidSignature',
+            args: [prefixedHash, signature as `0x${string}`]
+          });
+          
+          console.log('🔍 EIP-191 prefixed validation result:', isValid);
+        }
+        
+      } catch (validationError) {
+        console.log('❌ All validation attempts failed:', validationError);
+        throw validationError;
+      }
+
+      console.log('🔍 Smart account validation result:', isValid);
+      console.log('🔍 Expected magic value: 0x1626ba7e');
+      console.log('🔍 Magic value match:', isValid === '0x1626ba7e');
+      
+      // Additional debugging - let's see what the signature looks like
+      console.log('🔍 Signature analysis:', {
+        signature,
+        signatureLength: signature.length,
+        expectedLength: 132, // 0x + 130 hex chars = 132
+        messageHash,
+        messageHashLength: messageHash.length
+      });
+      
+      // Check if the signature is the right length
+      if (signature.length !== 132) {
+        console.warn('⚠️ Signature length is not 132 characters (0x + 130 hex chars)');
+      }
 
       const isValidSignature = isValid === '0x1626ba7e'; // EIP-1271 magic value
 
@@ -471,11 +572,6 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
     setJwkVerificationResult(null);
 
     try {
-      const walletClient = createWalletClient({ 
-        chain: sepolia as any, 
-        transport: custom(provider as any), 
-        account: eoa as `0x${string}` 
-      });
 
       // Create a test message to sign - use the same message format as JWK generation
       const testMessage = `DID:Web JWK Generation for ${eoa}`;
