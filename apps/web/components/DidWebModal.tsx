@@ -101,7 +101,7 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
     if (agent && open) {
       setDomain(agent.agentDomain);
       setEnsNameField(ensName || '');
-      setAgentCardUrl(`https://${agent.agentDomain}/.well-known/agent-card.json`);
+      setAgentCardUrl(`https://${agent.agentDomain}/.well-known/did.json`);
       setError(null);
       setSuccess(null);
       setValidationResult(null);
@@ -203,11 +203,11 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
 
       // Build services
       const services: Service[] = [];
-      const agentCardUrl = `https://${agentDomain}/.well-known/agent-card.json`;
+      const didDocumentUrl = `https://${agentDomain}/.well-known/did.json`;
       services.push({
-        id: `${didId}#agent-card`,
-        type: 'AgentCard',
-        serviceEndpoint: agentCardUrl
+        id: `${didId}#did-document`,
+        type: 'DIDDocument',
+        serviceEndpoint: didDocumentUrl
       });
 
       // Create DID document
@@ -256,8 +256,8 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
             `https://sepolia.app.ens.domains/`
           ],
           service: agentCardUrl ? [{
-            id: `did:web:${domain.trim()}#agent-card`,
-            type: 'AgentCard',
+            id: `did:web:${domain.trim()}#did-document`,
+            type: 'DIDDocument',
             serviceEndpoint: agentCardUrl
           }] : []
         };
@@ -358,8 +358,8 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
       const services: Service[] = [];
       if (agentCardUrl.trim()) {
         services.push({
-          id: `${didId}#agent-card`,
-          type: 'AgentCard',
+          id: `${didId}#did-document`,
+          type: 'DIDDocument',
           serviceEndpoint: agentCardUrl.trim()
         });
       }
@@ -594,11 +594,11 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
               
               <TextField
                 fullWidth
-                label="Agent Card URL (optional)"
+                label="DID Document URL (optional)"
                 value={agentCardUrl}
                 onChange={(e) => setAgentCardUrl(e.target.value)}
-                placeholder="https://example.com/.well-known/agent-card.json"
-                helperText="URL to the agent card service"
+                placeholder="https://example.com/.well-known/did.json"
+                helperText="URL to the DID document service"
               />
             </Stack>
           </Box>
