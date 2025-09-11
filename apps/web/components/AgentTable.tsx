@@ -10,6 +10,7 @@ import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
 import { DidWebModal } from './DidWebModal';
+import { DidAgentModal } from './DidAgentModal';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
@@ -226,6 +227,7 @@ export function AgentTable() {
 	
 	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
 	const [didWebOpen, setDidWebOpen] = React.useState(false);
+	const [didAgentOpen, setDidAgentOpen] = React.useState(false);
 	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
 	const [currentAgentEnsName, setCurrentAgentEnsName] = React.useState<string | null>(null);
 
@@ -540,6 +542,13 @@ export function AgentTable() {
 		setCurrentAgentForDid(row);
 		setCurrentAgentEnsName(agentEnsNames[row.agentAddress] || null);
 		setDidWebOpen(true);
+	}
+
+	function openDidAgentModal(row: Agent) {
+		if (!owned[row.agentId]) return; // only mine
+		setCurrentAgentForDid(row);
+		setCurrentAgentEnsName(agentEnsNames[row.agentAddress] || null);
+		setDidAgentOpen(true);
 	}
 
 
@@ -1212,6 +1221,21 @@ export function AgentTable() {
 													startIcon={<WebIcon sx={{ fontSize: '0.75rem' }} />}
 												>
 													DID:Web
+												</Button>
+												<Button 
+													size="small" 
+													onClick={() => openDidAgentModal(row)}
+													sx={{ 
+														minWidth: 'auto',
+														px: 0.5,
+														py: 0.25,
+														fontSize: '0.65rem',
+														lineHeight: 1,
+														height: 'auto'
+													}}
+													startIcon={<WebIcon sx={{ fontSize: '0.75rem' }} />}
+												>
+													DID:Agent
 												</Button>
 												<Button 
 													size="small" 
@@ -1952,6 +1976,14 @@ export function AgentTable() {
 			<DidWebModal
 				open={didWebOpen}
 				onClose={() => setDidWebOpen(false)}
+				agent={currentAgentForDid || { agentId: '', agentAddress: '', agentDomain: '' }}
+				ensName={currentAgentEnsName}
+			/>
+
+			{/* DID:Agent Modal */}
+			<DidAgentModal
+				open={didAgentOpen}
+				onClose={() => setDidAgentOpen(false)}
 				agent={currentAgentForDid || { agentId: '', agentAddress: '', agentDomain: '' }}
 				ensName={currentAgentEnsName}
 			/>
