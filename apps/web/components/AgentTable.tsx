@@ -1218,7 +1218,6 @@ export function AgentTable() {
 														lineHeight: 1,
 														height: 'auto'
 													}}
-													startIcon={<WebIcon sx={{ fontSize: '0.75rem' }} />}
 												>
 													DID:Web
 												</Button>
@@ -1233,7 +1232,6 @@ export function AgentTable() {
 														lineHeight: 1,
 														height: 'auto'
 													}}
-													startIcon={<WebIcon sx={{ fontSize: '0.75rem' }} />}
 												>
 													DID:Agent
 												</Button>

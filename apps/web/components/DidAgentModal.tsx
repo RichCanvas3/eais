@@ -26,29 +26,36 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 
 interface DidAgentDocument {
-  "@context": string;
+  "@context": string[];
   id: string;
-  controller: string;
-  service: Array<{
-    id: string;
-    type: string;
-    serviceEndpoint: string;
-  }>;
-  verificationMethod?: Array<{
+  alsoKnownAs?: string[];
+  verificationMethod: Array<{
     id: string;
     type: string;
     controller: string;
-    publicKeyJwk?: {
-      kty: string;
-      crv: string;
-      x: string;
-      y: string;
+    blockchainAccountId: string;
+    ethereumAddress: string;
+    accept: string[];
+    erc8004: {
+      agentId: string;
+      registry: string;
+      chainId: number;
     };
-    blockchainAccountId?: string;
   }>;
-  authentication?: string[];
-  assertionMethod?: string[];
-  capabilityInvocation?: string[];
+  authentication: string[];
+  assertionMethod: string[];
+  capabilityInvocation: string[];
+  capabilityDelegation: string[];
+  service: Array<{
+    id: string;
+    type: string;
+    serviceEndpoint: any;
+  }>;
+  agent: {
+    standard: string;
+    domain: string;
+    address: string;
+  };
 }
 
 interface Agent {
@@ -69,8 +76,6 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
   const [didDocument, setDidDocument] = useState<DidAgentDocument | null>(null);
   const [mcpEndpoint, setMcpEndpoint] = useState('');
   const [a2aEndpoint, setA2aEndpoint] = useState('');
-  const [ensEndpoint, setEnsEndpoint] = useState('');
-  const [controllerAddress, setControllerAddress] = useState('0x8004Contract');
   const [agentCardUrl, setAgentCardUrl] = useState('');
   const [eip1271Result, setEip1271Result] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -100,13 +105,8 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
       setAgentCardUrl(a2aUrl);
       
       // Set MCP endpoint based on agent domain (assuming MCP service runs on same domain)
-      const mcpUrl = `wss://${agent.agentDomain}/mcp`;
+      const mcpUrl = `wss://${agent.agentDomain}/.well-known/mcp`;
       setMcpEndpoint(mcpUrl);
-      
-      // Set ENS endpoint to the resolved ENS name if available
-      if (ensName) {
-        setEnsEndpoint(ensName);
-      }
       
       console.log('✅ Service endpoints set:', {
         a2a: a2aUrl,
@@ -139,36 +139,96 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
           id: `did:agent:eip155:11155111:${agent.agentId}#aa-eth`,
           type: "EcdsaSecp256k1RecoveryMethod2020",
           controller: `did:agent:eip155:11155111:${agent.agentId}`,
-          blockchainAccountId: `eip155:11155111:${agent.agentAddress}`
+          blockchainAccountId: `eip155:11155111:${agent.agentAddress}`,
+          ethereumAddress: agent.agentAddress,
+          accept: ["EIP-1271", "EIP-712"],
+          erc8004: {
+            agentId: agent.agentId,
+            registry: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS || "0xREG1STRYADDRE55",
+            chainId: 11155111
+          }
         }
+      ];
+
+      // Create alsoKnownAs array
+      const alsoKnownAs = [
+        `https://${agent.agentDomain}`,
+        ...(ensName ? [`ens:${ensName}`] : [])
       ];
 
       // Create DID:Agent document
       const didAgentDocument: DidAgentDocument = {
-        "@context": "https://www.w3.org/ns/did/v1",
-        id: `did:agent:eip155:11155111:${agent.agentId}`,
-        controller: `did:ethr:eip155:11155111:${controllerAddress}`,
-        service: [
-          {
-            id: "#mcp",
-            type: "MCPService",
-            serviceEndpoint: mcpEndpoint || `wss://${agent.agentDomain}/mcp`
-          },
-          {
-            id: "#a2a",
-            type: "A2AService",
-            serviceEndpoint: a2aEndpoint || `https://${agent.agentDomain}/.well-known/agent-card.json`
-          },
-          ...((ensName || ensEndpoint) ? [{
-            id: "#ens",
-            type: "ENSService",
-            serviceEndpoint: ensName || ensEndpoint
-          }] : [])
+        "@context": [
+          "https://www.w3.org/ns/did/v1",
+          "https://w3id.org/security/multikey/v1"
         ],
+        id: `did:agent:eip155:11155111:${agent.agentId}`,
+        alsoKnownAs: alsoKnownAs,
         verificationMethod: verificationMethods,
         authentication: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
         assertionMethod: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
-        capabilityInvocation: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`]
+        capabilityInvocation: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
+        capabilityDelegation: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
+        service: [
+          {
+            id: "#mcp-ws",
+            type: "MCP",
+            serviceEndpoint: {
+              uri: mcpEndpoint || `wss://${agent.agentDomain}/.well-known/mcp`,
+              protocol: "model-context-protocol",
+              version: "0.1",
+              transport: "websocket",
+              accept: ["application/json"],
+              auth: ["did-jws", "eip-1271"]
+            }
+          },
+          ...(ensName ? [{
+            id: "#ens",
+            type: "ENSService",
+            serviceEndpoint: {
+              name: ensName,
+              network: "eip155:1",
+              records: {
+                addr: agent.agentAddress,
+                contenthash: `ipfs://bafy.../${agent.agentDomain}/agent-card.json`,
+                url: `https://${agent.agentDomain}`,
+                "org.did": `did:agent:eip155:11155111:${agent.agentId}`
+              },
+              auth: ["eip-1271", "eip-712"]
+            }
+          }] : []),
+          {
+            id: "#linked-domains",
+            type: "LinkedDomains",
+            serviceEndpoint: {
+              origins: [`https://${agent.agentDomain}`]
+            }
+          },
+          {
+            id: "#agent-card",
+            type: "AgentCard",
+            serviceEndpoint: a2aEndpoint || `https://${agent.agentDomain}/.well-known/agent-card.json`
+          },
+          {
+            id: "#agent-interface",
+            type: "AgentInterface",
+            serviceEndpoint: `https://${agent.agentDomain}/.well-known/a2a`
+          },
+          {
+            id: "#reputation",
+            type: "ReputationRegistry",
+            serviceEndpoint: {
+              chainId: 11155111,
+              contract: "0xREPUT4TI0NADDRE55",
+              methods: ["acceptFeedback"]
+            }
+          }
+        ],
+        agent: {
+          standard: "ERC-8004",
+          domain: agent.agentDomain,
+          address: agent.agentAddress
+        }
       };
 
       setDidDocument(didAgentDocument);
@@ -180,26 +240,46 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
       
       // Fallback DID:Agent document
       const fallbackDocument: DidAgentDocument = {
-        "@context": "https://www.w3.org/ns/did/v1",
+        "@context": [
+          "https://www.w3.org/ns/did/v1",
+          "https://w3id.org/security/multikey/v1"
+        ],
         id: `did:agent:eip155:11155111:${agent.agentId}`,
-        controller: `did:ethr:eip155:11155111:${controllerAddress}`,
+        alsoKnownAs: [
+          `https://${agent.agentDomain}`,
+          ...(ensName ? [`ens:${ensName}`] : [])
+        ],
+        verificationMethod: [
+          {
+            id: `did:agent:eip155:11155111:${agent.agentId}#aa-eth`,
+            type: "EcdsaSecp256k1RecoveryMethod2020",
+            controller: `did:agent:eip155:11155111:${agent.agentId}`,
+            blockchainAccountId: `eip155:11155111:${agent.agentAddress}`,
+            ethereumAddress: agent.agentAddress,
+            accept: ["EIP-1271", "EIP-712"],
+            erc8004: {
+              agentId: agent.agentId,
+              registry: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS || "0xREG1STRYADDRE55",
+              chainId: 11155111
+            }
+          }
+        ],
+        authentication: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
+        assertionMethod: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
+        capabilityInvocation: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
+        capabilityDelegation: [`did:agent:eip155:11155111:${agent.agentId}#aa-eth`],
         service: [
           {
-            id: "#mcp",
-            type: "MCPService",
-            serviceEndpoint: mcpEndpoint || `wss://${agent.agentDomain}/mcp`
-          },
-          {
-            id: "#a2a",
-            type: "A2AService",
+            id: "#agent-card",
+            type: "AgentCard",
             serviceEndpoint: a2aEndpoint || `https://${agent.agentDomain}/.well-known/agent-card.json`
-          },
-          ...((ensName || ensEndpoint) ? [{
-            id: "#ens",
-            type: "ENSService",
-            serviceEndpoint: ensName || ensEndpoint
-          }] : [])
-        ]
+          }
+        ],
+        agent: {
+          standard: "ERC-8004",
+          domain: agent.agentDomain,
+          address: agent.agentAddress
+        }
       };
       
       setDidDocument(fallbackDocument);
@@ -406,21 +486,10 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Controller Address"
-                  value={controllerAddress}
-                  onChange={(e) => setControllerAddress(e.target.value)}
-                  placeholder="0x8004Contract"
-                  helperText="The Ethereum address that controls this DID:Agent"
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
                   label="MCP Service Endpoint"
                   value={mcpEndpoint}
                   onChange={(e) => setMcpEndpoint(e.target.value)}
-                  placeholder={`wss://${agent?.agentDomain || 'example.com'}/mcp`}
+                  placeholder={`wss://${agent?.agentDomain || 'example.com'}/.well-known/mcp`}
                   helperText="WebSocket endpoint for MCP (Model Context Protocol) service - derived from agent domain"
                 />
               </Grid>
@@ -428,22 +497,11 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="A2A Service Endpoint"
+                  label="Agent Card Endpoint"
                   value={a2aEndpoint}
                   onChange={(e) => setA2aEndpoint(e.target.value)}
                   placeholder={`https://${agent?.agentDomain || 'example.com'}/.well-known/agent-card.json`}
-                  helperText="HTTP endpoint for Agent-to-Agent communication service - derived from agent domain"
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="ENS Service Endpoint"
-                  value={ensName || ensEndpoint}
-                  onChange={(e) => setEnsEndpoint(e.target.value)}
-                  placeholder="name.agent.eth"
-                  helperText="ENS name for the agent - derived from resolved ENS name"
+                  helperText="HTTP endpoint for Agent Card service - derived from agent domain"
                 />
               </Grid>
             </Grid>
