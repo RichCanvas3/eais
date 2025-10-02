@@ -514,12 +514,16 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Create new Agent</DialogTitle>
+      <DialogTitle>
+        Create new Agent
+        <Typography variant="caption" color="text.secondary" display="block">
+          Connected EOA: {address ?? 'Not connected'}
+        </Typography>
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <Typography variant="body2" color="text.secondary">Connected EOA: {address ?? 'Not connected'}</Typography>
           <TextField label="Domain" placeholder="airbnb.eth" value={domain} onChange={(e) => setDomain(e.target.value)} fullWidth autoFocus />
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5 }}>
             {domain ? (
               domainStatusLoading ? 'Domain: checking…' : domainStatusError ? `Domain: error — ${domainStatusError}` : domainStatus?.exists ? (
                 (() => {
@@ -528,20 +532,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                   const url = `https://sepolia.app.ens.domains/${base}.eth`;
                   return (
                     <>
-                      Domain found: <a href={url} target="_blank" rel="noopener noreferrer">{base}.eth</a> — {wrappedText}
-                      {domainOwnerAddress && (
-                        <>
-                          {' '}— owner: <a href={`https://sepolia.etherscan.io/address/${domainOwnerAddress}`} target="_blank" rel="noopener noreferrer">{domainOwnerAddress}</a>
-                          {domainOwnerIsContract === true ? ' [Contract]' : domainOwnerIsContract === false ? ' [EOA]' : ''}
-                          {domainOwnerEns ? ` (${domainOwnerEns})` : ''}
-                          {domainOwnerIsContract && domainOwnerEoa && (
-                            <>
-                              {' '}— controller EOA: <a href={`https://sepolia.etherscan.io/address/${domainOwnerEoa}`} target="_blank" rel="noopener noreferrer">{domainOwnerEoa}</a>
-                              {domainOwnerEoaEns ? ` (${domainOwnerEoaEns})` : ''}
-                            </>
-                          )}
-                        </>
-                      )}
+                      Domain ENS: <a href={url} target="_blank" rel="noopener noreferrer">{base}.eth</a> — {wrappedText}
                     </>
                   );
                 })()
@@ -551,7 +542,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                   const url = `https://sepolia.app.ens.domains/${base}.eth`;
                   return (
                     <>
-                      Domain: not found on Sepolia — <a href={url} target="_blank" rel="noopener noreferrer">search {base}.eth</a>
+                      Domain not found — <a href={url} target="_blank" rel="noopener noreferrer">search {base}.eth</a>
                     </>
                   );
                 })()
@@ -559,8 +550,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             ) : 'Enter an ENS domain (e.g. airbnb.eth)'}
           </Typography>
           {domain && domainStatus && domainStatus.exists && (
-            <Typography variant="body2" color="text.secondary">
-              Domain URL text: {domainUrlLoading ? 'checking…' : domainUrlError ? `error — ${domainUrlError}` : domainUrlText ? (
+            <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
+              Domain URL: {domainUrlLoading ? 'checking…' : domainUrlError ? `error — ${domainUrlError}` : domainUrlText ? (
                 <a href={domainUrlText} target="_blank" rel="noopener noreferrer">{domainUrlText}</a>
               ) : 'not set'}
             </Typography>
@@ -628,30 +619,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             </Stack>
           )}
           
-          
+          <br></br>
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-          <Typography variant="body2" color="text.secondary">
-            ENS name: {ensPreview ? (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
+            Agent ENS: {ensPreview ? (
               <a href={`https://sepolia.app.ens.domains/${ensPreview}`} target="_blank" rel="noopener noreferrer">{ensPreview}</a>
             ) : '—'} {ensPreview && (
               <>
                 {ensResolving
                   ? '(checking...)'
-                  : ensResolvedAddress
-                    ? `(resolves to ${ensResolvedAddress})`
                     : ensExists === true
                       ? '(exists, no address record)'
                       : '(not found)'}
-                {ensResolvedAddress && agentAAIsContract && (
-                  <>
-                    {' '}— Agent AA owner EOA: {agentAAOwnerEoa ? (
-                      <>
-                        <a href={`https://sepolia.etherscan.io/address/${agentAAOwnerEoa}`} target="_blank" rel="noopener noreferrer">{agentAAOwnerEoa}</a>
-                        {agentAAOwnerEns ? ` (${agentAAOwnerEns})` : ''}
-                      </>
-                    ) : 'unknown'}
-                  </>
-                )}
               </>
             )}
           </Typography>
@@ -663,8 +642,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 </Stack>
               ) : (
                 <>
-                  <Typography variant="body2" color="text.secondary">
-                    Agent URL text: {agentUrlLoading ? 'checking…' : agentUrlError ? `error — ${agentUrlError}` : agentUrlText ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
+                    Agent URL: {agentUrlLoading ? 'checking…' : agentUrlError ? `error — ${agentUrlError}` : agentUrlText ? (
                       <a href={agentUrlText} target="_blank" rel="noopener noreferrer">{agentUrlText}</a>
                     ) : 'not set'}
                   </Typography>
