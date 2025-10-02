@@ -33,6 +33,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentAAIsContract, setAgentAAIsContract] = React.useState<boolean | null>(null);
   const [agentAAOwnerEoa, setAgentAAOwnerEoa] = React.useState<string | null>(null);
   const [agentAAOwnerEns, setAgentAAOwnerEns] = React.useState<string | null>(null);
+  const [agentResolver, setAgentResolver] = React.useState<`0x${string}` | null>(null);
+  const [agentUrlText, setAgentUrlText] = React.useState<string | null>(null);
+  const [agentUrlLoading, setAgentUrlLoading] = React.useState(false);
+  const [agentUrlError, setAgentUrlError] = React.useState<string | null>(null);
+  const [agentUrlEdit, setAgentUrlEdit] = React.useState('');
+  const [agentUrlSaving, setAgentUrlSaving] = React.useState(false);
   const [domainStatus, setDomainStatus] = React.useState<{
     exists: boolean;
     isWrapped: boolean;
@@ -109,6 +115,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setAgentAAIsContract(null);
       setAgentAAOwnerEoa(null);
       setAgentAAOwnerEns(null);
+      setAgentResolver(null);
+      setAgentUrlText(null);
+      setAgentUrlLoading(false);
+      setAgentUrlError(null);
+      setAgentUrlEdit('');
     }
   }, [name, domain]);
 
@@ -173,6 +184,47 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     })();
     return () => { cancelled = true; };
   }, [ensResolvedAddress, rpcUrl]);
+
+  // Load agent ENS URL text record if the preview exists
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setAgentUrlError(null);
+        setAgentResolver(null);
+        setAgentUrlText(null);
+        setAgentUrlEdit('');
+        if (!ensPreview) return;
+        // Get resolver and url text for agent ENS
+        setAgentUrlLoading(true);
+        const normalized = await ensService.getTextRecord(ensPreview, 'url', sepolia, rpcUrl);
+        if (!cancelled) {
+          setAgentUrlText(normalized);
+          setAgentUrlEdit(normalized ?? '');
+        }
+        // Also cache resolver for save path
+        try {
+          const node = namehash(ensPreview) as `0x${string}`;
+          const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+          const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+          const resolverAddr = await publicClient.readContract({
+            address: ENS_REGISTRY_ADDRESS,
+            abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+            functionName: 'resolver',
+            args: [node]
+          }) as `0x${string}`;
+          if (!cancelled) setAgentResolver(resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000' ? resolverAddr : null);
+        } catch (e: any) {
+          if (!cancelled) setAgentResolver(null);
+        }
+      } catch (e: any) {
+        if (!cancelled) setAgentUrlError(e?.message ?? 'Failed to read agent url');
+      } finally {
+        if (!cancelled) setAgentUrlLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ensPreview, rpcUrl]);
 
   React.useEffect(() => {
     const base = cleanBaseDomain(domain);
@@ -506,15 +558,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
               <TextField label="Set URL text" placeholder="https://example.com" value={domainUrlEdit} onChange={(e) => setDomainUrlEdit(e.target.value)} fullWidth />
               <Button
                 variant="outlined"
-                disabled={
+                disabled={Boolean(
                   domainUrlSaving ||
                   !provider ||
-                  !domainResolver ||
-                  !domainOwnerEoa ||
-                  !address ||
-                  domainOwnerEoa.toLowerCase() !== address.toLowerCase() ||
                   !/^https?:\/\//i.test(domainUrlEdit.trim())
-                }
+                )}
                 onClick={async () => {
                   try {
                     console.log('********************* setDomainUrlSaving: ', domainUrlEdit);
@@ -606,7 +654,52 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 )}
               </>
             )}
-          </Typography><TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
+          </Typography>
+          {ensPreview && (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                Agent URL text: {agentUrlLoading ? 'checking…' : agentUrlError ? `error — ${agentUrlError}` : agentUrlText ? (
+                  <a href={agentUrlText} target="_blank" rel="noopener noreferrer">{agentUrlText}</a>
+                ) : 'not set'}
+              </Typography>
+              {!agentUrlText && !agentUrlLoading && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <TextField label="Set Agent URL" placeholder="https://example.com" value={agentUrlEdit} onChange={(e) => setAgentUrlEdit(e.target.value)} fullWidth />
+                  <Button
+                    variant="outlined"
+
+                    onClick={async () => {
+                      try {
+                        setAgentUrlSaving(true);
+                        setAgentUrlError(null);
+                        const node = namehash(ensPreview) as `0x${string}`;
+                        // Build AA client for the agent AA (ensResolvedAddress)
+                        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                        const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
+                        try { (walletClient as any).account = address as Address; } catch {}
+                        const smartAccountClient = await toMetaMaskSmartAccount({
+                          address: ensResolvedAddress as `0x${string}`,
+                          client: publicClient,
+                          implementation: Implementation.Hybrid,
+                          signatory: { walletClient },
+                        });
+
+                        console.info("await ensService.setTextWithAA: ", smartAccountClient);
+                        console.info("await agentResolver: ", agentResolver);
+                        await ensService.setTextWithAA(smartAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
+                        setAgentUrlText(agentUrlEdit.trim());
+                      } catch (e: any) {
+                        setAgentUrlError(e?.message ?? 'Failed to set agent url');
+                      } finally {
+                        setAgentUrlSaving(false);
+                      }
+                    }}
+                  >Save URL</Button>
+                </Stack>
+              )}
+            </>
+          )}
+          <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
           {ensExists === true && (
             <Typography variant="body2" color="error">
               Create disabled: Agent ENS already exists for this name.
