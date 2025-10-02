@@ -516,6 +516,61 @@ class ensService {
         return ensName;
     }
 
+    /**
+     * Set a text record (key/value) on a resolver using a Smart Account (AA) via bundler
+     */
+    static async setTextWithAA(
+      smartAccountClient: MetaMaskSmartAccount,
+      resolverAddress: `0x${string}`,
+      node: `0x${string}`,
+      key: string,
+      value: string,
+      chain: Chain
+    ): Promise<boolean> {
+      validateSepoliaChain(chain);
+      const bundlerClient = createBundlerClient({
+        transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+        paymaster: true,
+        chain,
+        paymasterContext: { mode: 'SPONSORED' }
+      });
+      const pimlicoClient = createPimlicoClient({ transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL) });
+      const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+
+      const data = encodeFunctionData({
+        abi: PublicResolverABI.abi,
+        functionName: 'setText',
+        args: [node, key, value]
+      });
+
+      const userOpHash = await bundlerClient.sendUserOperation({
+        account: smartAccountClient,
+        calls: [{ to: resolverAddress, data, value: 0n }],
+        ...fee
+      });
+      await bundlerClient.waitForUserOperationReceipt({ hash: userOpHash });
+      return true;
+    }
+
+    /**
+     * Set a text record (key/value) on a resolver using a normal EOA signer
+     */
+    static async setTextWithEOA(
+      resolverAddress: `0x${string}`,
+      node: `0x${string}`,
+      key: string,
+      value: string,
+      chain: Chain
+    ): Promise<boolean> {
+      validateSepoliaChain(chain);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const resolver = new ethers.Contract(resolverAddress, PublicResolverABI.abi, signer);
+      const tx = await resolver.setText(node, key, value);
+      await tx.wait();
+      return true;
+    }
+
     static async wrapEnsDomainName(signer: ethers.JsonRpcSigner, smartAccountClient: MetaMaskSmartAccount, ensName: string, chain: Chain) : Promise<string> {
       console.log("Wrapping ENS domain name:", ensName);
 
@@ -1971,7 +2026,40 @@ class ensService {
             console.error("Error getting ENS address:", error);
             return null;
         }
+      }
+
+    /**
+     * Read a text record (e.g., url) for an ENS name. Returns string or null.
+     */
+    static async getTextRecord(name: string, key: string, chain: Chain, rpcUrl?: string): Promise<string | null> {
+      try {
+        validateSepoliaChain(chain);
+        const rpc = rpcUrl || (process.env.NEXT_PUBLIC_RPC_URL as string);
+        if (!rpc) throw new Error('RPC URL is not configured');
+        const publicClient = createPublicClient({ chain, transport: http(rpc) });
+        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+        const full = name.endsWith('.eth') ? name : `${name}.eth`;
+        const node = namehash(full);
+        const resolverAddress = await publicClient.readContract({
+          address: ENS_REGISTRY_ADDRESS,
+          abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+          functionName: 'resolver',
+          args: [node]
+        }) as `0x${string}`;
+        if (!resolverAddress || resolverAddress === '0x0000000000000000000000000000000000000000') return null;
+        const value = await publicClient.readContract({
+          address: resolverAddress,
+          abi: PublicResolverABI.abi,
+          functionName: 'text',
+          args: [node, key]
+        }).catch(() => null) as unknown;
+        return typeof value === 'string' && value.trim() !== '' ? value : null;
+      } catch (e) {
+        console.error('Error reading text record', { name, key, error: e });
+        return null;
+      }
     }
+ 
     /**
      * Get ENS name and basic data for an address
      */

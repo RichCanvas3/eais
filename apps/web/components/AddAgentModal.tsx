@@ -4,6 +4,7 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, S
 import { useWeb3Auth } from './Web3AuthProvider';
 import { createAgentAdapter, ensureIdentityWithAA } from '@/lib/agentAdapter';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, type Address } from 'viem';
+import PublicResolverABI from '../abis/PublicResolver.json';
 import { sepolia } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
@@ -29,6 +30,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [ensResolvedAddress, setEnsResolvedAddress] = React.useState<string | null>(null);
   const [ensResolving, setEnsResolving] = React.useState(false);
   const [ensExists, setEnsExists] = React.useState<boolean | null>(null);
+  const [agentAAIsContract, setAgentAAIsContract] = React.useState<boolean | null>(null);
+  const [agentAAOwnerEoa, setAgentAAOwnerEoa] = React.useState<string | null>(null);
+  const [agentAAOwnerEns, setAgentAAOwnerEns] = React.useState<string | null>(null);
   const [domainStatus, setDomainStatus] = React.useState<{
     exists: boolean;
     isWrapped: boolean;
@@ -44,6 +48,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [domainOwnerEns, setDomainOwnerEns] = React.useState<string | null>(null);
   const [domainOwnerEoa, setDomainOwnerEoa] = React.useState<string | null>(null);
   const [domainOwnerEoaEns, setDomainOwnerEoaEns] = React.useState<string | null>(null);
+  const [domainResolver, setDomainResolver] = React.useState<`0x${string}` | null>(null);
+  const [domainUrlText, setDomainUrlText] = React.useState<string | null>(null);
+  const [domainUrlLoading, setDomainUrlLoading] = React.useState(false);
+  const [domainUrlError, setDomainUrlError] = React.useState<string | null>(null);
+  const [domainUrlEdit, setDomainUrlEdit] = React.useState('');
+  const [domainUrlSaving, setDomainUrlSaving] = React.useState(false);
 
 
   const adapter = React.useMemo(() => createAgentAdapter({ registryAddress, rpcUrl }), [registryAddress, rpcUrl]);
@@ -96,8 +106,73 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setEnsResolvedAddress(null);
       setEnsResolving(false);
       setEnsExists(null);
+      setAgentAAIsContract(null);
+      setAgentAAOwnerEoa(null);
+      setAgentAAOwnerEns(null);
     }
   }, [name, domain]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setAgentAAIsContract(null);
+        setAgentAAOwnerEoa(null);
+        setAgentAAOwnerEns(null);
+        if (!ensResolvedAddress) return;
+        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+        const code = await publicClient.getBytecode({ address: ensResolvedAddress as `0x${string}` });
+        if (!cancelled) setAgentAAIsContract(!!code);
+        if (!code) return;
+        let controller: string | null = null;
+        // Try Ownable.owner()
+        try {
+          const eoa = await publicClient.readContract({
+            address: ensResolvedAddress as `0x${string}`,
+            abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+            functionName: 'owner',
+          });
+          controller = eoa as string;
+        } catch {}
+        // Try getOwner()
+        if (!controller) {
+          try {
+            const eoa = await publicClient.readContract({
+              address: ensResolvedAddress as `0x${string}`,
+              abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+              functionName: 'getOwner',
+            });
+            controller = eoa as string;
+          } catch {}
+        }
+        // Try owners() -> address[] and take first
+        if (!controller) {
+          try {
+            const eoas = await publicClient.readContract({
+              address: ensResolvedAddress as `0x${string}`,
+              abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
+              functionName: 'owners',
+            });
+            if (Array.isArray(eoas) && eoas.length > 0) controller = eoas[0] as string;
+          } catch {}
+        }
+        if (!cancelled) setAgentAAOwnerEoa(controller);
+        if (controller) {
+          try {
+            const reverse = await ensService.getEnsName(controller, sepolia);
+            if (!cancelled) setAgentAAOwnerEns(reverse);
+          } catch {}
+        }
+      } catch {
+        if (!cancelled) {
+          setAgentAAIsContract(null);
+          setAgentAAOwnerEoa(null);
+          setAgentAAOwnerEns(null);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ensResolvedAddress, rpcUrl]);
 
   React.useEffect(() => {
     const base = cleanBaseDomain(domain);
@@ -110,6 +185,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setDomainOwnerEns(null);
       setDomainOwnerEoa(null);
       setDomainOwnerEoaEns(null);
+      setDomainResolver(null);
+      setDomainUrlText(null);
+      setDomainUrlLoading(false);
+      setDomainUrlError(null);
+      setDomainUrlEdit('');
       return;
     }
     let cancelled = false;
@@ -144,11 +224,58 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             if (!cancelled) setDomainOwnerEns(null);
           }
 
+          // Read resolver & URL text record (via service for normalization)
+          try {
+            const baseName = base + '.eth';
+            const node = namehash(baseName);
+            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            const resolverAddr = await publicClient.readContract({
+              address: ENS_REGISTRY_ADDRESS,
+              abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+              functionName: 'resolver',
+              args: [node],
+            }) as `0x${string}`;
+            if (!cancelled) setDomainResolver(resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000' ? resolverAddr : null);
+            if (resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000') {
+              setDomainUrlLoading(true);
+              setDomainUrlError(null);
+              try {
+                const normalized = await ensService.getTextRecord(base, 'url', sepolia, rpcUrl);
+                if (!cancelled) {
+                  setDomainUrlText(normalized);
+                  setDomainUrlEdit(normalized ?? '');
+                }
+              } catch (e: any) {
+                if (!cancelled) {
+                  setDomainUrlText(null);
+                  setDomainUrlEdit('');
+                  setDomainUrlError(e?.message ?? 'Failed to read url');
+                }
+              } finally {
+                if (!cancelled) setDomainUrlLoading(false);
+              }
+            } else {
+              if (!cancelled) {
+                setDomainUrlText(null);
+                setDomainUrlEdit('');
+              }
+            }
+          } catch (e: any) {
+            if (!cancelled) {
+              setDomainResolver(null);
+              setDomainUrlText(null);
+              setDomainUrlEdit('');
+              setDomainUrlError(e?.message ?? 'Failed to read resolver');
+            }
+          }
+
           // If AA (contract), attempt to find controlling EOA via common owner functions
           try {
             const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
             let controller: string | null = null;
-            if (!!(await publicClient.getBytecode({ address: owner as `0x${string}` }))) {
+            const ownerCode = await publicClient.getBytecode({ address: owner as `0x${string}` });
+            if (!!ownerCode) {
               // Try Ownable.owner()
               try {
                 const eoa = await publicClient.readContract({
@@ -180,6 +307,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                   if (Array.isArray(eoas) && eoas.length > 0) controller = eoas[0] as string;
                 } catch {}
               }
+            } else {
+              // Owner is an EOA; treat it as controller
+              controller = owner;
             }
             if (!cancelled) setDomainOwnerEoa(controller);
             if (controller) {
@@ -204,6 +334,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             setDomainOwnerEns(null);
             setDomainOwnerEoa(null);
             setDomainOwnerEoaEns(null);
+            setDomainResolver(null);
+            setDomainUrlText(null);
+            setDomainUrlEdit('');
           }
         }
       } catch (e: any) {
@@ -215,6 +348,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           setDomainOwnerEns(null);
           setDomainOwnerEoa(null);
           setDomainOwnerEoaEns(null);
+          setDomainResolver(null);
+          setDomainUrlText(null);
+          setDomainUrlEdit('');
         }
       } finally {
         if (!cancelled) setDomainStatusLoading(false);
@@ -358,6 +494,92 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
               )
             ) : 'Enter an ENS domain (e.g. airbnb.eth)'}
           </Typography>
+          {domain && domainStatus && domainStatus.exists && (
+            <Typography variant="body2" color="text.secondary">
+              URL text: {domainUrlLoading ? 'checking…' : domainUrlError ? `error — ${domainUrlError}` : domainUrlText ? (
+                <a href={domainUrlText} target="_blank" rel="noopener noreferrer">{domainUrlText}</a>
+              ) : 'not set'}
+            </Typography>
+          )}
+          {domain && domainStatus && domainStatus.exists && !domainUrlText && !domainUrlLoading && (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField label="Set URL text" placeholder="https://example.com" value={domainUrlEdit} onChange={(e) => setDomainUrlEdit(e.target.value)} fullWidth />
+              <Button
+                variant="outlined"
+                disabled={
+                  domainUrlSaving ||
+                  !provider ||
+                  !domainResolver ||
+                  !domainOwnerEoa ||
+                  !address ||
+                  domainOwnerEoa.toLowerCase() !== address.toLowerCase() ||
+                  !/^https?:\/\//i.test(domainUrlEdit.trim())
+                }
+                onClick={async () => {
+                  try {
+                    console.log('********************* setDomainUrlSaving: ', domainUrlEdit);
+                    setDomainUrlSaving(true);
+                    setDomainUrlError(null);
+
+                    console.log('********************* cleanBaseDomain');
+                    const baseName = cleanBaseDomain(domain) + '.eth';
+                    const node = namehash(baseName) as `0x${string}`;
+                    if (domainOwnerIsContract) {
+
+                      console.log('********************* createPublicClient');
+
+                      // Build AA client using connected EOA (controller) like other parts of the app
+                      const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                      const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
+                      
+                      console.log('********************* check address: ', address);
+                      try { (walletClient as any).account = address as Address; } catch {}
+                      console.info("to metamask smart account");
+                      /*
+                      const smartAccountClient = await toMetaMaskSmartAccount({
+                        client: publicClient,
+                        implementation: Implementation.Hybrid,
+                        deployParams: [address as `0x${string}`, [], [], []],
+                        signatory: { walletClient },
+                      } as any);
+                       */
+
+                      const smartAccountClient = await toMetaMaskSmartAccount({
+                        address: address as `0x${string}`,
+                        client: publicClient,
+                        implementation: Implementation.Hybrid,
+                        signatory: { walletClient },
+                      });
+
+                      console.log('********************* await ensService.setTextWithAA');
+                      await ensService.setTextWithAA(smartAccountClient as any, domainResolver as `0x${string}`, node, 'url', domainUrlEdit.trim(), sepolia);
+                    } else {
+                      // EOA path
+                      await ensService.setTextWithEOA(domainResolver as `0x${string}`, node, 'url', domainUrlEdit.trim(), sepolia);
+                    }
+                    setDomainUrlText(domainUrlEdit.trim());
+                  } catch (e: any) {
+                    setDomainUrlError(e?.message ?? 'Failed to set URL');
+                  } finally {
+                    setDomainUrlSaving(false);
+                  }
+                }}
+              >Save URL</Button>
+            </Stack>
+          )}
+          {domain && domainStatus && domainStatus.exists && domainOwnerEoa && address && domainOwnerEoa.toLowerCase() !== address.toLowerCase() && (
+            <Typography variant="body2" color="error">
+              Create disabled: Connected EOA must match the domain controller EOA.
+              {' '}Connected: <a href={`https://sepolia.etherscan.io/address/${address}`} target="_blank" rel="noopener noreferrer">{address}</a>
+              {' '}Controller: <a href={`https://sepolia.etherscan.io/address/${domainOwnerEoa}`} target="_blank" rel="noopener noreferrer">{domainOwnerEoa}</a>
+              {domainOwnerEoaEns ? ` (${domainOwnerEoaEns})` : ''}
+            </Typography>
+          )}
+          {domain && domainStatus && domainStatus.exists && !domainStatusLoading && !domainOwnerEoa && (
+            <Typography variant="body2" color="error">
+              Create disabled: Unable to verify domain controller EOA. Ensure you own the domain or it is properly wrapped.
+            </Typography>
+          )}
           
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
           <Typography variant="body2" color="text.secondary">
@@ -372,15 +594,37 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     : ensExists === true
                       ? '(exists, no address record)'
                       : '(not found)'}
+                {ensResolvedAddress && agentAAIsContract && (
+                  <>
+                    {' '}— Agent AA owner EOA: {agentAAOwnerEoa ? (
+                      <>
+                        <a href={`https://sepolia.etherscan.io/address/${agentAAOwnerEoa}`} target="_blank" rel="noopener noreferrer">{agentAAOwnerEoa}</a>
+                        {agentAAOwnerEns ? ` (${agentAAOwnerEns})` : ''}
+                      </>
+                    ) : 'unknown'}
+                  </>
+                )}
               </>
             )}
           </Typography><TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
+          {ensExists === true && (
+            <Typography variant="body2" color="error">
+              Create disabled: Agent ENS already exists for this name.
+            </Typography>
+          )}
           {error && <Typography variant="body2" color="error">{error}</Typography>}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-        <Button onClick={handleSubmit} variant="contained" disableElevation disabled={isSubmitting || !provider || ensExists === true}>Create</Button>
+        <Button onClick={handleSubmit} variant="contained" disableElevation disabled={
+          isSubmitting ||
+          !provider ||
+          ensExists === true ||
+          !domainOwnerEoa ||
+          !address ||
+          domainOwnerEoa.toLowerCase() !== address.toLowerCase()
+        }>Create</Button>
       </DialogActions>
     </Dialog>
   );
