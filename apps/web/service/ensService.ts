@@ -535,7 +535,15 @@ class ensService {
         paymasterContext: { mode: 'SPONSORED' }
       });
       const pimlicoClient = createPimlicoClient({ transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL) });
-      const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+      const { fast: gasFee } = await pimlicoClient.getUserOperationGasPrice();
+
+      const fee = {
+        maxFeePerGas: gasFee.maxFeePerGas,
+        maxPriorityFeePerGas: gasFee.maxPriorityFeePerGas,
+        callGasLimit: 500000n,
+        preVerificationGas: 100000n,
+        verificationGasLimit: 500000n,
+      } as const;
 
       const data = encodeFunctionData({
         abi: PublicResolverABI.abi,

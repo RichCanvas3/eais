@@ -545,13 +545,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                        */
 
                       const smartAccountClient = await toMetaMaskSmartAccount({
-                        address: address as `0x${string}`,
+                        address: domainOwnerAddress as `0x${string}`,
                         client: publicClient,
                         implementation: Implementation.Hybrid,
                         signatory: { walletClient },
                       });
 
-                      console.log('********************* await ensService.setTextWithAA');
+                      console.log('await ensService.setTextWithAA: ', smartAccountClient);
                       await ensService.setTextWithAA(smartAccountClient as any, domainResolver as `0x${string}`, node, 'url', domainUrlEdit.trim(), sepolia);
                     } else {
                       // EOA path
