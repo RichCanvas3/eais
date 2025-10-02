@@ -1,4 +1,4 @@
-# EAIS, Agent Identity Service for Ethereum Blockchain
+# Agent Explorer
 
 ![ERC-8004 Overview](docs/images/ERC8004OverviewDNS.png)
 

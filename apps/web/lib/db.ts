@@ -11,8 +11,8 @@ function resolveDbPath(): string {
   }
   // Try common locations depending on cwd (apps/web or repo root)
   const candidates = [
-    path.resolve(process.cwd(), "../indexer/data/registry.db"),      // when cwd is apps/web
-    path.resolve(process.cwd(), "apps/indexer/data/registry.db"),   // when cwd is repo root
+    path.resolve(process.cwd(), "../indexer/data/registryV2.db"),      // when cwd is apps/web
+    path.resolve(process.cwd(), "apps/indexer/data/registryV2.db"),   // when cwd is repo root
   ];
   for (const candidate of candidates) {
     const dir = path.dirname(candidate);
@@ -23,7 +23,7 @@ function resolveDbPath(): string {
     return candidate;
   }
   // Fallback (should not reach)
-  return path.resolve(process.cwd(), "apps/indexer/data/registry.db");
+  return path.resolve(process.cwd(), "apps/indexer/data/registryV2.db");
 }
 
 const DB_PATH = resolveDbPath();
