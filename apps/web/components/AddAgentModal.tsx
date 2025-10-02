@@ -615,19 +615,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
               >Save URL</Button>
             </Stack>
           )}
-          {domain && domainStatus && domainStatus.exists && domainOwnerEoa && address && domainOwnerEoa.toLowerCase() !== address.toLowerCase() && (
-            <Typography variant="body2" color="error">
-              Create disabled: Connected EOA must match the domain controller EOA.
-              {' '}Connected: <a href={`https://sepolia.etherscan.io/address/${address}`} target="_blank" rel="noopener noreferrer">{address}</a>
-              {' '}Controller: <a href={`https://sepolia.etherscan.io/address/${domainOwnerEoa}`} target="_blank" rel="noopener noreferrer">{domainOwnerEoa}</a>
-              {domainOwnerEoaEns ? ` (${domainOwnerEoaEns})` : ''}
-            </Typography>
-          )}
-          {domain && domainStatus && domainStatus.exists && !domainStatusLoading && !domainOwnerEoa && (
-            <Typography variant="body2" color="error">
-              Create disabled: Unable to verify domain controller EOA. Ensure you own the domain or it is properly wrapped.
-            </Typography>
-          )}
+          
           
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
           <Typography variant="body2" color="text.secondary">
@@ -713,10 +701,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         <Button onClick={handleSubmit} variant="contained" disableElevation disabled={
           isSubmitting ||
           !provider ||
-          ensExists === true ||
-          !domainOwnerEoa ||
-          !address ||
-          domainOwnerEoa.toLowerCase() !== address.toLowerCase()
+          ensExists === true
         }>Create</Button>
       </DialogActions>
     </Dialog>
