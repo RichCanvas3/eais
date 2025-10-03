@@ -28,6 +28,8 @@ export type Agent = {
 	createdAtTime: number;
   name?: string | null;
   description?: string | null;
+  a2aEndpoint?: string | null;
+  ensEndpoint?: string | null;
 };
 
 export function AgentTable() {
@@ -1080,16 +1082,16 @@ export function AgentTable() {
 
 					{/* Search Form */}
 				<Box component="form" onSubmit={handleSubmit}>
-					<Grid container spacing={2}>
-						<Grid item xs={12} md={3}>
-								<TextField fullWidth label="Agent domain" placeholder="Filter by agent domain" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
-						</Grid>
-						<Grid item xs={12} md={3}>
-							<TextField fullWidth label="Agent address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
-						</Grid>
-						<Grid item xs={12} md={3}>
-							<TextField fullWidth label="AgentId" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
-						</Grid>
+						<Grid container spacing={2}>
+							<Grid item xs={12} md={3}>
+								<TextField fullWidth label="id" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
+							</Grid>
+							<Grid item xs={12} md={3}>
+								<TextField fullWidth label="name" placeholder="Filter by name (ENS or metadata)" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
+							</Grid>
+							<Grid item xs={12} md={3}>
+								<TextField fullWidth label="address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
+							</Grid>
 						<Grid item xs={12} md={1}>
 							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
 						</Grid>
@@ -1106,80 +1108,43 @@ export function AgentTable() {
 
 			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
 				<Table size="small" sx={{ minWidth: 600 }}>
-					<TableHead>
-						<TableRow>
-							<TableCell>Agent Domain</TableCell>
-							<TableCell>Name</TableCell>
-							<TableCell>Description</TableCell>
-							<TableCell>Agent Address</TableCell>
-							<TableCell>ENS Domain</TableCell>
-							<TableCell>AgentId</TableCell>
-							<TableCell>Mine</TableCell>
-							{eoa && <TableCell></TableCell>}
-						</TableRow>
-					</TableHead>
+						<TableHead>
+							<TableRow>
+								<TableCell>id</TableCell>
+								<TableCell>name</TableCell>
+								<TableCell>address</TableCell>
+								<TableCell>A2A</TableCell>
+								<TableCell>Mine</TableCell>
+								{eoa && <TableCell></TableCell>}
+							</TableRow>
+						</TableHead>
 					<TableBody>
 						{!isLoading && (data?.rows?.filter((row) => {
 							const agentIdNum = parseInt(row.agentId);
-							//const isInExcludedRange = agentIdNum >= 5 && agentIdNum <= 10;
-							//return (!mineOnly || owned[row.agentId]) && !isInExcludedRange;
 							return (!mineOnly || owned[row.agentId]);
 						}).length ?? 0) === 0 && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 8 : 7} align="center">
+								<TableCell colSpan={eoa ? 6 : 5} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 8 : 7} align="center">
+								<TableCell colSpan={eoa ? 6 : 5} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
 						)}
-						{data?.rows?.filter((row) => {
-							const agentIdNum = parseInt(row.agentId);
-							const isInExcludedRange = agentIdNum >= 5 && agentIdNum <= 10;
-							return (!mineOnly || owned[row.agentId]) && !isInExcludedRange;
-							//return (!mineOnly || owned[row.agentId]);
-						})?.map((row) => (
+						{data?.rows?.filter((row) => (!mineOnly || owned[row.agentId]))?.map((row) => (
 							<TableRow key={row.agentId} hover>
-								<TableCell sx={{ fontWeight: 600 }}>
-									<Stack direction="row" alignItems="center" spacing={1}>
-										<Typography component="span">
-											{row.agentDomain.replace(/\/$/, '')}
-										</Typography>
-										<IconButton
-											size="small"
-											sx={{ 
-												p: 0.5,
-												color: 'secondary.main',
-												'&:hover': {
-													color: 'secondary.dark',
-													backgroundColor: 'action.hover'
-												}
-											}}
-											title={`Review feedback for ${row.agentDomain.replace(/\/$/, '')}`}
-											onClick={() => {
-												const cleanDomain = row.agentDomain.replace(/\/$/, '');
-												const domain = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
-												const agentCardUrl = `${domain}/.well-known/agent-card.json`;
-												window.open(agentCardUrl, '_blank');
-											}}
-										>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-												<path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z" />
-											</svg>
-										</IconButton>
-									</Stack>
+								<TableCell>
+									<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
 								</TableCell>
 							<TableCell>
-								<Typography variant="body2" noWrap title={row.name || ''}>{row.name || '—'}</Typography>
+								<Typography variant="body2" noWrap title={row.ensEndpoint || agentEnsNames[row.agentAddress] || ''}>{row.ensEndpoint || agentEnsNames[row.agentAddress] || '—'}</Typography>
 							</TableCell>
-							<TableCell>
-								<Typography variant="body2" noWrap title={row.description || ''}>{row.description || '—'}</Typography>
-							</TableCell>
+
 								<TableCell>
 									<Stack direction="row" spacing={0.25} alignItems="center">
 										<Typography 
@@ -1280,49 +1245,28 @@ export function AgentTable() {
 										)}
 									</Stack>
 								</TableCell>
-								<TableCell>
-									{agentEnsNames[row.agentAddress] ? (
-										<Chip 
-											label={agentEnsNames[row.agentAddress]} 
-											size="small" 
-											color="secondary"
-											sx={{ 
-												fontFamily: 'ui-monospace, monospace',
-												cursor: 'pointer',
-												'&:hover': {
-													backgroundColor: 'secondary.dark',
-													color: 'secondary.contrastText'
-												}
-											}}
-											onClick={() => openEnsFor(row)}
-											title={`Manage ENS for ${agentEnsNames[row.agentAddress]}`}
-										/>
-									) : eoa ? (
-										<Chip 
-											label="Set ENS" 
-											size="small" 
-											color="primary"
-											variant="outlined"
-											sx={{ 
-												fontFamily: 'ui-monospace, monospace',
-												cursor: 'pointer',
-												'&:hover': {
-													backgroundColor: 'primary.light',
-													color: 'primary.contrastText'
-												}
-											}}
-											onClick={() => openEnsFor(row)}
-											title="Set up ENS for this agent"
-										/>
-									) : (
-										<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>
-											No ENS
-										</Typography>
-									)}
-								</TableCell>
-								<TableCell>
-									<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
-								</TableCell>
+
+							<TableCell>
+								{row.a2aEndpoint ? (
+									<Button 
+										size="small" 
+										onClick={() => window.open(row.a2aEndpoint as string, '_blank')}
+										sx={{ 
+											minWidth: 'auto',
+											px: 0.5,
+											py: 0.25,
+											fontSize: '0.65rem',
+											lineHeight: 1,
+											height: 'auto'
+										}}
+									>
+										A2A
+									</Button>
+								) : (
+									<Typography variant="body2" color="text.secondary">—</Typography>
+								)}
+							</TableCell>
+
 								<TableCell>
 									{owned[row.agentId] ? <Chip label="Mine" color="primary" size="small" /> : null}
 								</TableCell>

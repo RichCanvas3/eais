@@ -100,6 +100,14 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
       const ensEndpoint = findEndpoint('ENS');
       const agentWalletEndpoint = findEndpoint('agentWallet');
       const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
+      console.info("............insert into table: agentId: ", agentId)
+      console.info("............insert into table: type: ", type)
+      console.info("............insert into table: name: ", name)
+      console.info("............insert into table: description: ", description)
+      console.info("............insert into table: image: ", image)
+      console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
+      console.info("............insert into table: ensEndpoint: ", ensEndpoint)
+      console.info("............insert into table: agentWalletEndpoint: ", agentWalletEndpoint)
       db.prepare(`
         INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentWalletEndpoint, supportedTrust, rawJson, updatedAtTime)
         VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @wallet, @trust, @raw, strftime('%s','now'))

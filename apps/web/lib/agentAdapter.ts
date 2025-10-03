@@ -440,7 +440,7 @@ export async function ensureIdentityWithAA(params: {
   // If an EOA wallet with registry ownership is provided, use it to mint directly
 
   console.info('********************* identityRegistryOwnerWallet write contract');
-  await identityRegistryOwnerWallet.writeContract({
+  const hash = await identityRegistryOwnerWallet.writeContract({
     address: registry,
     abi: identityRegistryAbi as any,
     functionName: (tokenUri && tokenUri.trim() !== '') ? 'mintWithURI' : 'mint',
@@ -449,20 +449,15 @@ export async function ensureIdentityWithAA(params: {
     chain,
   });
 
-  const hash = await identityRegistryOwnerWallet.writeContract({
-    address: registry,
-    abi: identityRegistryAbi,
-    functionName: tokenUri ? 'mintWithURI' : 'mint',
-    args: tokenUri ? [agentAddress, tokenUri] : [agentAddress],
-    account: identityRegistryOwnerWallet.account,
-  });
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  console.info("............receipt: ", receipt)
   const logs = parseEventLogs({
     abi: identityRegistryAbi,
     eventName: 'Transfer',
     logs: receipt.logs,
   });
+  console.info("............logs: ", logs)
   const tokenId = logs[0]?.args.tokenId as bigint;
   console.info("............tokenId: ", tokenId)
 

@@ -242,6 +242,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     }
   }, [ensExists, domainUrlText, name]);
 
+  // Also prefill when agent ENS exists but has no URL text record
+  React.useEffect(() => {
+    if (ensExists === true && !agentUrlText) {
+      const label = cleanAgentLabel(name);
+      const base = (domainUrlText ?? '').replace(/\/$/, '');
+      const suggested = base && label ? `${base}/${label}` : '';
+      if (!agentUrlEdit && suggested) {
+        setAgentUrlEdit(suggested);
+      }
+    }
+  }, [ensExists, agentUrlText, domainUrlText, name]);
+
   React.useEffect(() => {
     const base = cleanBaseDomain(domain);
     if (!base) {

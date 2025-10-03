@@ -5,6 +5,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
   const domain = (searchParams.get("domain") ?? "").trim();
+  const name = (searchParams.get("name") ?? "").trim();
   const address = (searchParams.get("address") ?? "").trim();
   const agentId = (searchParams.get("agentId") ?? "").trim();
   const page = Number(searchParams.get("page") ?? 1);
@@ -17,6 +18,11 @@ export async function GET(req: Request) {
   if (domain) {
     where.push("lower(domain) LIKE lower(@domain)");
     params.domain = `%${domain}%`;
+  }
+  if (name) {
+    // Match display name: ENS endpoint path or metadata name
+    where.push("(lower(m.ensEndpoint) LIKE lower(@name) OR lower(m.name) LIKE lower(@name))");
+    params.name = `%${name}%`;
   }
   if (address) {
     where.push("lower(agent) LIKE lower(@address)");
@@ -42,10 +48,12 @@ export async function GET(req: Request) {
            a.createdAtBlock,
            a.createdAtTime,
            m.name as name,
-           m.description as description
+           m.description as description,
+           m.a2aEndpoint as a2aEndpoint,
+           m.ensEndpoint as ensEndpoint
     FROM agents a
     LEFT JOIN agent_metadata m ON m.agentId = a.agentId
-    ${whereSql ? whereSql.replace(/\bFROM agents\b/, 'FROM agents a LEFT JOIN agent_metadata m ON m.agentId = a.agentId') : ''}
+    ${whereSql}
     ORDER BY a.agentId ASC
     LIMIT @limit OFFSET @offset
   `).all({ ...params, limit: pageSize, offset });
