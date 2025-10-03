@@ -752,6 +752,53 @@ app.get('/api/agents/by-address/:address', async (req, res) => {
   }
 });
 
+app.get('/api/agents/by-name/:name', async (req, res) => {
+  try {
+    const name = String(req.params.name || '').trim().toLowerCase();
+    if (!name) return res.status(400).json({ error: 'Invalid name' });
+
+    const db = getAgentsDb();
+    let row = null;
+    try {
+      row = db.prepare(`
+        SELECT a.agentId,
+               a.agent as agentAddress,
+               a.owner,
+               a.domain as agentDomain,
+               a.metadataURI,
+               a.createdAtBlock,
+               a.createdAtTime,
+               m.name,
+               m.description,
+               m.a2aEndpoint,
+               m.ensEndpoint
+        FROM agents a
+        LEFT JOIN agent_metadata m ON m.agentId = a.agentId
+        WHERE lower(m.name) LIKE @nameLike OR lower(m.ensEndpoint) LIKE @nameLike
+        ORDER BY a.agentId ASC
+        LIMIT 1
+      `).get({ nameLike: `%${name}%` });
+    } catch (e) {
+      row = db.prepare(`
+        SELECT agentId,
+               agent as agentAddress,
+               owner,
+               domain as agentDomain,
+               metadataURI,
+               createdAtBlock,
+               createdAtTime
+        FROM agents
+        WHERE lower(domain) LIKE @nameLike
+        ORDER BY agentId ASC
+        LIMIT 1
+      `).get({ nameLike: `%${name}%` });
+    }
+    res.json({ found: !!row, agent: row || null });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Lookup failed' });
+  }
+});
+
 // Debug endpoint: list agents without filters (logs to console and returns sample)
 app.get('/api/agents/debug', async (req, res) => {
   try {

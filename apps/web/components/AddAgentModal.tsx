@@ -78,6 +78,57 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     return base.replace(/[^a-z0-9-]/g, '');
   }
 
+  async function getDefaultAgentAccount(agentName: string, ipfsService: any, publicClient: any, walletClient: any)  {
+    // Try DB lookup by name (guard empty to avoid 400)
+    console.info("getDefaultAgentAccount", agentName);
+    try {
+      if (agentName && agentName.trim() !== '') {
+        const byName = await ipfsService.getAgentByName(agentName.trim());
+        const foundAddr = byName?.agentAddress || byName?.agent || null;
+        if (foundAddr) {
+          const agentAccountClient = await toMetaMaskSmartAccount({
+            address: foundAddr as `0x${string}`,
+            client: publicClient,
+            implementation: Implementation.Hybrid,
+            signatory: { walletClient },
+          });
+          console.info("identity found with name", agentName, agentAccountClient.address);
+          return agentAccountClient;
+        }
+      }
+    } catch {
+      console.error("error getting agent by name", agentName);
+    }
+
+    // first look for ENS match to get address
+    const ensAgentAddress = await ensService.getEnsAddress(agentName, sepolia);
+    if (ensAgentAddress) {
+      const agentAccountClient = await toMetaMaskSmartAccount({
+        address: ensAgentAddress as `0x${string}`,
+        client: publicClient,
+        implementation: Implementation.Hybrid,
+        signatory: { walletClient },
+      });
+      console.info("ens found with name", agentName, agentAccountClient.address);
+      return agentAccountClient
+    }
+
+    // use agentName to get salt
+    const salt: `0x${string}` = keccak256(stringToHex(agentName)) as `0x${string}`;
+    const agentAccountClient = await toMetaMaskSmartAccount({
+      client: publicClient,
+      implementation: Implementation.Hybrid,
+      deployParams: [address as `0x${string}`, [], [], []],
+      signatory: { walletClient },
+      deploySalt: salt,
+    } as any);
+    console.info("salt found with name", agentName, agentAccountClient.address);
+    return agentAccountClient
+
+
+    
+  }
+
   React.useEffect(() => {
     const label = cleanAgentLabel(name);
     const base = cleanBaseDomain(domain);
@@ -128,6 +179,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     }
   }, [name, domain]);
 
+	// Default Agent URL to domain URL + agent name when available and not yet set
+	React.useEffect(() => {
+		try {
+			if (!domainUrlText) return;
+			if (!name || !name.trim()) return;
+			if (agentUrlEdit && agentUrlEdit.trim() !== '') return; // don't override user input
+			const base = (domainUrlText || '').replace(/\/$/, '');
+			const label = cleanAgentLabel(name);
+			if (!label) return;
+			setAgentUrlEdit(`${base}/${label}`);
+		} catch {}
+	}, [domainUrlText, name]);
+
   // Check if the derived Agent Identity already exists (disable Create if true)
   React.useEffect(() => {
     let cancelled = false;
@@ -139,14 +203,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
         const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
         try { (walletClient as any).account = address as Address; } catch {}
-        const salt: `0x${string}` = keccak256(stringToHex(ensPreviewLower)) as `0x${string}`;
-        const agentAccountClient = await toMetaMaskSmartAccount({
-          client: publicClient,
-          implementation: Implementation.Hybrid,
-          deployParams: [address as `0x${string}`, [], [], []],
-          signatory: { walletClient },
-          deploySalt: salt,
-        } as any);
+
+        const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IpfsService, publicClient, walletClient);
         const agentAddress = await agentAccountClient.getAddress();
         const existing = await IpfsService.getAgentByAddress(agentAddress);
         if (!cancelled) setAgentIdentityExists(!!existing);
@@ -502,16 +560,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       const signatory = { walletClient: createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: owner }) } as any;
       // Ensure viem client has a default account for signing (toolkit calls signTypedData without passing account)
       try { (signatory.walletClient as any).account = owner; } catch {}
-      const salt: `0x${string}` = keccak256(stringToHex(ensPreviewLower)) as `0x${string}`;
-
-      console.log('********************* toMetaMaskSmartAccount: ', address, salt);
-      const agentAccountClient = await toMetaMaskSmartAccount({
-        client: publicClient,
-        implementation: Implementation.Hybrid,
-        deployParams: [owner, [], [], []],
-        signatory: signatory,
-        deploySalt: salt,
-      });
+      
+      const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
+      try { (walletClient as any).account = address as Address; } catch {}
+      const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IpfsService, publicClient, walletClient);
+        
       
 
       const agentAddress = await agentAccountClient.getAddress();
@@ -770,14 +823,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     } as any);
 
                     // Agent AA for the agent name
-                    const salt: `0x${string}` = keccak256(stringToHex(ensPreview.toLowerCase())) as `0x${string}`;
-                    const agentAccountClient = await toMetaMaskSmartAccount({
-                      client: publicClient,
-                      implementation: Implementation.Hybrid,
-                      deployParams: [address as `0x${string}`, [], [], []],
-                      signatory: { walletClient },
-                      deploySalt: salt,
-                    } as any);
+                    const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IpfsService, publicClient, walletClient);
                     const agentAAAddress = await agentAccountClient.getAddress();
 
                     // Ethers signer for onchain write
@@ -828,6 +874,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       <a href={agentUrlText} target="_blank" rel="noopener noreferrer">{agentUrlText}</a>
                     ) : 'not set'}
                   </Typography>
+                  {ensResolvedAddress && (
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
+                      Agent AA: <a href={`https://sepolia.etherscan.io/address/${ensResolvedAddress}`} target="_blank" rel="noopener noreferrer">{ensResolvedAddress}</a>
+                    </Typography>
+                  )}
                   {!agentUrlText && !agentUrlLoading && (
                     <Stack direction="row" spacing={1} alignItems="center">
                       <TextField label="Set Agent URL" placeholder="https://example.com" value={agentUrlEdit} onChange={(e) => setAgentUrlEdit(e.target.value)} fullWidth />
@@ -836,7 +887,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                         disabled={Boolean(
                           agentUrlSaving ||
                           !provider ||
-                          !/^https?:\/\//i.test(agentUrlEdit.trim())
+                          !/^https?:\/\//i.test(agentUrlEdit.trim()) ||
+                          !agentResolver
                         )}
                         onClick={async () => {
                           try {
@@ -847,16 +899,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                             const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
                             const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
                             try { (walletClient as any).account = address as Address; } catch {}
-                            const smartAccountClient = await toMetaMaskSmartAccount({
-                              address: ensResolvedAddress as `0x${string}`,
-                              client: publicClient,
-                              implementation: Implementation.Hybrid,
-                              signatory: { walletClient },
-                            });
-
-                            console.info("await ensService.setTextWithAA: ", smartAccountClient);
-                            console.info("await agentResolver: ", agentResolver);
-                            await ensService.setTextWithAA(smartAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
+                            // Use the agent AA derived from the name to authorize setText via AA
+                            const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IpfsService, publicClient, walletClient);
+                            console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
+                            await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
                             setAgentUrlText(agentUrlEdit.trim());
                           } catch (e: any) {
                             setAgentUrlError(e?.message ?? 'Failed to set agent url');

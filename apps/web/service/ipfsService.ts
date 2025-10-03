@@ -99,6 +99,20 @@ class IpfsService {
       return null;
     }
   }
+
+  // Get agent by name (ENS-like or metadata name) from backend DB
+  static async getAgentByName(name: string): Promise<any | null> {
+    try {
+      const base = getApiBaseUrl();
+      const url = `${base}/api/agents/by-name/${encodeURIComponent(name)}`;
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) return null;
+      const out = await res.json();
+      return out?.agent ?? null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 export default IpfsService;
