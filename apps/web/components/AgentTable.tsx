@@ -400,17 +400,29 @@ export function AgentTable() {
 	}
 
 
-	async function fetchData(page = 1) {
+		async function fetchData(page = 1, overrides?: { name?: string; address?: string; agentId?: string }) {
 		setIsLoading(true);
-		const url = new URL("/api/agents", window.location.origin);
-		if (domain) url.searchParams.set("domain", domain);
-		if (address) url.searchParams.set("address", address);
-		if (agentId) url.searchParams.set("agentId", agentId);
+			const url = new URL("/api/agents", window.location.origin);
+			const nameFilter = overrides?.name ?? domain;
+			const addressFilter = overrides?.address ?? address;
+			const idFilter = overrides?.agentId ?? agentId;
+			if (nameFilter) url.searchParams.set("name", nameFilter);
+			if (addressFilter) url.searchParams.set("address", addressFilter);
+			if (idFilter) url.searchParams.set("agentId", idFilter);
 		url.searchParams.set("page", String(page));
 		url.searchParams.set("pageSize", "20");
 		try {
-			const res = await fetch(url);
-			setData(await res.json());
+				const res = await fetch(url);
+				if (!res.ok) {
+					setData({ page, pageSize: 20, total: 0, rows: [] });
+					return;
+				}
+				const text = await res.text();
+				let json: any = null;
+				if (text && text.trim().length > 0) {
+					try { json = JSON.parse(text); } catch { json = null; }
+				}
+				setData(json ?? { page, pageSize: 20, total: 0, rows: [] });
 		} finally {
 			setIsLoading(false);
 		}
@@ -466,12 +478,13 @@ export function AgentTable() {
 		fetchData(1);
 	}
 
-	function clearFilters() {
+		function clearFilters() {
 		setDomain("");
 		setAddress("");
 		setAgentId("");
 		setMineOnly(false);
-		fetchData(1);
+			// Force-refresh immediately with cleared filters (state updates are async)
+			fetchData(1, { name: "", address: "", agentId: "" });
 	}
 
 
@@ -1139,11 +1152,40 @@ export function AgentTable() {
 						{data?.rows?.filter((row) => (!mineOnly || owned[row.agentId]))?.map((row) => (
 							<TableRow key={row.agentId} hover>
 								<TableCell>
-									<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
+									{process.env.NEXT_PUBLIC_REGISTRY_ADDRESS ? (
+										<Typography
+											component="a"
+											href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_REGISTRY_ADDRESS}/${row.agentId}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											variant="body2"
+											sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+											title={`View NFT #${row.agentId} on Etherscan`}
+										>
+											{row.agentId}
+										</Typography>
+									) : (
+										<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
+									)}
 								</TableCell>
-							<TableCell>
-								<Typography variant="body2" noWrap title={row.ensEndpoint || agentEnsNames[row.agentAddress] || ''}>{row.ensEndpoint || agentEnsNames[row.agentAddress] || '—'}</Typography>
-							</TableCell>
+						<TableCell>
+							{(row.ensEndpoint || agentEnsNames[row.agentAddress]) ? (
+								<Typography
+									component="a"
+									href={`https://sepolia.app.ens.domains/${(row.ensEndpoint || agentEnsNames[row.agentAddress]) as string}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									variant="body2"
+									noWrap
+									sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+									title={row.ensEndpoint || agentEnsNames[row.agentAddress] || ''}
+								>
+									{row.ensEndpoint || agentEnsNames[row.agentAddress]}
+								</Typography>
+							) : (
+								<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>—</Typography>
+							)}
+						</TableCell>
 
 								<TableCell>
 									<Stack direction="row" spacing={0.25} alignItems="center">

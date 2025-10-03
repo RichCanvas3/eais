@@ -15,6 +15,8 @@ export async function GET(req: Request) {
   const where: string[] = [];
   const params: any = {};
 
+  console.info("............filter list: ", name, domain, address, agentId, q)
+
   if (domain) {
     where.push("lower(domain) LIKE lower(@domain)");
     params.domain = `%${domain}%`;
@@ -29,8 +31,9 @@ export async function GET(req: Request) {
     params.address = `%${address}%`;
   }
   if (agentId) {
-    where.push("lower(agentId) LIKE lower(@agentId)");
-    params.agentId = `%${agentId}%`;
+    where.push("(a.agentId = @agentIdExact OR lower(a.agentId) LIKE lower(@agentIdLike))");
+    params.agentIdExact = agentId;
+    params.agentIdLike = `%${agentId}%`;
   }
   if (!domain && !address && !agentId && q) {
     where.push("(lower(domain) LIKE lower(@q) OR lower(agent) LIKE lower(@q) OR lower(agentId) LIKE lower(@q))");
@@ -38,6 +41,7 @@ export async function GET(req: Request) {
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  console.info("............whereSql: ", whereSql)
 
   const rows = db.prepare(`
     SELECT a.agentId,
@@ -58,7 +62,12 @@ export async function GET(req: Request) {
     LIMIT @limit OFFSET @offset
   `).all({ ...params, limit: pageSize, offset });
 
-  const total = db.prepare(`SELECT COUNT(1) as c FROM agents ${whereSql}`).get(params) as { c: number };
+  const total = db.prepare(`
+    SELECT COUNT(1) as c
+    FROM agents a
+    LEFT JOIN agent_metadata m ON m.agentId = a.agentId
+    ${whereSql}
+  `).get(params) as { c: number };
 
   return NextResponse.json({ page, pageSize, total: total.c, rows });
 }
