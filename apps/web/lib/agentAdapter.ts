@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
+import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
 import { identityRegistryAbi as registryAbi } from "@/lib/abi/identityRegistry";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
@@ -419,12 +419,14 @@ export async function ensureIdentityWithAA(params: {
   publicClient: PublicClient,
   bundlerUrl: string,
   chain: Chain,
+  identityRegistryOwnerWallet: any,
   registry: `0x${string}`,
   agentAccount: any,
   tokenUri: string,
 }): Promise<`0x${string}`> {
-  const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri } = params;
+  const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri, identityRegistryOwnerWallet } = params;
 
+  console.info("....... inside ensureIdentityWithAA");
   /*
   const existing = await getAgentByDomain({ publicClient, registry, domain });
   console.info('********************* ensureIdentityWithAA: existing', existing);
@@ -435,10 +437,35 @@ export async function ensureIdentityWithAA(params: {
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
   const agentAddress = await agentAccount.getAddress();
 
-  console.info('********************* encodeMintAgent: agentAddress', agentAddress);
-  console.info('********************* encodeMintAgent: tokenUri', tokenUri);
-  const data = encodeMintAgent({ to: agentAddress as `0x${string}`, uri: tokenUri });
-  await sendSponsoredUserOperation({ bundlerUrl, chain, account: agentAccount, calls: [{ to: registry, data, value: 0n }] });
+  // If an EOA wallet with registry ownership is provided, use it to mint directly
+
+  console.info('********************* identityRegistryOwnerWallet write contract');
+  await identityRegistryOwnerWallet.writeContract({
+    address: registry,
+    abi: identityRegistryAbi as any,
+    functionName: (tokenUri && tokenUri.trim() !== '') ? 'mintWithURI' : 'mint',
+    args: (tokenUri && tokenUri.trim() !== '') ? [agentAddress as `0x${string}`, tokenUri] : [agentAddress as `0x${string}`],
+    account: identityRegistryOwnerWallet.account,
+    chain,
+  });
+
+  const hash = await identityRegistryOwnerWallet.writeContract({
+    address: registry,
+    abi: identityRegistryAbi,
+    functionName: tokenUri ? 'mintWithURI' : 'mint',
+    args: tokenUri ? [agentAddress, tokenUri] : [agentAddress],
+    account: identityRegistryOwnerWallet.account,
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  const logs = parseEventLogs({
+    abi: identityRegistryAbi,
+    eventName: 'Transfer',
+    logs: receipt.logs,
+  });
+  const tokenId = logs[0]?.args.tokenId as bigint;
+  console.info("............tokenId: ", tokenId)
+
   
   /*
   const updated = await getAgentByDomain({ publicClient, registry, domain });

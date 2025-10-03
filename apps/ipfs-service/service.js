@@ -25,19 +25,10 @@ dotenv.config();
 // Validate critical environment variables
 const validateEnvVars = () => {
   const requiredVars = [
-    'SENDGRID_API_KEY',
-    'GCLOUD_BUCKET_NAME',
-    'LINKEDIN_CLIENT_ID',
-    'LINKEDIN_CLIENT_SECRET',
-    'LINKEDIN_REDIRECT_URI',
-    'X_CLIENT_ID',
-    'X_CLIENT_SECRET',
-    'X_REDIRECT_URI',
-    'SHOPIFY_CLIENT_ID',
-    'SHOPIFY_CLIENT_SECRET',
-    'SHOPIFY_SHOP_NAME'
+    'WEB3_STORAGE_EMAIL',
+    'WEB3_STORAGE_SPACE_DID'
   ];
-  
+
   // Optional Web3.Storage configuration
   if (process.env.WEB3_STORAGE_EMAIL && process.env.WEB3_STORAGE_SPACE_DID) {
     console.log('Web3.Storage configuration detected');
@@ -68,8 +59,11 @@ try {
 // Middleware
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
   'https://wallet.myorgwallet.io',
-];
+  process.env.CLIENT_ORIGIN, // optional override
+].filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
     //console.log(`CORS check for origin: ${origin}`);

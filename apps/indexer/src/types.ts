@@ -1,3 +1,8 @@
+// Ambient type for better-sqlite3 when @types is unavailable in this workspace
+declare module 'better-sqlite3' {
+  const BetterSqlite3: any;
+  export default BetterSqlite3;
+}
 import type { Address } from "viem";
 
 export type AgentRow = {

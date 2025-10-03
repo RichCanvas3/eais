@@ -43,6 +43,20 @@ CREATE TABLE IF NOT EXISTS checkpoints (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS agent_metadata (
+  agentId TEXT PRIMARY KEY,
+  type TEXT,
+  name TEXT,
+  description TEXT,
+  image TEXT,
+  a2aEndpoint TEXT,
+  ensEndpoint TEXT,
+  agentWalletEndpoint TEXT,
+  supportedTrust TEXT,
+  rawJson TEXT,
+  updatedAtTime INTEGER NOT NULL
+);
 `);
 
 export function getCheckpoint(): bigint {

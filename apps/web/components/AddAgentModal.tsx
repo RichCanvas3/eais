@@ -13,6 +13,9 @@ import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 
 
+import { privateKeyToAccount } from 'viem/accounts';
+
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -525,10 +528,25 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       }
 
       console.log('********************* ensureIdentityWithAA: tokenUri: ', tokenUri);
+
+      // wallet for Identity Registry Contract Owner
+      //const { ethers } = await import('ethers');
+      //const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
+      //const identityRegistryOwnerWallet = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
+
+      const ownerAccount = privateKeyToAccount(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as `0x${string}`);
+      const identityRegistryOwnerWallet = createWalletClient({
+        chain: sepolia,
+        transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+        account: ownerAccount,
+      });
+
+      console.info('********************* identityRegistryOwnerWallet: ', identityRegistryOwnerWallet);
       await ensureIdentityWithAA({
         publicClient,
         bundlerUrl: BUNDLER_URL,
         chain: sepolia,
+        identityRegistryOwnerWallet: identityRegistryOwnerWallet,
         registry: registryAddress,
         agentAccount: agentAccountClient,
         tokenUri: tokenUri,

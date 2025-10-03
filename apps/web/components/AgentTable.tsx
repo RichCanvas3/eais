@@ -26,6 +26,8 @@ export type Agent = {
 	metadataURI?: string | null;
 	createdAtBlock: number;
 	createdAtTime: number;
+  name?: string | null;
+  description?: string | null;
 };
 
 export function AgentTable() {
@@ -1107,6 +1109,8 @@ export function AgentTable() {
 					<TableHead>
 						<TableRow>
 							<TableCell>Agent Domain</TableCell>
+							<TableCell>Name</TableCell>
+							<TableCell>Description</TableCell>
 							<TableCell>Agent Address</TableCell>
 							<TableCell>ENS Domain</TableCell>
 							<TableCell>AgentId</TableCell>
@@ -1122,14 +1126,14 @@ export function AgentTable() {
 							return (!mineOnly || owned[row.agentId]);
 						}).length ?? 0) === 0 && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 6 : 5} align="center">
+								<TableCell colSpan={eoa ? 8 : 7} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 6 : 5} align="center">
+								<TableCell colSpan={eoa ? 8 : 7} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -1170,6 +1174,12 @@ export function AgentTable() {
 										</IconButton>
 									</Stack>
 								</TableCell>
+							<TableCell>
+								<Typography variant="body2" noWrap title={row.name || ''}>{row.name || '—'}</Typography>
+							</TableCell>
+							<TableCell>
+								<Typography variant="body2" noWrap title={row.description || ''}>{row.description || '—'}</Typography>
+							</TableCell>
 								<TableCell>
 									<Stack direction="row" spacing={0.25} alignItems="center">
 										<Typography 

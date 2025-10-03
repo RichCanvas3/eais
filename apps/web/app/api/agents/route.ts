@@ -34,10 +34,19 @@ export async function GET(req: Request) {
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
   const rows = db.prepare(`
-    SELECT agentId, agent as agentAddress, owner, domain as agentDomain, metadataURI, createdAtBlock, createdAtTime
-    FROM agents
-    ${whereSql}
-    ORDER BY agentId ASC
+    SELECT a.agentId,
+           a.agent as agentAddress,
+           a.owner,
+           a.domain as agentDomain,
+           a.metadataURI,
+           a.createdAtBlock,
+           a.createdAtTime,
+           m.name as name,
+           m.description as description
+    FROM agents a
+    LEFT JOIN agent_metadata m ON m.agentId = a.agentId
+    ${whereSql ? whereSql.replace(/\bFROM agents\b/, 'FROM agents a LEFT JOIN agent_metadata m ON m.agentId = a.agentId') : ''}
+    ORDER BY a.agentId ASC
     LIMIT @limit OFFSET @offset
   `).all({ ...params, limit: pageSize, offset });
 
