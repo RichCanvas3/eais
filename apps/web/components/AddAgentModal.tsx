@@ -37,11 +37,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentAAIsContract, setAgentAAIsContract] = React.useState<boolean | null>(null);
   const [agentAAOwnerEoa, setAgentAAOwnerEoa] = React.useState<string | null>(null);
   const [agentAAOwnerEns, setAgentAAOwnerEns] = React.useState<string | null>(null);
+  const [agentAADefaultAddress, setAgentAADefaultAddress] = React.useState<string | null>(null);
   const [agentResolver, setAgentResolver] = React.useState<`0x${string}` | null>(null);
   const [agentUrlText, setAgentUrlText] = React.useState<string | null>(null);
   const [agentUrlLoading, setAgentUrlLoading] = React.useState(false);
   const [agentUrlError, setAgentUrlError] = React.useState<string | null>(null);
   const [agentUrlEdit, setAgentUrlEdit] = React.useState('');
+  const [agentUrlIsAuto, setAgentUrlIsAuto] = React.useState(true);
   const [agentUrlSaving, setAgentUrlSaving] = React.useState(false);
   const [agentIdentityExists, setAgentIdentityExists] = React.useState<boolean | null>(null);
   const [domainStatus, setDomainStatus] = React.useState<{
@@ -176,6 +178,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setAgentUrlLoading(false);
       setAgentUrlError(null);
       setAgentUrlEdit('');
+      setAgentUrlIsAuto(true);
     }
   }, [name, domain]);
 
@@ -206,6 +209,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
         const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IpfsService, publicClient, walletClient);
         const agentAddress = await agentAccountClient.getAddress();
+        if (!cancelled) setAgentAADefaultAddress(agentAddress);
         const existing = await IpfsService.getAgentByAddress(agentAddress);
         if (!cancelled) setAgentIdentityExists(!!existing);
       } catch {
@@ -291,8 +295,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         setAgentUrlLoading(true);
         const normalized = await ensService.getTextRecord(ensPreview, 'url', sepolia, rpcUrl);
         if (!cancelled) {
-          setAgentUrlText(normalized);
-          setAgentUrlEdit(normalized ?? '');
+        setAgentUrlText(normalized);
+        setAgentUrlEdit(normalized ?? '');
+        setAgentUrlIsAuto(false);
         }
         // Also cache resolver for save path
         try {
@@ -324,9 +329,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       const label = cleanAgentLabel(name);
       const base = (domainUrlText ?? '').replace(/\/$/, '');
       const suggested = base && label ? `${base}/${label}` : '';
-      if (!agentUrlEdit) {
-        setAgentUrlEdit(suggested);
-      }
+      if (agentUrlIsAuto || !agentUrlEdit) setAgentUrlEdit(suggested);
     }
   }, [ensExists, domainUrlText, name]);
 
@@ -336,11 +339,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       const label = cleanAgentLabel(name);
       const base = (domainUrlText ?? '').replace(/\/$/, '');
       const suggested = base && label ? `${base}/${label}` : '';
-      if (!agentUrlEdit && suggested) {
-        setAgentUrlEdit(suggested);
-      }
+      if ((agentUrlIsAuto || !agentUrlEdit) && suggested) setAgentUrlEdit(suggested);
     }
-  }, [ensExists, agentUrlText, domainUrlText, name]);
+  }, [ensExists, agentUrlText, domainUrlText, name, agentUrlIsAuto, agentUrlEdit]);
 
   React.useEffect(() => {
     const base = cleanBaseDomain(domain);
@@ -672,7 +673,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>
-        Create new Agent
+        Create Agent Identity
         <Typography variant="caption" color="text.secondary" display="block">
           Connected EOA: {address ?? 'Not connected'}
         </Typography>
@@ -778,6 +779,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           
           <br></br>
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
+            Agent AA: {agentAADefaultAddress ? (
+              <a href={`https://sepolia.etherscan.io/address/${agentAADefaultAddress}`} target="_blank" rel="noopener noreferrer">{agentAADefaultAddress}</a>
+            ) : ensResolvedAddress ? (
+              <a href={`https://sepolia.etherscan.io/address/${ensResolvedAddress}`} target="_blank" rel="noopener noreferrer">{ensResolvedAddress}</a>
+            ) : '—'}
+          </Typography>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: 5 }}>
             <Typography variant="caption" color="text.secondary">
               Agent ENS: {ensPreview ? (
@@ -792,6 +800,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 </>
               )}
             </Typography>
+
             {ensPreview && ensExists === false && (
               <Button
                 size="small"
@@ -854,6 +863,28 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                     console.info("***********8 done creating subdomain ");
 
+                    // Update Create new Agent state after ENS creation
+                    try {
+                      setEnsExists(true);
+                      setEnsResolvedAddress(agentAAAddress);
+                      const node = namehash(ensPreview) as `0x${string}`;
+                      // Refresh resolver
+                      const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+                      const resolverAddr = await publicClient.readContract({
+                        address: ENS_REGISTRY_ADDRESS,
+                        abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+                        functionName: 'resolver',
+                        args: [node]
+                      }) as `0x${string}`;
+                      setAgentResolver(resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000' ? resolverAddr : null);
+                      // Refresh URL text
+                      try {
+                        const normalized = await ensService.getTextRecord(ensPreview, 'url', sepolia, rpcUrl);
+                        setAgentUrlText(normalized);
+                        setAgentUrlEdit(normalized ?? '');
+                      } catch {}
+                    } catch {}
+
                   } catch (e: any) {
                     setError(e?.message ?? 'Failed to create ENS subdomain');
                   }
@@ -861,6 +892,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
               >Create ENS</Button>
             )}
           </Stack>
+          
           {ensPreview && (
             <>
               {ensExists === false ? (
@@ -874,14 +906,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       <a href={agentUrlText} target="_blank" rel="noopener noreferrer">{agentUrlText}</a>
                     ) : 'not set'}
                   </Typography>
-                  {ensResolvedAddress && (
-                    <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
-                      Agent AA: <a href={`https://sepolia.etherscan.io/address/${ensResolvedAddress}`} target="_blank" rel="noopener noreferrer">{ensResolvedAddress}</a>
-                    </Typography>
-                  )}
+                  
                   {!agentUrlText && !agentUrlLoading && (
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <TextField label="Set Agent URL" placeholder="https://example.com" value={agentUrlEdit} onChange={(e) => setAgentUrlEdit(e.target.value)} fullWidth />
+                      <TextField label="Set Agent URL" placeholder="https://example.com" value={agentUrlEdit} onChange={(e) => { setAgentUrlEdit(e.target.value); setAgentUrlIsAuto(false); }} fullWidth />
                       <Button
                         variant="outlined"
                         disabled={Boolean(

@@ -1115,7 +1115,7 @@ export function AgentTable() {
 								onClick={() => setAddAgentOpen(true)}
 								size="small"
 							>
-								Create Agent
+								Create Agent Identity
 							</Button>
 						)}
 					</Stack>
