@@ -48,7 +48,7 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
       const resp = await fetchFn(`${IPFS_API_URL}/api/web3storage/download/${cid}`);
       if (resp?.ok) {
         const json = await resp.json();
-        console.info("............fetchIpfsJson: json: ", json)
+        console.info("............fetchIpfsJson: json: ", JSON.stringify(json?.data))
         return json?.data ?? null;
       }
     }
