@@ -1,5 +1,5 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
-import { identityRegistryAbi } from "@/lib/abi/identityRegistry";
+import { identityRegistryAbi as registryAbi } from "@/lib/abi/identityRegistry";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { encodeNonce } from 'permissionless/utils';
@@ -16,6 +16,8 @@ export type AgentAdapterConfig = {
 };
 
 export function createAgentAdapter(config: AgentAdapterConfig) {
+  // Alias to a permissive type for legacy function names used by the web app
+  const identityRegistryAbi = registryAbi as any;
   function getPublicClient() {
     if (config.rpcUrl) {
       return createPublicClient({ transport: http(config.rpcUrl) });
@@ -31,7 +33,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     return await publicClient.readContract({
       address: config.registryAddress,
       abi: identityRegistryAbi,
-      functionName: "getAgentCount",
+      functionName: "getAgentCount" as any,
       args: [],
     }) as bigint;
   }
@@ -41,7 +43,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     const res = await publicClient.readContract({
       address: config.registryAddress,
       abi: identityRegistryAbi,
-      functionName: "getAgent",
+      functionName: "getAgent" as any,
       args: [agentId],
     }) as any;
     return {
@@ -56,7 +58,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     const res = await publicClient.readContract({
       address: config.registryAddress,
       abi: identityRegistryAbi,
-      functionName: "resolveByDomain",
+      functionName: "resolveByDomain" as any,
       args: [agentDomain],
     }) as any;
     return {
@@ -71,7 +73,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     const res = await publicClient.readContract({
       address: config.registryAddress,
       abi: identityRegistryAbi,
-      functionName: "resolveByAddress",
+      functionName: "resolveByAddress" as any,
       args: [agentAddress],
     }) as any;
     return {
@@ -117,7 +119,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     const hash = await walletClient.writeContract({
       address: config.registryAddress,
       abi: identityRegistryAbi,
-      functionName: 'registerByDomain',
+      functionName: 'registerByDomain' as any,
       args: [agentDomain, from],
       account: from,
       chain,
@@ -138,46 +140,201 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
 
 // -------------------- AA helpers for Identity Registration (per user spec) --------------------
 
-export const identityRegistrationAbi = [
+const identityRegistryAbi = [
+  // --- ERC721 Standard Events ---
   {
-    type: 'function',
-    name: 'newAgent',
-    stateMutability: 'nonpayable',
+    type: "event",
+    name: "Transfer",
     inputs: [
-      { name: 'domain', type: 'string' },
-      { name: 'agentAccount', type: 'address' },
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true }
     ],
-    outputs: [
-      { name: 'agentId', type: 'uint256' },
-    ],
+    anonymous: false
   },
   {
-    type: 'function',
-    name: 'resolveByDomain',
-    stateMutability: 'view',
-    inputs: [{ name: 'agentDomain', type: 'string' }],
-    outputs: [
-      {
-        name: 'agentInfo',
-        type: 'tuple',
-        components: [
-          { name: 'agentId', type: 'uint256' },
-          { name: 'agentDomain', type: 'string' },
-          { name: 'agentAddress', type: 'address' },
-        ],
-      },
+    type: "event",
+    name: "Approval",
+    inputs: [
+      { name: "owner", type: "address", indexed: true },
+      { name: "approved", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true }
     ],
+    anonymous: false
   },
-  { type: 'function', name: 'agentOfDomain', stateMutability: 'view', inputs: [{ name: 'domain', type: 'string' }], outputs: [{ name: 'agent', type: 'address' }] },
-  { type: 'function', name: 'getAgent', stateMutability: 'view', inputs: [{ name: 'domain', type: 'string' }], outputs: [{ name: 'agent', type: 'address' }] },
-  { type: 'function', name: 'agents', stateMutability: 'view', inputs: [{ name: 'domain', type: 'string' }], outputs: [{ name: 'agent', type: 'address' }] },
+  {
+    type: "event",
+    name: "ApprovalForAll",
+    inputs: [
+      { name: "owner", type: "address", indexed: true },
+      { name: "operator", type: "address", indexed: true },
+      { name: "approved", type: "bool", indexed: false }
+    ],
+    anonymous: false
+  },
+
+  // --- IdentityRegistry custom events ---
+  {
+    type: "event",
+    name: "MetadataSet",
+    inputs: [
+      { name: "agentId", type: "uint256", indexed: true },
+      { name: "key", type: "bytes32", indexed: true },
+      { name: "value", type: "bytes", indexed: false }
+    ],
+    anonymous: false
+  },
+  {
+    type: "event",
+    name: "MetadataDeleted",
+    inputs: [
+      { name: "agentId", type: "uint256", indexed: true },
+      { name: "key", type: "bytes32", indexed: true }
+    ],
+    anonymous: false
+  },
+
+  // --- ERC165 ---
+  {
+    type: "function",
+    name: "supportsInterface",
+    stateMutability: "view",
+    inputs: [{ name: "interfaceId", type: "bytes4" }],
+    outputs: [{ name: "", type: "bool" }]
+  },
+
+  // --- ERC721 Metadata ---
+  { type: "function", name: "name", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  {
+    type: "function",
+    name: "tokenURI",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "string" }]
+  },
+
+  // --- ERC721 Core ---
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "ownerOf", stateMutability: "view", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "getApproved", stateMutability: "view", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "isApprovedForAll", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "operator", type: "address" }], outputs: [{ type: "bool" }] },
+  { type: "function", name: "approve", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }, { name: "tokenId", type: "uint256" }], outputs: [] },
+  { type: "function", name: "setApprovalForAll", stateMutability: "nonpayable", inputs: [{ name: "operator", type: "address" }, { name: "approved", type: "bool" }], outputs: [] },
+  { type: "function", name: "transferFrom", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }], outputs: [] },
+  { type: "function", name: "safeTransferFrom", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }], outputs: [] },
+  { type: "function", name: "safeTransferFrom", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }, { name: "data", type: "bytes" }], outputs: [] },
+
+  // --- IdentityRegistry helpers ---
+  {
+    type: "function",
+    name: "registryChainId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint64" }]
+  },
+  {
+    type: "function",
+    name: "identityRegistryAddress",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "exists",
+    stateMutability: "view",
+    inputs: [{ name: "agentId", type: "uint256" }],
+    outputs: [{ name: "", type: "bool" }]
+  },
+
+  // --- Admin minting ---
+  {
+    type: "function",
+    name: "mint",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "to", type: "address" }],
+    outputs: [{ name: "agentId", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "mintWithURI",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "to", type: "address" }, { name: "uri", type: "string" }],
+    outputs: [{ name: "agentId", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "setNextId",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "nextId_", type: "uint256" }],
+    outputs: []
+  },
+
+  // --- Controller/operator actions ---
+  {
+    type: "function",
+    name: "setTokenURI",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "agentId", type: "uint256" }, { name: "uri", type: "string" }],
+    outputs: []
+  },
+
+  // --- On-chain metadata ---
+  {
+    type: "function",
+    name: "setMetadata",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "key", type: "bytes32" },
+      { name: "value", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "deleteMetadata",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "key", type: "bytes32" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "getMetadata",
+    stateMutability: "view",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "key", type: "bytes32" }
+    ],
+    outputs: [{ name: "", type: "bytes" }]
+  }
 ] as const;
+
+export function encodeMintAgent(params: { to: `0x${string}`; uri?: string | null }): `0x${string}` {
+  const { to, uri } = params;
+  if (uri && uri.trim() !== '') {
+    return encodeFunctionData({
+      abi: identityRegistryAbi as any,
+      functionName: 'mintWithURI' as any,
+      args: [to, uri],
+    });
+  }
+  return encodeFunctionData({
+    abi: identityRegistryAbi as any,
+    functionName: 'mint' as any,
+    args: [to],
+  });
+}
 
 export function encodeNewAgent(domain: string, agentAccount: `0x${string}`): `0x${string}` {
   return encodeFunctionData({
-    abi: identityRegistrationAbi,
-    functionName: 'newAgent',
-    args: [domain, agentAccount],
+    abi: identityRegistryAbi as any,
+    functionName: 'mintWithURI' as any,
+    args: [agentAccount, domain],
   });
 }
 
@@ -190,14 +347,14 @@ export async function getAgentByDomain(params: {
   const domain = params.domain.trim().toLowerCase();
   const zero = '0x0000000000000000000000000000000000000000';
   try {
-    const info: any = await publicClient.readContract({ address: registry, abi: identityRegistrationAbi as any, functionName: 'resolveByDomain' as any, args: [domain] });
+    const info: any = await publicClient.readContract({ address: registry, abi: identityRegistryAbi as any, functionName: 'getMetadata' as any, args: [1n, '0x0000000000000000000000000000000000000000000000000000000000000000'] });
     const addr = (info?.agentAddress ?? info?.[2]) as `0x${string}` | undefined;
     if (addr && addr !== zero) return addr;
   } catch {}
   const fns: Array<'agentOfDomain' | 'getAgent' | 'agents'> = ['agentOfDomain', 'getAgent', 'agents'];
   for (const fn of fns) {
     try {
-      const addr = await publicClient.readContract({ address: registry, abi: identityRegistrationAbi as any, functionName: fn as any, args: [domain] }) as `0x${string}`;
+      const addr = await publicClient.readContract({ address: registry, abi: identityRegistryAbi as any, functionName: fn as any, args: [domain] }) as `0x${string}`;
       if (addr && addr !== zero) return addr;
     } catch {}
   }
@@ -214,7 +371,7 @@ export async function getAgentInfoByDomain(params: {
   try {
     const info: any = await publicClient.readContract({
       address: registry,
-      abi: identityRegistrationAbi as any,
+      abi: identityRegistryAbi as any,
       functionName: 'resolveByDomain' as any,
       args: [domain],
     });
@@ -263,22 +420,32 @@ export async function ensureIdentityWithAA(params: {
   bundlerUrl: string,
   chain: Chain,
   registry: `0x${string}`,
-  domain: string,
   agentAccount: any,
+  tokenUri: string,
 }): Promise<`0x${string}`> {
-  const { publicClient, bundlerUrl, chain, registry, domain, agentAccount } = params;
+  const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri } = params;
+
+  /*
   const existing = await getAgentByDomain({ publicClient, registry, domain });
   console.info('********************* ensureIdentityWithAA: existing', existing);
   if (existing) return existing;
+  */
 
   console.log('********************* deploySmartAccountIfNeeded');
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
   const agentAddress = await agentAccount.getAddress();
-  const data = encodeNewAgent(domain.trim().toLowerCase(), agentAddress as `0x${string}`);
+
+  console.info('********************* encodeMintAgent: agentAddress', agentAddress);
+  console.info('********************* encodeMintAgent: tokenUri', tokenUri);
+  const data = encodeMintAgent({ to: agentAddress as `0x${string}`, uri: tokenUri });
   await sendSponsoredUserOperation({ bundlerUrl, chain, account: agentAccount, calls: [{ to: registry, data, value: 0n }] });
+  
+  /*
   const updated = await getAgentByDomain({ publicClient, registry, domain });
   console.log('********************* ensureIdentityWithAA: updated', updated);
   return (updated ?? agentAddress) as `0x${string}`;
+  */
+ return agentAddress as `0x${string}`;
 }
 
 

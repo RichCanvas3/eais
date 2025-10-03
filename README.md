@@ -104,3 +104,60 @@ _Status: Draft (Standards Track: ERC)_
 See **WSL setup** in this README for recommended steps on Windows Subsystem for Linux.
 
 
+## IPFS/Web3.Storage Service (Optional Backend)
+
+A lightweight Express service is included to handle Web3.Storage uploads/downloads and a few OAuth helper callbacks.
+
+- Location: `apps/ipfs-service/service.js`
+
+### Configure
+
+Create an env file (example values):
+
+```
+SENDGRID_API_KEY=...
+GCLOUD_BUCKET_NAME=...
+
+# Web3.Storage (optional but recommended)
+WEB3_STORAGE_EMAIL=you@example.com
+WEB3_STORAGE_SPACE_DID=did:key:...
+
+# OAuth (optional)
+LINKEDIN_CLIENT_ID=...
+LINKEDIN_CLIENT_SECRET=...
+LINKEDIN_REDIRECT_URI=http://localhost:4000/linkedin-callback
+X_CLIENT_ID=...
+X_CLIENT_SECRET=...
+X_REDIRECT_URI=http://localhost:4000/x-callback
+SHOPIFY_CLIENT_ID=...
+SHOPIFY_CLIENT_SECRET=...
+SHOPIFY_SHOP_NAME=yourshop
+```
+
+Place it where you launch the service (e.g., repo root or use a process manager that loads env).
+
+### Run
+
+```
+node apps/ipfs-service/service.js
+```
+
+Defaults to port `4000`. Endpoints:
+
+- `POST /api/web3storage/upload` { data, filename? } → { cid, url }
+- `GET /api/web3storage/download/:cid` → { data }
+- `POST /api/web3storage/credentials/save` { credentials, did } → { cid, url }
+- `GET /api/web3storage/credentials/:did` → { data: [] }
+- `DELETE /api/web3storage/credentials/:did` → { success }
+- `GET /api/web3storage/status` → config + spaces info
+
+### Web client configuration
+
+Set the base URL for the web app to reach the service:
+
+```
+NEXT_PUBLIC_IPFS_API_URL=http://localhost:4000
+```
+
+Or set `NEXT_PUBLIC_API_URL` as a fallback. The web client (`apps/web/service/ipfsService.ts`) will use these to call the service.
+

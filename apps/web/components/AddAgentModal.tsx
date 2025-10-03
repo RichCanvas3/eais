@@ -10,6 +10,7 @@ import { createBundlerClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import ensService from '@/service/ensService';
+import IpfsService from '@/service/ipfsService';
 
 
 type Props = {
@@ -428,19 +429,21 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     console.log('********************* handleSubmit', e);
     e.preventDefault();
     if (!provider) { setError('Please login first'); return; }
-    if (!domain.trim()) { setError('Domain is required'); return; }
+    if (!ensPreview.trim()) { setError('agent name is required'); return; }
     setError(null);
     setIsSubmitting(true);
     try {
       const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
-      const domainLower = domain.trim().toLowerCase();
+      const ensPreviewLower = ensPreview.trim().toLowerCase();
 
-      // 0) Early exit if agent already exists for this domain
+      console.log('********************* ensPreviewLower', ensPreviewLower);
+
+      // 0) Early exit if agent already exists for this ensPreviewLower
       try {
-        const existing = await adapter.resolveByDomain(domainLower);
+        const existing = await adapter.resolveByDomain(ensPreviewLower);
         if (existing && existing.agentAddress) {
           setIsSubmitting(false);
-          setError('Agent already exists for this domain');
+          setError('Agent already exists for this name ' + ensPreviewLower);
           return;
         }
       } catch {}
@@ -454,7 +457,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       const signatory = { walletClient: createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: owner }) } as any;
       // Ensure viem client has a default account for signing (toolkit calls signTypedData without passing account)
       try { (signatory.walletClient as any).account = owner; } catch {}
-      const salt: `0x${string}` = keccak256(stringToHex(domainLower)) as `0x${string}`;
+      const salt: `0x${string}` = keccak256(stringToHex(ensPreviewLower)) as `0x${string}`;
 
       console.log('********************* toMetaMaskSmartAccount: ', address, salt);
       const agentAccountClient = await toMetaMaskSmartAccount({
@@ -493,14 +496,42 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
       const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
 
-      console.log('********************* ensureIdentityWithAA');
+      // Build ERC-8004 registration metadata and upload to IPFS to get tokenUri
+      let tokenUri = '';
+      try {
+        const baseDomainUrl = domainUrlText || '';
+        const cleanBase = baseDomainUrl.replace(/\/$/, '');
+        const label = cleanAgentLabel(name);
+        const a2aEndpoint = cleanBase && label ? `${cleanBase}/${label}/.well-known/agent-card.json` : `${cleanBase}/.well-known/agent-card.json`;
+        const endpoints: any[] = [];
+        if (a2aEndpoint) endpoints.push({ name: 'A2A', endpoint: a2aEndpoint, version: '0.3.0' });
+        if (ensPreviewLower) endpoints.push({ name: 'ENS', endpoint: ensPreviewLower, version: 'v1' });
+        endpoints.push({ name: 'agentWallet', endpoint: `eip155:11155111:${agentAddress}`, version: 'v1' });
+
+        const metadata = {
+          type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
+          name: name || ensPreviewLower,
+          description: description || '',
+          image: null,
+          endpoints,
+          registrations: [],
+          supportedTrust: ['reputation', 'crypto-economic', 'tee-attestation']
+        } as any;
+
+        const upload = await IpfsService.uploadJson({ data: metadata, filename: `agent_${ensPreviewLower}.json` });
+        tokenUri = upload.url;
+      } catch (e) {
+        console.warn('IPFS upload failed, proceeding without tokenUri', e);
+      }
+
+      console.log('********************* ensureIdentityWithAA: tokenUri: ', tokenUri);
       await ensureIdentityWithAA({
         publicClient,
         bundlerUrl: BUNDLER_URL,
         chain: sepolia,
         registry: registryAddress,
-        domain: domain.trim().toLowerCase(),
         agentAccount: agentAccountClient,
+        tokenUri: tokenUri,
       })
 
 
