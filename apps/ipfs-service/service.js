@@ -15,6 +15,9 @@ import bodyParser from 'body-parser';
 import { v4 as uuidv4 } from 'uuid';
 import { Storage } from '@google-cloud/storage';
 import { create } from '@web3-storage/w3up-client';
+import path from 'path';
+let SqliteDB = null;
+try { SqliteDB = (await import('better-sqlite3')).default; } catch {}
 
 // Initialize application
 console.log('Starting application...');
@@ -679,6 +682,50 @@ app.get('/api/web3storage/status', async (req, res) => {
       configured: false, 
       error: error.message 
     });
+  }
+});
+
+// ---- Agents database lookup (reads indexer DB) ----
+let cachedDb = null;
+function getAgentsDb() {
+  if (cachedDb) return cachedDb;
+  if (!SqliteDB) {
+    throw new Error('better-sqlite3 is not installed in ipfs-service');
+  }
+  const configured = process.env.INDEXER_DB_PATH;
+  const defaultPath = path.resolve(process.cwd(), '../indexer/data/registry.db');
+  const dbPath = configured && configured.trim() !== '' ? configured : defaultPath;
+  cachedDb = new SqliteDB(dbPath);
+  return cachedDb;
+}
+
+app.get('/api/agents/by-address/:address', async (req, res) => {
+  try {
+    const address = String(req.params.address || '').trim().toLowerCase();
+    if (!/^0x[a-f0-9]{40}$/.test(address)) {
+      return res.status(400).json({ error: 'Invalid address' });
+    }
+    const db = getAgentsDb();
+    const row = db.prepare(`
+      SELECT a.agentId,
+             a.agent as agentAddress,
+             a.owner,
+             a.domain as agentDomain,
+             a.metadataURI,
+             a.createdAtBlock,
+             a.createdAtTime,
+             m.name,
+             m.description,
+             m.a2aEndpoint,
+             m.ensEndpoint
+      FROM agents a
+      LEFT JOIN agent_metadata m ON m.agentId = a.agentId
+      WHERE lower(a.agent) = @addr
+      LIMIT 1
+    `).get({ addr: address });
+    res.json({ found: !!row, agent: row || null });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Lookup failed' });
   }
 });
 

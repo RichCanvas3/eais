@@ -509,6 +509,16 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       }
       console.log('********************* deployed', deployed);
 
+      // Check if an agent already exists for this AA address via backend DB
+      try {
+        const existingAgent = await IpfsService.getAgentByAddress(agentAddress);
+        if (existingAgent) {
+          setIsSubmitting(false);
+          setError(`Agent already exists for address ${agentAddress} (id ${existingAgent.agentId})`);
+          return;
+        }
+      } catch {}
+
       const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
 
       // Build ERC-8004 registration metadata and upload to IPFS to get tokenUri
@@ -540,6 +550,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       }
 
       console.log('********************* ensureIdentityWithAA: tokenUri: ', tokenUri);
+
+
 
       // wallet for Identity Registry Contract Owner
       //const { ethers } = await import('ethers');
@@ -682,19 +694,93 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           
           <br></br>
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
-            Agent ENS: {ensPreview ? (
-              <a href={`https://sepolia.app.ens.domains/${ensPreview}`} target="_blank" rel="noopener noreferrer">{ensPreview}</a>
-            ) : '—'} {ensPreview && (
-              <>
-                {ensResolving
-                  ? '(checking...)'
-                    : ensExists === true
-                      ? '(exists, no address record)'
-                      : '(not found)'}
-              </>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: 5 }}>
+            <Typography variant="caption" color="text.secondary">
+              Agent ENS: {ensPreview ? (
+                <a href={`https://sepolia.app.ens.domains/${ensPreview}`} target="_blank" rel="noopener noreferrer">{ensPreview}</a>
+              ) : '—'} {ensPreview && (
+                <>
+                  {ensResolving
+                    ? '(checking...)'
+                      : ensExists === true
+                        ? '(exists, no address record)'
+                        : '(not found)'}
+                </>
+              )}
+            </Typography>
+            {ensPreview && (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={!provider || !domainStatus?.exists || !domainOwnerAddress}
+                onClick={async () => {
+                  try {
+                    setError(null);
+                    const base = cleanBaseDomain(domain);
+                    if (!base) throw new Error('Invalid parent domain');
+                    const label = cleanAgentLabel(name);
+                    if (!label) throw new Error('Agent name is required');
+
+                    // Build clients for ENS owner AA and agent AA
+                    const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                    const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
+                    try { (walletClient as any).account = address as Address; } catch {}
+
+                    // ENS Owner AA: parent domain controller
+                    const ensOwnerAA = await toMetaMaskSmartAccount({
+                      address: domainOwnerAddress as `0x${string}`,
+                      client: publicClient,
+                      implementation: Implementation.Hybrid,
+                      signatory: { walletClient },
+                    });
+
+                    // Agent AA for the agent name
+                    const salt: `0x${string}` = keccak256(stringToHex(ensPreview.toLowerCase())) as `0x${string}`;
+                    const agentAccountClient = await toMetaMaskSmartAccount({
+                      client: publicClient,
+                      implementation: Implementation.Hybrid,
+                      deployParams: [address as `0x${string}`, [], [], []],
+                      signatory: { walletClient },
+                      deploySalt: salt,
+                    } as any);
+                    const agentAAAddress = await agentAccountClient.getAddress();
+
+                    // Ethers signer for onchain write
+
+                    const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
+                    const { ethers } = await import('ethers');
+                    const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
+                    const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
+                    const signer = ensOwnerWallet.connect(ethersProvider);
+
+
+                    console.info("await ensService.createSubdomainForOrg ");
+                    const result = await ensService.createSubdomainForOrg(
+                      signer as any, // Cast to any to bypass type issues
+                      ensOwnerAA,
+                      agentAccountClient,
+                      agentAAAddress,
+                      base, 
+                      label, 
+                      sepolia
+                    );
+
+                    console.info("await ensService.forwardFromEnsName ");
+
+                    await ensService.forwardFromEnsName(result, sepolia, ensOwnerAA, ensOwnerAA, label);
+
+                    console.info("await ensService.reverseFromEnsAddress ");
+                    await ensService.reverseFromEnsAddress(result, sepolia, ensOwnerAA, ensOwnerAA, label);
+
+                    console.info("***********8 done creating subdomain ");
+
+                  } catch (e: any) {
+                    setError(e?.message ?? 'Failed to create ENS subdomain');
+                  }
+                }}
+              >Create ENS</Button>
             )}
-          </Typography>
+          </Stack>
           {ensPreview && (
             <>
               {ensExists === false ? (
