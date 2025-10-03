@@ -43,6 +43,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentUrlError, setAgentUrlError] = React.useState<string | null>(null);
   const [agentUrlEdit, setAgentUrlEdit] = React.useState('');
   const [agentUrlSaving, setAgentUrlSaving] = React.useState(false);
+  const [agentIdentityExists, setAgentIdentityExists] = React.useState<boolean | null>(null);
   const [domainStatus, setDomainStatus] = React.useState<{
     exists: boolean;
     isWrapped: boolean;
@@ -126,6 +127,35 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setAgentUrlEdit('');
     }
   }, [name, domain]);
+
+  // Check if the derived Agent Identity already exists (disable Create if true)
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setAgentIdentityExists(null);
+        if (!ensPreview || !provider || !address) return;
+        const ensPreviewLower = ensPreview.trim().toLowerCase();
+        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+        const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
+        try { (walletClient as any).account = address as Address; } catch {}
+        const salt: `0x${string}` = keccak256(stringToHex(ensPreviewLower)) as `0x${string}`;
+        const agentAccountClient = await toMetaMaskSmartAccount({
+          client: publicClient,
+          implementation: Implementation.Hybrid,
+          deployParams: [address as `0x${string}`, [], [], []],
+          signatory: { walletClient },
+          deploySalt: salt,
+        } as any);
+        const agentAddress = await agentAccountClient.getAddress();
+        const existing = await IpfsService.getAgentByAddress(agentAddress);
+        if (!cancelled) setAgentIdentityExists(!!existing);
+      } catch {
+        if (!cancelled) setAgentIdentityExists(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ensPreview, provider, address, rpcUrl]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -482,6 +512,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         signatory: signatory,
         deploySalt: salt,
       });
+      
 
       const agentAddress = await agentAccountClient.getAddress();
       console.log('********************* agentAddress', agentAddress);
@@ -708,7 +739,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 </>
               )}
             </Typography>
-            {ensPreview && (
+            {ensPreview && ensExists === false && (
               <Button
                 size="small"
                 variant="outlined"
@@ -841,9 +872,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             </>
           )}
           <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
-          {ensExists === true && (
+          {agentIdentityExists === true && (
             <Typography variant="body2" color="error">
-              Create disabled: Agent ENS already exists for this name.
+              Create disabled: Agent Identity already exists for this agent.
             </Typography>
           )}
           {error && <Typography variant="body2" color="error">{error}</Typography>}
@@ -854,7 +885,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         <Button onClick={handleSubmit} variant="contained" disableElevation disabled={
           isSubmitting ||
           !provider ||
-          ensExists === true
+          agentIdentityExists === true
         }>Create</Button>
       </DialogActions>
     </Dialog>

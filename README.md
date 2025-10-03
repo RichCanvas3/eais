@@ -83,6 +83,9 @@ pnpm dev:indexer
 
 
 pnpm dev:web
+
+pnpm --filter ipfs-service dev
+
 ```
 
 Open http://localhost:3000.

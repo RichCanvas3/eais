@@ -1,8 +1,9 @@
 'use client';
 import * as React from 'react';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
-import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash } from 'viem';
+import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData } from 'viem';
+import { identityRegistryAbi as registryAbi } from '@/lib/abi/identityRegistry';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
@@ -15,6 +16,7 @@ import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import WebIcon from '@mui/icons-material/Web';
 import ensService from '@/service/ensService';
 
@@ -430,48 +432,73 @@ export function AgentTable() {
 
 	React.useEffect(() => { fetchData(); }, []);
 
-	React.useEffect(() => {
-		async function computeOwnership() {
-			if (!data?.rows || !provider || !eoa) { setOwned({}); return; }
-			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
-			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
-			const entries: Record<string, boolean> = {};
-			for (const row of data.rows) {
-				try {
-					const salt = keccak256(stringToHex(row.agentDomain.trim().toLowerCase()));
-					const smartAccount = await toMetaMaskSmartAccount({
-						client: publicClient,
-						implementation: Implementation.Hybrid,
-						deployParams: [eoa as `0x${string}`, [], [], []],
-						signatory: { walletClient },
-						deploySalt: salt as `0x${string}`,
-					} as any);
-					const derived = (await smartAccount.getAddress()).toLowerCase();
-					entries[row.agentId] = derived === row.agentAddress.toLowerCase();
-				} catch {
-					entries[row.agentId] = false;
-				}
-			}
-			setOwned(entries);
-			
-			// Check for feedback URIs for all agents
-			const feedbackURIMap: Record<string, string> = {};
-			for (const row of data.rows) {
-				try {
-					const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentDomain)}`);
-					const cardData = await response.json();
-					if (cardData.found && cardData.card?.feedbackDataURI) {
-						feedbackURIMap[row.agentId] = cardData.card.feedbackDataURI;
-					}
-				} catch {
-					// Ignore errors, just don't add feedback URI
-				}
-			}
-			setAgentFeedbackURIs(feedbackURIMap);
-		}
-		computeOwnership();
-	}, [data?.rows, provider, eoa]);
+    React.useEffect(() => {
+        async function computeOwnership() {
+            if (!data?.rows || !provider || !eoa) { setOwned({}); return; }
+            const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+            const entries: Record<string, boolean> = {};
+            for (const row of data.rows) {
+                try {
+                    const addr = row.agentAddress as `0x${string}`;
+                    const code = await publicClient.getBytecode({ address: addr });
+                    if (!code || code === '0x') {
+                        // Agent is an EOA; ownership = EOA matches connected EOA
+                        entries[row.agentId] = addr.toLowerCase() === (eoa as string).toLowerCase();
+                        continue;
+                    }
+                    // Try common owner selectors on the AA
+                    let controller: string | null = null;
+                    try {
+                        controller = await publicClient.readContract({
+                            address: addr,
+                            abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+                            functionName: 'owner'
+                        }) as string;
+                    } catch {}
+                    if (!controller) {
+                        try {
+                            controller = await publicClient.readContract({
+                                address: addr,
+                                abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+                                functionName: 'getOwner'
+                            }) as string;
+                        } catch {}
+                    }
+                    if (!controller) {
+                        try {
+                            const owners = await publicClient.readContract({
+                                address: addr,
+                                abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
+                                functionName: 'owners'
+                            }) as string[];
+                            controller = Array.isArray(owners) && owners.length ? owners[0] : null;
+                        } catch {}
+                    }
+                    entries[row.agentId] = !!controller && (controller as string).toLowerCase() === (eoa as string).toLowerCase();
+                } catch {
+                    entries[row.agentId] = false;
+                }
+            }
+            setOwned(entries);
+
+            // Check for feedback URIs for all agents
+            const feedbackURIMap: Record<string, string> = {};
+            for (const row of data.rows) {
+                try {
+                    const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentDomain)}`);
+                    const cardData = await response.json();
+                    if (cardData.found && cardData.card?.feedbackDataURI) {
+                        feedbackURIMap[row.agentId] = cardData.card.feedbackDataURI;
+                    }
+                } catch {
+                    // Ignore errors, just don't add feedback URI
+                }
+            }
+            setAgentFeedbackURIs(feedbackURIMap);
+        }
+        computeOwnership();
+    }, [data?.rows, provider, eoa]);
 
 	function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
@@ -1097,14 +1124,14 @@ export function AgentTable() {
 				<Box component="form" onSubmit={handleSubmit}>
 						<Grid container spacing={2}>
 							<Grid item xs={12} md={3}>
-								<TextField fullWidth label="id" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
-							</Grid>
-							<Grid item xs={12} md={3}>
-								<TextField fullWidth label="name" placeholder="Filter by name (ENS or metadata)" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
-							</Grid>
-							<Grid item xs={12} md={3}>
 								<TextField fullWidth label="address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
 							</Grid>
+						<Grid item xs={12} md={3}>
+							<TextField fullWidth label="name" placeholder="Filter by name (ENS or metadata)" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
+						</Grid>
+						<Grid item xs={12} md={3}>
+							<TextField fullWidth label="id" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
+						</Grid>
 						<Grid item xs={12} md={1}>
 							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
 						</Grid>
@@ -1121,11 +1148,11 @@ export function AgentTable() {
 
 			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
 				<Table size="small" sx={{ minWidth: 600 }}>
-						<TableHead>
-							<TableRow>
-								<TableCell>id</TableCell>
-								<TableCell>name</TableCell>
-								<TableCell>address</TableCell>
+                    <TableHead>
+								<TableRow>
+								<TableCell>Account Address</TableCell>
+								<TableCell>ENS Name</TableCell>
+								<TableCell>Identity ID</TableCell>
 								<TableCell>A2A</TableCell>
 								<TableCell>Mine</TableCell>
 								{eoa && <TableCell></TableCell>}
@@ -1150,24 +1177,30 @@ export function AgentTable() {
 							</TableRow>
 						)}
 						{data?.rows?.filter((row) => (!mineOnly || owned[row.agentId]))?.map((row) => (
-							<TableRow key={row.agentId} hover>
-								<TableCell>
-									{process.env.NEXT_PUBLIC_REGISTRY_ADDRESS ? (
-										<Typography
-											component="a"
-											href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_REGISTRY_ADDRESS}/${row.agentId}`}
-											target="_blank"
-											rel="noopener noreferrer"
-											variant="body2"
-											sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-											title={`View NFT #${row.agentId} on Etherscan`}
-										>
-											{row.agentId}
-										</Typography>
-									) : (
-										<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
-									)}
-								</TableCell>
+									<TableRow key={row.agentId} hover>
+										<TableCell>
+											<Stack direction="row" spacing={0.25} alignItems="center">
+												<Typography 
+													component="span" 
+													variant="body2" 
+													sx={{ 
+														fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+														cursor: 'pointer',
+														color: 'primary.main',
+														textDecoration: 'underline',
+														'&:hover': {
+															color: 'primary.dark',
+															textDecoration: 'none'
+														}
+													}} 
+													noWrap 
+													title={`Click to view on Etherscan: ${row.agentAddress}`}
+													onClick={() => window.open(`https://sepolia.etherscan.io/address/${row.agentAddress}`, '_blank')}
+												>
+													{`${row.agentAddress.slice(0, 6)}...${row.agentAddress.slice(-4)}`}
+												</Typography>
+											</Stack>
+										</TableCell>
 						<TableCell>
 							{(row.ensEndpoint || agentEnsNames[row.agentAddress]) ? (
 								<Typography
@@ -1187,106 +1220,121 @@ export function AgentTable() {
 							)}
 						</TableCell>
 
-								<TableCell>
-									<Stack direction="row" spacing={0.25} alignItems="center">
-										<Typography 
-											component="span" 
-											variant="body2" 
-											sx={{ 
-												fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-												cursor: 'pointer',
-												color: 'primary.main',
-												textDecoration: 'underline',
-												'&:hover': {
-													color: 'primary.dark',
-													textDecoration: 'none'
-												}
-											}} 
-											noWrap 
-											title={`Click to view on Etherscan: ${row.agentAddress}`}
-											onClick={() => window.open(`https://sepolia.etherscan.io/address/${row.agentAddress}`, '_blank')}
-										>
-											{`${row.agentAddress.slice(0, 6)}...${row.agentAddress.slice(-4)}`}
-										</Typography>
-										{owned[row.agentId] && (
-											<>
-												<Button 
-													size="small" 
-													onClick={() => viewOrCreateCard(row)}
-													sx={{ 
-														minWidth: 'auto',
-														px: 0.5,
-														py: 0.25,
-														fontSize: '0.65rem',
-														lineHeight: 1,
-														height: 'auto'
-													}}
+									<TableCell>
+										<Stack direction="row" spacing={1} alignItems="center">
+											{process.env.NEXT_PUBLIC_REGISTRY_ADDRESS ? (
+												<Typography
+													component="a"
+													href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_REGISTRY_ADDRESS}/${row.agentId}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													variant="body2"
+													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+													title={`View NFT #${row.agentId} on Etherscan`}
 												>
-													Card
+													{row.agentId}
+												</Typography>
+											) : (
+												<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
+											)}
+											{owned[row.agentId] && (
+												<Tooltip title="Burn Identity (send to 0x000…dEaD)">
+													<IconButton
+														size="small"
+														color="error"
+														onClick={async () => {
+															try {
+																const registry = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`;
+																if (!registry) throw new Error('Registry address not configured');
+																const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+																const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+																const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+
+																const domainOwnerAddress = row.agentAddress;
+																const smartAccountClient = await toMetaMaskSmartAccount({
+																	address: domainOwnerAddress as `0x${string}`,
+																	client: publicClient,
+																	implementation: Implementation.Hybrid,
+																	signatory: { walletClient },
+																});
+
+																// Build calldata for transferFrom(from=AA, to=0x000...dEaD, tokenId)
+																const calldata = encodeFunctionData({
+																	abi: registryAbi as any,
+																	functionName: 'transferFrom' as any,
+																	args: [domainOwnerAddress, '0x000000000000000000000000000000000000dEaD' as `0x${string}`, BigInt(row.agentId)],
+																});
+
+																// Send UO via bundler
+																const bundlerUrl2 = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+																const pimlicoClient2 = createPimlicoClient({ transport: http(bundlerUrl2) });
+																const bundlerClient2 = createBundlerClient({
+																	transport: http(bundlerUrl2),
+																	paymaster: true as any,
+																	chain: sepolia as any,
+																	paymasterContext: { mode: 'SPONSORED' },
+																} as any);
+																const { fast: fee2 } = await pimlicoClient2.getUserOperationGasPrice();
+
+																console.info(" send user operation to burn identity");
+																const userOpHash = await bundlerClient2.sendUserOperation({
+																	account: smartAccountClient as any,
+																	calls: [{ to: registry, data: calldata }],
+																	...fee2,
+																});
+																await bundlerClient2.waitForUserOperationReceipt({ hash: userOpHash });
+																console.info(" burn completed");
+																fetchData(data?.page ?? 1);
+															} catch (err) {
+																console.error('Failed to burn identity', err);
+															}
+														}}
+														sx={{ minWidth: 'auto', p: 0.5, lineHeight: 1, height: 'auto' }}
+													>
+														<LocalFireDepartmentIcon fontSize="small" />
+													</IconButton>
+												</Tooltip>
+											)}
+											{owned[row.agentId] && (
+												<>
+													<Button 
+														size="small" 
+														onClick={() => viewOrCreateCard(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														Card
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openDidWebModal(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														DID:Web
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openDidAgentModal(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														DID:Agent
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openSessionFor(row)} 
+														disabled={sessionLoading}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														{sessionLoading ? 'Loading...' : 'Session'}
+													</Button>
+												</>
+											)}
+											{agentFeedbackURIs[row.agentId] && (
+												<Button size="small" onClick={() => openFeedbackFor(row)} sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}>
+													Feedback
 												</Button>
-												<Button 
-													size="small" 
-													onClick={() => openDidWebModal(row)}
-													sx={{ 
-														minWidth: 'auto',
-														px: 0.5,
-														py: 0.25,
-														fontSize: '0.65rem',
-														lineHeight: 1,
-														height: 'auto'
-													}}
-												>
-													DID:Web
-												</Button>
-												<Button 
-													size="small" 
-													onClick={() => openDidAgentModal(row)}
-													sx={{ 
-														minWidth: 'auto',
-														px: 0.5,
-														py: 0.25,
-														fontSize: '0.65rem',
-														lineHeight: 1,
-														height: 'auto'
-													}}
-												>
-													DID:Agent
-												</Button>
-												<Button 
-													size="small" 
-													onClick={() => openSessionFor(row)} 
-													disabled={sessionLoading}
-													sx={{ 
-														minWidth: 'auto',
-														px: 0.5,
-														py: 0.25,
-														fontSize: '0.65rem',
-														lineHeight: 1,
-														height: 'auto'
-													}}
-												>
-													{sessionLoading ? 'Loading...' : 'Session'}
-												</Button>
-											</>
-										)}
-										{agentFeedbackURIs[row.agentId] && (
-											<Button 
-												size="small" 
-												onClick={() => openFeedbackFor(row)}
-												sx={{ 
-													minWidth: 'auto',
-													px: 0.5,
-													py: 0.25,
-													fontSize: '0.65rem',
-													lineHeight: 1,
-													height: 'auto'
-												}}
-											>
-												Feedback
-											</Button>
-										)}
-									</Stack>
-								</TableCell>
+											)}
+										</Stack>
+									</TableCell>
 
 							<TableCell>
 								{row.a2aEndpoint ? (

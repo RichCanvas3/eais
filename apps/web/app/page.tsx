@@ -19,7 +19,7 @@ export default function Page() {
             {isLoggedIn ? 'Disconnect' : 'Login'}
           </Button>
         </Box>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>Search and explore registered agents, domains and addresses.</Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>Search and explore registered agent accounts, names and identifies.</Typography>
       </Box>
       <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'transparent' }}>
         <AgentTable />

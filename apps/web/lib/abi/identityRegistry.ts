@@ -140,6 +140,7 @@ export const identityRegistryAbi = [
     outputs: []
   },
 
+
   // --- On-chain metadata ---
   {
     type: "function",

@@ -692,40 +692,104 @@ function getAgentsDb() {
   if (!SqliteDB) {
     throw new Error('better-sqlite3 is not installed in ipfs-service');
   }
-  const configured = process.env.INDEXER_DB_PATH;
+  const configured = process.env.DB_PATH;
   const defaultPath = path.resolve(process.cwd(), '../indexer/data/registry.db');
   const dbPath = configured && configured.trim() !== '' ? configured : defaultPath;
-  cachedDb = new SqliteDB(dbPath);
+  cachedDb = new SqliteDB(dbPath, { readonly: true });
+  console.log('[agents-db] Using DB file:', dbPath);
   return cachedDb;
 }
 
 app.get('/api/agents/by-address/:address', async (req, res) => {
   try {
+    console.info("............getAgentByAddress: ", req.params.address)
     const address = String(req.params.address || '').trim().toLowerCase();
     if (!/^0x[a-f0-9]{40}$/.test(address)) {
+      console.info("............getAgentByAddress: invalid address ", address)
       return res.status(400).json({ error: 'Invalid address' });
     }
+    console.info("............getAgentByAddress: valid address ", address)
+
     const db = getAgentsDb();
-    const row = db.prepare(`
-      SELECT a.agentId,
-             a.agent as agentAddress,
-             a.owner,
-             a.domain as agentDomain,
-             a.metadataURI,
-             a.createdAtBlock,
-             a.createdAtTime,
-             m.name,
-             m.description,
-             m.a2aEndpoint,
-             m.ensEndpoint
-      FROM agents a
-      LEFT JOIN agent_metadata m ON m.agentId = a.agentId
-      WHERE lower(a.agent) = @addr
-      LIMIT 1
-    `).get({ addr: address });
+    let row = null;
+    try {
+      row = db.prepare(`
+        SELECT a.agentId,
+               a.agent as agentAddress,
+               a.owner,
+               a.domain as agentDomain,
+               a.metadataURI,
+               a.createdAtBlock,
+               a.createdAtTime,
+               m.name,
+               m.description,
+               m.a2aEndpoint,
+               m.ensEndpoint
+        FROM agents a
+        LEFT JOIN agent_metadata m ON m.agentId = a.agentId
+        WHERE lower(a.agent) LIKE @addrLike OR lower(a.owner) LIKE @addrLike
+        LIMIT 1
+      `).get({ addrLike: `%${address}%` });
+    } catch (e) {
+      row = db.prepare(`
+        SELECT agentId,
+               agent as agentAddress,
+               owner,
+               domain as agentDomain,
+               metadataURI,
+               createdAtBlock,
+               createdAtTime
+        FROM agents
+        WHERE lower(agent) LIKE @addrLike OR lower(owner) LIKE @addrLike
+        LIMIT 1
+      `).get({ addrLike: `%${address}%` });
+    }
+    console.info("............return getAgentByAddress: row ", row)
     res.json({ found: !!row, agent: row || null });
   } catch (err) {
+    console.info("............return getAgentByAddress: error ", err)
     res.status(500).json({ error: err?.message || 'Lookup failed' });
+  }
+});
+
+// Debug endpoint: list agents without filters (logs to console and returns sample)
+app.get('/api/agents/debug', async (req, res) => {
+  try {
+    const db = getAgentsDb();
+    let rows = [];
+    try {
+      rows = db.prepare(`
+        SELECT a.agentId,
+               a.agent as agentAddress,
+               a.owner,
+               a.domain as agentDomain,
+               a.metadataURI,
+               m.name,
+               m.ensEndpoint,
+               m.a2aEndpoint
+        FROM agents a
+        LEFT JOIN agent_metadata m ON m.agentId = a.agentId
+        ORDER BY a.agentId ASC
+        LIMIT 100
+      `).all();
+    } catch {
+      rows = db.prepare(`
+        SELECT agentId,
+               agent as agentAddress,
+               owner,
+               domain as agentDomain,
+               metadataURI
+        FROM agents
+        ORDER BY agentId ASC
+        LIMIT 100
+      `).all();
+    }
+    const total = db.prepare('SELECT COUNT(1) as c FROM agents').get().c;
+    console.info('[agents-debug] total:', total);
+    console.info('[agents-debug] sample rows:', rows);
+    res.json({ total, rows });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Debug list failed' });
   }
 });
 

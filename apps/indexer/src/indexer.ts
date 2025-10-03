@@ -67,74 +67,91 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
   const agentAddress = to; // mirror owner for now
   const domain = ""; // not modeled in ERC-721; leave empty
 
-  db.prepare(`
-    INSERT INTO agents(agentId, agent, owner, domain, metadataURI, createdAtBlock, createdAtTime)
-    VALUES(@agentId, @agent, @owner, @domain, @metadataURI, @block, strftime('%s','now'))
-    ON CONFLICT(agentId) DO UPDATE SET
-      agent=excluded.agent,
-      owner=excluded.owner,
-      domain=excluded.domain,
-      metadataURI=COALESCE(excluded.metadataURI, metadataURI)
-  `).run({
-    agentId,
-    agent: agentAddress,
-    owner: ownerAddress,
-    domain,
-    metadataURI: tokenURI,
-    block: Number(blockNumber),
-  });
-  const metadata = await fetchIpfsJson(tokenURI);
-  if (metadata) {
+  console.info(".... ownerAddress", ownerAddress)
+
+  if (ownerAddress != '0x000000000000000000000000000000000000dEaD') {
+
+
+    db.prepare(`
+      INSERT INTO agents(agentId, agent, owner, domain, metadataURI, createdAtBlock, createdAtTime)
+      VALUES(@agentId, @agent, @owner, @domain, @metadataURI, @block, strftime('%s','now'))
+      ON CONFLICT(agentId) DO UPDATE SET
+        agent=excluded.agent,
+        owner=excluded.owner,
+        domain=excluded.domain,
+        metadataURI=COALESCE(excluded.metadataURI, metadataURI)
+    `).run({
+      agentId,
+      agent: agentAddress,
+      owner: ownerAddress,
+      domain,
+      metadataURI: tokenURI,
+      block: Number(blockNumber),
+    });
+    const metadata = await fetchIpfsJson(tokenURI);
+    if (metadata) {
+      try {
+        const meta = metadata as any;
+        const type = typeof meta.type === 'string' ? meta.type : null;
+        const name = typeof meta.name === 'string' ? meta.name : null;
+        const description = typeof meta.description === 'string' ? meta.description : null;
+        const image = meta.image == null ? null : String(meta.image);
+        const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
+        const findEndpoint = (n: string) => {
+          const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
+          return e && typeof e.endpoint === 'string' ? e.endpoint : null;
+        };
+        const a2aEndpoint = findEndpoint('A2A');
+        const ensEndpoint = findEndpoint('ENS');
+        const agentWalletEndpoint = findEndpoint('agentWallet');
+        const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
+        console.info("............insert into table: agentId: ", agentId)
+        console.info("............insert into table: type: ", type)
+        console.info("............insert into table: name: ", name)
+        console.info("............insert into table: description: ", description)
+        console.info("............insert into table: image: ", image)
+        console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
+        console.info("............insert into table: ensEndpoint: ", ensEndpoint)
+        console.info("............insert into table: agentWalletEndpoint: ", agentWalletEndpoint)
+        db.prepare(`
+          INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentWalletEndpoint, supportedTrust, rawJson, updatedAtTime)
+          VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @wallet, @trust, @raw, strftime('%s','now'))
+          ON CONFLICT(agentId) DO UPDATE SET
+            type=excluded.type,
+            name=excluded.name,
+            description=excluded.description,
+            image=excluded.image,
+            a2aEndpoint=excluded.a2aEndpoint,
+            ensEndpoint=excluded.ensEndpoint,
+            agentWalletEndpoint=excluded.agentWalletEndpoint,
+            supportedTrust=excluded.supportedTrust,
+            rawJson=excluded.rawJson,
+            updatedAtTime=strftime('%s','now')
+        `).run({
+          agentId,
+          type,
+          name,
+          description,
+          image,
+          a2a: a2aEndpoint,
+          ens: ensEndpoint,
+          wallet: agentWalletEndpoint,
+          trust: JSON.stringify(supportedTrust),
+          raw: JSON.stringify(meta),
+        });
+        recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId });
+      } catch {}
+    }
+
+
+  }
+  else {
+    console.info("remove from list")
     try {
-      const meta = metadata as any;
-      const type = typeof meta.type === 'string' ? meta.type : null;
-      const name = typeof meta.name === 'string' ? meta.name : null;
-      const description = typeof meta.description === 'string' ? meta.description : null;
-      const image = meta.image == null ? null : String(meta.image);
-      const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
-      const findEndpoint = (n: string) => {
-        const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
-        return e && typeof e.endpoint === 'string' ? e.endpoint : null;
-      };
-      const a2aEndpoint = findEndpoint('A2A');
-      const ensEndpoint = findEndpoint('ENS');
-      const agentWalletEndpoint = findEndpoint('agentWallet');
-      const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
-      console.info("............insert into table: agentId: ", agentId)
-      console.info("............insert into table: type: ", type)
-      console.info("............insert into table: name: ", name)
-      console.info("............insert into table: description: ", description)
-      console.info("............insert into table: image: ", image)
-      console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
-      console.info("............insert into table: ensEndpoint: ", ensEndpoint)
-      console.info("............insert into table: agentWalletEndpoint: ", agentWalletEndpoint)
-      db.prepare(`
-        INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentWalletEndpoint, supportedTrust, rawJson, updatedAtTime)
-        VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @wallet, @trust, @raw, strftime('%s','now'))
-        ON CONFLICT(agentId) DO UPDATE SET
-          type=excluded.type,
-          name=excluded.name,
-          description=excluded.description,
-          image=excluded.image,
-          a2aEndpoint=excluded.a2aEndpoint,
-          ensEndpoint=excluded.ensEndpoint,
-          agentWalletEndpoint=excluded.agentWalletEndpoint,
-          supportedTrust=excluded.supportedTrust,
-          rawJson=excluded.rawJson,
-          updatedAtTime=strftime('%s','now')
-      `).run({
-        agentId,
-        type,
-        name,
-        description,
-        image,
-        a2a: a2aEndpoint,
-        ens: ensEndpoint,
-        wallet: agentWalletEndpoint,
-        trust: JSON.stringify(supportedTrust),
-        raw: JSON.stringify(meta),
-      });
-      recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId });
+      const agentId = toDecString(tokenId);
+      db.prepare("DELETE FROM agent_metadata WHERE agentId = ?").run(agentId);
+      db.prepare("DELETE FROM agents WHERE agentId = ?").run(agentId);
+      recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
     } catch {}
   }
 }
