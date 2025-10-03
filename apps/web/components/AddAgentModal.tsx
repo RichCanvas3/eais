@@ -726,13 +726,17 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
                     try { (walletClient as any).account = address as Address; } catch {}
 
+                    // ENS owner EOA from private key for AA signatory
+                    const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
+                    const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
+
                     // ENS Owner AA: parent domain controller
                     const ensOwnerAA = await toMetaMaskSmartAccount({
                       address: domainOwnerAddress as `0x${string}`,
                       client: publicClient,
                       implementation: Implementation.Hybrid,
-                      signatory: { walletClient },
-                    });
+                      signatory: { account: ensOwnerEOA },
+                    } as any);
 
                     // Agent AA for the agent name
                     const salt: `0x${string}` = keccak256(stringToHex(ensPreview.toLowerCase())) as `0x${string}`;
@@ -747,7 +751,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                     // Ethers signer for onchain write
 
-                    const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
                     const { ethers } = await import('ethers');
                     const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
                     const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
@@ -767,10 +770,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                     console.info("await ensService.forwardFromEnsName ");
 
-                    await ensService.forwardFromEnsName(result, sepolia, ensOwnerAA, ensOwnerAA, label);
+                    await ensService.forwardFromEnsName(result, sepolia, ensOwnerAA, agentAccountClient, label);
 
                     console.info("await ensService.reverseFromEnsAddress ");
-                    await ensService.reverseFromEnsAddress(result, sepolia, ensOwnerAA, ensOwnerAA, label);
+                    await ensService.reverseFromEnsAddress(result, sepolia, ensOwnerAA, agentAccountClient, label);
 
                     console.info("***********8 done creating subdomain ");
 
