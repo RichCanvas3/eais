@@ -439,31 +439,27 @@ export async function ensureIdentityWithAA(params: {
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
   const agentAddress = 'eip155:11155111:${await agentAccount.getAddress()}'
 
-  // If an EOA wallet with registry ownership is provided, use it to mint directly
-
-  console.info('********************* identityRegistryOwnerWallet write contract');
-  // Use register(tokenURI_, MetadataEntry[]) with initial metadata
+  // Register via AA so the Identity owner is the AA (msg.sender)
+  console.info('********************* register via AA (sponsored)');
   const initialMetadata: { key: string; value: string }[] = [
     { key: 'agentName', value: params.name },
     { key: 'agentAccount', value: agentAddress as `0x${string}` },
   ];
-  const hash = await identityRegistryOwnerWallet.writeContract({
-    address: registry,
+  const dataRegister = encodeFunctionData({
     abi: registryAbi as any,
     functionName: 'register' as any,
     args: [tokenUri ?? '', initialMetadata],
-    account: identityRegistryOwnerWallet.account,
+  });
+  const userOpHash = await sendSponsoredUserOperation({
+    bundlerUrl,
     chain,
+    account: agentAccount,
+    calls: [{ to: registry, data: dataRegister }],
   });
-
-
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  console.info("............receipt: ", receipt)
-  const logs = parseEventLogs({
-    abi: registryAbi,
-    eventName: 'Transfer',
-    logs: receipt.logs,
-  });
+  const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
+  const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
+  console.info("............receipt: ", aaReceipt)
+  const logs = parseEventLogs({ abi: registryAbi, eventName: 'Transfer', logs: aaReceipt.logs });
   console.info("............logs: ", logs)
   const tokenId = logs[0]?.args.tokenId as bigint;
   console.info("............tokenId: ", tokenId)

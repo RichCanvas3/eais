@@ -106,30 +106,34 @@ export function AgentTable() {
 			setInfoData(null);
 			const agentId = row.agentId;
 			const agentIdNum = BigInt(agentId);
-			// Read on-chain metadata: agentName key
-			const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
-			const keyAgentAccount = keccak256(stringToHex('agentAccount')) as `0x${string}`;
-			
-			const nameBytes = await createPublicClient({ 
-				chain: sepolia, 
-				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) 
-			}).readContract({ address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`, 
-				abi: registryAbi as any, 
-				functionName: 'getMetadata' as any, 
-				args: [agentIdNum, keyAgentName] }) as `0x${string}`;
+			// Read on-chain metadata: string keys, string values
+			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) });
+			const name = await publicClient.readContract({
+				address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`,
+				abi: registryAbi as any,
+				functionName: 'getMetadata' as any,
+				args: [agentIdNum, 'agentName']
+			}) as string;
+			const accountRaw = await publicClient.readContract({
+				address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`,
+				abi: registryAbi as any,
+				functionName: 'getMetadata' as any,
+				args: [agentIdNum, 'agentAccount']
+			}) as string;
+			let account: string | null = null;
+			try {
+				if (typeof accountRaw === 'string' && accountRaw) {
+					if (/^eip155:/i.test(accountRaw)) {
+						const parts = accountRaw.split(':');
+						const maybe = parts[parts.length - 1] || '';
+						if (/^0x[0-9a-fA-F]{40}$/.test(maybe)) account = getAddress(maybe as `0x${string}`);
+					} else if (/^0x[0-9a-fA-F]{40}$/.test(accountRaw)) {
+						account = getAddress(accountRaw as `0x${string}`);
+					}
+				}
+			} catch {}
 
-			const accountBytes = await createPublicClient({ 
-				chain: sepolia, 
-				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) 
-			}).readContract({ address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`, 
-				abi: registryAbi as any, 
-				functionName: 'getMetadata' as any, 
-				args: [agentIdNum, keyAgentAccount] }) as `0x${string}`;
-			
-			const name = hexToString(nameBytes); 
-			const account = getAddress(`0x${accountBytes.slice(-40)}`);
-
-			setInfoData({ agentId: agentId, agentName: name, agentAccount: account });
+			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account });
 		} catch (e: any) {
 			setInfoError(e?.message || 'Failed to load agent info');
 		} finally {
