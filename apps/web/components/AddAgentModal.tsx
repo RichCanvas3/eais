@@ -3,8 +3,9 @@ import * as React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { createAgentAdapter, ensureIdentityWithAA } from '@/lib/agentAdapter';
-import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, type Address } from 'viem';
+import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 import PublicResolverABI from '../abis/PublicResolver.json';
+import { identityRegistryAbi as registryAbi } from '@/lib/abi/identityRegistry';
 import { sepolia } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
@@ -83,6 +84,53 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   async function getDefaultAgentAccount(agentName: string, identityService: any, publicClient: any, walletClient: any)  {
     // Try DB lookup by name (guard empty to avoid 400)
     console.info("getDefaultAgentAccount", agentName);
+    const logAgent = async (addr: `0x${string}`) => {
+      try {
+        const row = await identityService.getAgentByAddress(addr);
+        console.info("agent nft row by address:", row);
+        try {
+          if (row?.agentId) {
+            const agentIdNum = BigInt(row.agentId);
+            const publicClient2 = publicClient;
+            // Read agentAccount and agentName from on-chain metadata
+            const keyAgentAccount = keccak256(stringToHex('agentAccount')) as `0x${string}`;
+            const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
+            const agentAccountBytes = await publicClient2.readContract({ address: registryAddress as `0x${string}`, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [agentIdNum, keyAgentAccount] }) as `0x${string}`;
+            const agentNameBytes = await publicClient2.readContract({ address: registryAddress as `0x${string}`, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [agentIdNum, keyAgentName] }) as `0x${string}`;
+            console.info('on-chain agentAccount (bytes):', agentAccountBytes);
+            try { console.info('on-chain agentName (utf8):', hexToString(agentNameBytes)); } catch {}
+            try {
+              const tokenUriOnChain = await publicClient2.readContract({ address: registryAddress as `0x${string}`, abi: registryAbi as any, functionName: 'tokenURI' as any, args: [agentIdNum] }) as string;
+              console.info('on-chain tokenURI:', tokenUriOnChain);
+            } catch {}
+          }
+        } catch (e) {
+          console.info('failed to read on-chain metadata for row', e);
+        }
+        const uri = row?.metadataURI as string | undefined;
+        if (uri) {
+          console.info("agent nft tokenUri:", uri);
+          const cid = (function extract(tokenUri: string): string | null {
+            try {
+              if (tokenUri.startsWith('ipfs://')) {
+                const rest = tokenUri.slice('ipfs://'.length);
+                const c = rest.split('/')[0]?.trim();
+                return c || null;
+              }
+              const m = tokenUri.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
+              if (m && m[1]) return m[1];
+            } catch {}
+            return null;
+          })(uri);
+          if (cid) {
+            const json = await IdentityService.downloadJson(cid);
+            console.info("agent nft ipfs json:", json);
+          }
+        }
+      } catch (e) {
+        console.info("no agent nft row/ipfs found for", addr);
+      }
+    };
     try {
       if (agentName && agentName.trim() !== '') {
         const byName = await identityService.getAgentByName(agentName.trim());
@@ -94,7 +142,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             implementation: Implementation.Hybrid,
             signatory: { walletClient },
           });
+          
           console.info("identity found with name", agentName, agentAccountClient.address);
+          await logAgent(foundAddr as `0x${string}`);
+          
+          console.info("get agent info from identity service", byName);
           return agentAccountClient;
         }
       }
@@ -111,6 +163,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         implementation: Implementation.Hybrid,
         signatory: { walletClient },
       });
+      await logAgent(ensAgentAddress as `0x${string}`);
       console.info("ens found with name", agentName, agentAccountClient.address);
       return agentAccountClient
     }
@@ -125,6 +178,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       deploySalt: salt,
     } as any);
     console.info("salt found with name", agentName, agentAccountClient.address);
+    try { await logAgent(await agentAccountClient.getAddress()); } catch {}
     return agentAccountClient
 
 
@@ -672,6 +726,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         identityRegistryOwnerWallet: identityRegistryOwnerWallet,
         registry: registryAddress,
         agentAccount: agentAccountClient,
+        name: name,
         tokenUri: tokenUri,
       })
 

@@ -1,4 +1,5 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
+import { stringToHex, keccak256 } from "viem";
 import { identityRegistryAbi as registryAbi } from "@/lib/abi/identityRegistry";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
@@ -422,6 +423,7 @@ export async function ensureIdentityWithAA(params: {
   identityRegistryOwnerWallet: any,
   registry: `0x${string}`,
   agentAccount: any,
+  name: string,
   tokenUri: string,
 }): Promise<`0x${string}`> {
   const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri, identityRegistryOwnerWallet } = params;
@@ -461,7 +463,35 @@ export async function ensureIdentityWithAA(params: {
   const tokenId = logs[0]?.args.tokenId as bigint;
   console.info("............tokenId: ", tokenId)
 
-  
+  // Set on-chain metadata via AA: agentAccount and agentName
+  try {
+    const keyAgentAccount = keccak256(stringToHex('agentAccount')) as `0x${string}`;
+    const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
+    const agentAddrBytes = (await agentAccount.getAddress()) as `0x${string}`;
+    const nameBytes = stringToHex(params.name) as `0x${string}`;
+    const dataSetAccount = encodeFunctionData({
+      abi: identityRegistryAbi as any,
+      functionName: 'setMetadata' as any,
+      args: [tokenId, keyAgentAccount, agentAddrBytes],
+    });
+    const dataSetName = encodeFunctionData({
+      abi: identityRegistryAbi as any,
+      functionName: 'setMetadata' as any,
+      args: [tokenId, keyAgentName, nameBytes],
+    });
+    await sendSponsoredUserOperation({
+      bundlerUrl,
+      chain,
+      account: agentAccount,
+      calls: [
+        { to: registry, data: dataSetAccount },
+        { to: registry, data: dataSetName },
+      ]
+    });
+  } catch (e) {
+    console.warn('setMetadata via AA failed', e);
+  }
+
   /*
   const updated = await getAgentByDomain({ publicClient, registry, domain });
   console.log('********************* ensureIdentityWithAA: updated', updated);
