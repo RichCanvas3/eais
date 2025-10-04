@@ -8,26 +8,7 @@ importers:
 
   .: {}
 
-  apps/indexer:
-    dependencies:
-      better-sqlite3:
-        specifier: ^9.4.0
-        version: 9.6.0
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.6.1
-      viem:
-        specifier: ^2.13.3
-        version: 2.37.11(typescript@5.9.3)
-    devDependencies:
-      tsx:
-        specifier: ^4.15.7
-        version: 4.20.6
-      typescript:
-        specifier: ^5.6.2
-        version: 5.9.3
-
-  apps/ipfs-service:
+  apps/identity-service:
     dependencies:
       '@ethersproject/base64':
         specifier: ^5.7.0
@@ -74,6 +55,25 @@ importers:
       viem:
         specifier: ^2.21.16
         version: 2.37.11(typescript@5.9.3)
+
+  apps/indexer:
+    dependencies:
+      better-sqlite3:
+        specifier: ^9.4.0
+        version: 9.6.0
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      viem:
+        specifier: ^2.13.3
+        version: 2.37.11(typescript@5.9.3)
+    devDependencies:
+      tsx:
+        specifier: ^4.15.7
+        version: 4.20.6
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
 
   apps/web:
     dependencies:
@@ -3648,7 +3648,7 @@ snapshots:
 
   '@scure/bip32@1.7.0':
     dependencies:
-      '@noble/curves': 1.9.1
+      '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 
@@ -5385,7 +5385,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
-      abitype: 1.1.0(typescript@5.9.3)
+      abitype: 1.1.1(typescript@5.9.3)
       eventemitter3: 5.0.1
     optionalDependencies:
       typescript: 5.9.3

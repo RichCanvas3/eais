@@ -84,7 +84,7 @@ pnpm dev:indexer
 
 pnpm dev:web
 
-pnpm --filter ipfs-service dev
+pnpm --filter identity-service dev
 
 ```
 
@@ -111,7 +111,7 @@ See **WSL setup** in this README for recommended steps on Windows Subsystem for 
 
 A lightweight Express service is included to handle Web3.Storage uploads/downloads and a few OAuth helper callbacks.
 
-- Location: `apps/ipfs-service/service.js`
+- Location: `apps/identity-service/service.js`
 
 ### Configure
 
@@ -142,7 +142,7 @@ Place it where you launch the service (e.g., repo root or use a process manager 
 ### Run
 
 ```
-node apps/ipfs-service/service.js
+node apps/identity-service/service.js
 ```
 
 Defaults to port `4000`. Endpoints:
@@ -159,8 +159,8 @@ Defaults to port `4000`. Endpoints:
 Set the base URL for the web app to reach the service:
 
 ```
-NEXT_PUBLIC_IPFS_API_URL=http://localhost:4000
+NEXT_PUBLIC_IDENTITY_API_URL=http://localhost:4000
 ```
 
-Or set `NEXT_PUBLIC_API_URL` as a fallback. The web client (`apps/web/service/ipfsService.ts`) will use these to call the service.
+Or set `NEXT_PUBLIC_API_URL` as a fallback. The web client (`apps/web/service/identityService.ts`) will use these to call the service.
 

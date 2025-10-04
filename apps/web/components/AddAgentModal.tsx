@@ -10,7 +10,7 @@ import { createBundlerClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import ensService from '@/service/ensService';
-import IpfsService from '@/service/ipfsService';
+import IdentityService from '@/service/identityService';
 
 
 import { privateKeyToAccount } from 'viem/accounts';
@@ -80,12 +80,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     return base.replace(/[^a-z0-9-]/g, '');
   }
 
-  async function getDefaultAgentAccount(agentName: string, ipfsService: any, publicClient: any, walletClient: any)  {
+  async function getDefaultAgentAccount(agentName: string, identityService: any, publicClient: any, walletClient: any)  {
     // Try DB lookup by name (guard empty to avoid 400)
     console.info("getDefaultAgentAccount", agentName);
     try {
       if (agentName && agentName.trim() !== '') {
-        const byName = await ipfsService.getAgentByName(agentName.trim());
+        const byName = await identityService.getAgentByName(agentName.trim());
         const foundAddr = byName?.agentAddress || byName?.agent || null;
         if (foundAddr) {
           const agentAccountClient = await toMetaMaskSmartAccount({
@@ -202,15 +202,15 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       try {
         setAgentIdentityExists(null);
         if (!ensPreview || !provider || !address) return;
-        const ensPreviewLower = ensPreview.trim().toLowerCase();
+    const ensPreviewLower = ensPreview.trim().toLowerCase();
         const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
         const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
         try { (walletClient as any).account = address as Address; } catch {}
 
-        const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IpfsService, publicClient, walletClient);
+        const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IdentityService, publicClient, walletClient);
         const agentAddress = await agentAccountClient.getAddress();
         if (!cancelled) setAgentAADefaultAddress(agentAddress);
-        const existing = await IpfsService.getAgentByAddress(agentAddress);
+        const existing = await IdentityService.getAgentByAddress(agentAddress);
         if (!cancelled) setAgentIdentityExists(!!existing);
       } catch {
         if (!cancelled) setAgentIdentityExists(false);
@@ -564,7 +564,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       
       const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
       try { (walletClient as any).account = address as Address; } catch {}
-      const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IpfsService, publicClient, walletClient);
+      const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IdentityService, publicClient, walletClient);
         
       
 
@@ -596,7 +596,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
       // Check if an agent already exists for this AA address via backend DB
       try {
-        const existingAgent = await IpfsService.getAgentByAddress(agentAddress);
+        const existingAgent = await IdentityService.getAgentByAddress(agentAddress);
         if (existingAgent) {
           setIsSubmitting(false);
           setError(`Agent already exists for address ${agentAddress} (id ${existingAgent.agentId})`);
@@ -628,7 +628,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           supportedTrust: ['reputation', 'crypto-economic', 'tee-attestation']
         } as any;
 
-        const upload = await IpfsService.uploadJson({ data: metadata, filename: `agent_${ensPreviewLower}.json` });
+        const upload = await IdentityService.uploadJson({ data: metadata, filename: `agent_${ensPreviewLower}.json` });
         tokenUri = upload.url;
       } catch (e) {
         console.warn('IPFS upload failed, proceeding without tokenUri', e);
@@ -832,7 +832,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     } as any);
 
                     // Agent AA for the agent name
-                    const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IpfsService, publicClient, walletClient);
+                    const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IdentityService, publicClient, walletClient);
                     const agentAAAddress = await agentAccountClient.getAddress();
 
                     // Ethers signer for onchain write
@@ -928,7 +928,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                             const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
                             try { (walletClient as any).account = address as Address; } catch {}
                             // Use the agent AA derived from the name to authorize setText via AA
-                            const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IpfsService, publicClient, walletClient);
+                            const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IdentityService, publicClient, walletClient);
                             console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
                             await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
                             setAgentUrlText(agentUrlEdit.trim());

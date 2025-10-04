@@ -690,7 +690,7 @@ let cachedDb = null;
 function getAgentsDb() {
   if (cachedDb) return cachedDb;
   if (!SqliteDB) {
-    throw new Error('better-sqlite3 is not installed in ipfs-service');
+    throw new Error('better-sqlite3 is not installed in identity-service');
   }
   const configured = process.env.DB_PATH;
   const defaultPath = path.resolve(process.cwd(), '../indexer/data/registry.db');

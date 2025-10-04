@@ -1,7 +1,7 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { identityRegistryAbi } from "./abi/identityRegistry";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { REGISTRY_ADDRESS, RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IPFS_API_URL } from "./env";
+import { REGISTRY_ADDRESS, RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL } from "./env";
 
 // ---- client ----
 const transport = RPC_WS_URL ? webSocket(RPC_WS_URL) : http(RPC_HTTP_URL);
@@ -44,8 +44,8 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
     const cid = extractCid(tokenURI);
     if (cid) {
       console.info("............fetchIpfsJson: cid: ", cid)
-      console.info("............fetchIpfsJson: IPFS_API_URL: ", IPFS_API_URL)
-      const resp = await fetchFn(`${IPFS_API_URL}/api/web3storage/download/${cid}`);
+      console.info("............fetchIpfsJson: IDENTITY_API_URL: ", IDENTITY_API_URL)
+      const resp = await fetchFn(`${IDENTITY_API_URL}/api/web3storage/download/${cid}`);
       if (resp?.ok) {
         const json = await resp.json();
         console.info("............fetchIpfsJson: json: ", JSON.stringify(json?.data))

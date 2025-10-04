@@ -1,19 +1,17 @@
-// Lightweight client for the external IPFS/Web3.Storage service
+// Lightweight client for the external Identity service (formerly identity-service)
 // Endpoints expected (from server):
 // - POST   /api/web3storage/upload            { data, filename? }
 // - GET    /api/web3storage/download/:cid
-// - POST   /api/web3storage/credentials/save  { credentials, did }
-// - GET    /api/web3storage/credentials/:did
-// - DELETE /api/web3storage/credentials/:did
-// - GET    /api/web3storage/status
+// - GET    /api/agents/by-address/:address
+// - GET    /api/agents/by-name/:name
 
 type JsonRecord = Record<string, unknown> | unknown[] | null;
 
 function getApiBaseUrl(): string {
-  // Prefer a dedicated IPFS API base; fall back to a generic API base; then localhost
   const fromEnv =
     (process.env.NEXT_PUBLIC_IDENTITY_API_URL as string | undefined) ||
-    (process.env.NEXT_PUBLIC_API_URL as string | undefined);
+    (process.env.NEXT_PUBLIC_API_URL as string | undefined) ||
+    (process.env.NEXT_PUBLIC_IDENTITY_API_URL as string | undefined); // backward compat
   return fromEnv && fromEnv.trim() !== "" ? fromEnv : "http://localhost:4000";
 }
 
@@ -39,12 +37,11 @@ async function httpJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-class IpfsService {
+class IdentityService {
   static get apiBase(): string {
     return getApiBaseUrl();
   }
 
-  // Upload arbitrary JSON; returns CID and public gateway URL
   static async uploadJson(params: { data: JsonRecord; filename?: string }): Promise<{ cid: string; url: string }> {
     const payload = { data: params.data, filename: params.filename ?? "data.json" };
     const out = await httpJson<{ success: boolean; cid: string; url: string }>(
@@ -54,39 +51,11 @@ class IpfsService {
     return { cid: out.cid, url: out.url };
   }
 
-  // Download JSON by CID
   static async downloadJson(cid: string): Promise<JsonRecord> {
     const out = await httpJson<{ success: boolean; data: JsonRecord }>(`/api/web3storage/download/${cid}`);
     return out.data ?? null;
   }
 
-  // Save credentials bundle under a DID
-  static async saveCredentials(params: { credentials: JsonRecord; did: string }): Promise<{ cid: string; url: string }> {
-    const out = await httpJson<{ success: boolean; cid: string; url: string }>(
-      "/api/web3storage/credentials/save",
-      { method: "POST", body: JSON.stringify({ credentials: params.credentials, did: params.did }) }
-    );
-    return { cid: out.cid, url: out.url };
-  }
-
-  // Retrieve credentials for a DID (server currently returns [])
-  static async getCredentials(did: string): Promise<JsonRecord> {
-    const out = await httpJson<{ success: boolean; data: JsonRecord }>(`/api/web3storage/credentials/${did}`);
-    return out.data ?? null;
-  }
-
-  // Delete credentials for a DID (logical delete; server may be a no-op)
-  static async deleteCredentials(did: string): Promise<boolean> {
-    const out = await httpJson<{ success: boolean }>(`/api/web3storage/credentials/${did}`, { method: "DELETE" });
-    return Boolean(out.success);
-  }
-
-  // Service configuration and current spaces (diagnostics)
-  static async getStatus(): Promise<{ configured: boolean; email?: string; spaceDid?: string; availableSpaces?: string[]; targetSpaceExists?: boolean; error?: string }> {
-    return await httpJson(`/api/web3storage/status`);
-  }
-
-  // Get agent by EVM address from backend DB
   static async getAgentByAddress(address: string): Promise<any | null> {
     try {
       const base = getApiBaseUrl();
@@ -100,7 +69,6 @@ class IpfsService {
     }
   }
 
-  // Get agent by name (ENS-like or metadata name) from backend DB
   static async getAgentByName(name: string): Promise<any | null> {
     try {
       const base = getApiBaseUrl();
@@ -115,5 +83,6 @@ class IpfsService {
   }
 }
 
-export default IpfsService;
+export default IdentityService;
+
 

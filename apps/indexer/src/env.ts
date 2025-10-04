@@ -26,4 +26,4 @@ export const DB_PATH           = process.env.DB_PATH ?? "./data/registry.db";
 export const START_BLOCK       = BigInt(process.env.START_BLOCK ?? 0);
 export const LOGS_CHUNK_SIZE   = BigInt(process.env.LOGS_CHUNK_SIZE ?? 10);
 export const BACKFILL_MODE     = (process.env.BACKFILL_MODE ?? 'logs') as 'logs' | 'ids';
-export const IPFS_API_URL      = process.env.IPFS_API_URL ?? 'http://localhost:4000';
+export const IDENTITY_API_URL      = process.env.IDENTITY_API_URL  ?? 'http://localhost:4000';

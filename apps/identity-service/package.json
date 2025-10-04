@@ -1,5 +1,5 @@
 {
-  "name": "ipfs-service",
+  "name": "identity-service",
   "private": true,
   "type": "module",
   "version": "0.1.0",
