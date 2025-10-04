@@ -353,6 +353,27 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         setAgentUrlEdit(normalized ?? '');
         setAgentUrlIsAuto(false);
         }
+        // Read and decode agent-registry per ENSIP (ERC-7930 address + agentId)
+        try {
+          const registryHex = await ensService.getTextRecord(ensPreview, 'agent-registry', sepolia, rpcUrl);
+          if (registryHex && /^0x[0-9a-fA-F]+$/.test(registryHex)) {
+            const hex = registryHex.slice(2);
+            const version = hex.slice(0, 2);
+            const namespace = hex.slice(2, 4); // eip155 => 01
+            const chainIdHex = hex.slice(4, 12);
+            const chainId = parseInt(chainIdHex, 16);
+            const addressHex = hex.slice(12, 52);
+            const agentAddr = `0x${addressHex}` as `0x${string}`;
+            const idLen = parseInt(hex.slice(52, 54), 16);
+            const idHex = hex.slice(54, 54 + idLen * 2);
+            const agentIdDecoded = BigInt(`0x${idHex || '0'}`);
+            console.info('agent-registry decoded:', { version, namespace, chainId, agentAddr, agentId: agentIdDecoded.toString() });
+          } else {
+            console.info('agent-registry text not set');
+          }
+        } catch (e) {
+          console.info('failed to read/parse agent-registry text', e);
+        }
         // Also cache resolver for save path
         try {
           const node = namehash(ensPreview) as `0x${string}`;
