@@ -429,15 +429,10 @@ export async function ensureIdentityWithAA(params: {
   const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri, identityRegistryOwnerWallet } = params;
 
   console.info("....... inside ensureIdentityWithAA");
-  /*
-  const existing = await getAgentByDomain({ publicClient, registry, domain });
-  console.info('********************* ensureIdentityWithAA: existing', existing);
-  if (existing) return existing;
-  */
 
   console.log('********************* deploySmartAccountIfNeeded');
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
-  const agentAddress = 'eip155:11155111:${await agentAccount.getAddress()}'
+  const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
   // Register via AA so the Identity owner is the AA (msg.sender)
   console.info('********************* register via AA (sponsored)');
@@ -464,13 +459,6 @@ export async function ensureIdentityWithAA(params: {
   const tokenId = logs[0]?.args.tokenId as bigint;
   console.info("............tokenId: ", tokenId)
 
-  // Optional: no-op as metadata was set during register
-
-  /*
-  const updated = await getAgentByDomain({ publicClient, registry, domain });
-  console.log('********************* ensureIdentityWithAA: updated', updated);
-  return (updated ?? agentAddress) as `0x${string}`;
-  */
  return tokenId;
 }
 

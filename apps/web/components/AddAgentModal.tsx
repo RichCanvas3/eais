@@ -353,9 +353,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         setAgentUrlEdit(normalized ?? '');
         setAgentUrlIsAuto(false);
         }
-        // Read and decode agent-registry per ENSIP (ERC-7930 address + agentId)
+        // Read and decode agent-identity per ENSIP (ERC-7930 address + agentId)
         try {
-          const registryHex = await ensService.getTextRecord(ensPreview, 'agent-registry', sepolia, rpcUrl);
+          const registryHex = await ensService.getTextRecord(ensPreview, 'agent-identity', sepolia, rpcUrl);
           if (registryHex && /^0x[0-9a-fA-F]+$/.test(registryHex)) {
             const hex = registryHex.slice(2);
             const version = hex.slice(0, 2);
@@ -367,12 +367,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             const idLen = parseInt(hex.slice(52, 54), 16);
             const idHex = hex.slice(54, 54 + idLen * 2);
             const agentIdDecoded = BigInt(`0x${idHex || '0'}`);
-            console.info('agent-registry decoded:', { version, namespace, chainId, agentAddr, agentId: agentIdDecoded.toString() });
+            console.info('agent-identity decoded:', { version, namespace, chainId, agentAddr, agentId: agentIdDecoded.toString() });
           } else {
-            console.info('agent-registry text not set');
+            console.info('agent-identity text not set');
           }
         } catch (e) {
-          console.info('failed to read/parse agent-registry text', e);
+          console.info('failed to read/parse agent-identity text', e);
         }
         // Also cache resolver for save path
         try {
@@ -756,7 +756,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       onClose();
       
       try {
-        // After on-chain metadata is set, also set ENS text: agent-registry per ENSIP
+        // After on-chain metadata is set, also set ENS text: agent-identity per ENSIP
         console.info("set ensip agent registry")
         if (agentIdNum > 0n) {
           // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]
@@ -780,12 +780,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             }) as `0x${string}`;
           }
           if (resolverToUse && resolverToUse !== '0x0000000000000000000000000000000000000000') {
-            console.info("set ensip agent registry", 'agent-registry', valueHex);
-            await ensService.setTextWithAA(agentAccountClient as any, resolverToUse, node, 'agent-registry', valueHex, sepolia);
+            console.info("set ensip agent identity", 'agent-identity', valueHex);
+            await ensService.setTextWithAA(agentAccountClient as any, resolverToUse, node, 'agent-identity', valueHex, sepolia);
           }
         }
       } catch (e) {
-        console.info('failed to set agent-registry text', e);
+        console.info('failed to set agent-identity text', e);
       }
     } catch (err: any) {
       setIsSubmitting(false);

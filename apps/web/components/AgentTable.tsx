@@ -56,7 +56,7 @@ export function AgentTable() {
 	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
 	const [ensDetailsLoading, setEnsDetailsLoading] = React.useState(false);
 	const [ensDetailsError, setEnsDetailsError] = React.useState<string | null>(null);
-	const [ensDetails, setEnsDetails] = React.useState<{ name: string; tokenId: string; urlText?: string | null; agentRegistry?: string | null; decodedRegistry?: { chainId: number; address: `0x${string}`; agentId: string } | null } | null>(null);
+	const [ensDetails, setEnsDetails] = React.useState<{ name: string; tokenId: string; urlText?: string | null; agentIdentity?: string | null; decodedIdentity?: { chainId: number; address: `0x${string}`; agentId: string } | null } | null>(null);
 
 	// Agent INFO modal
 	const [infoOpen, setInfoOpen] = React.useState(false);
@@ -114,24 +114,14 @@ export function AgentTable() {
 				functionName: 'getMetadata' as any,
 				args: [agentIdNum, 'agentName']
 			}) as string;
-			const accountRaw = await publicClient.readContract({
+			const account = await publicClient.readContract({
 				address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`,
 				abi: registryAbi as any,
 				functionName: 'getMetadata' as any,
 				args: [agentIdNum, 'agentAccount']
 			}) as string;
-			let account: string | null = null;
-			try {
-				if (typeof accountRaw === 'string' && accountRaw) {
-					if (/^eip155:/i.test(accountRaw)) {
-						const parts = accountRaw.split(':');
-						const maybe = parts[parts.length - 1] || '';
-						if (/^0x[0-9a-fA-F]{40}$/.test(maybe)) account = getAddress(maybe as `0x${string}`);
-					} else if (/^0x[0-9a-fA-F]{40}$/.test(accountRaw)) {
-						account = getAddress(accountRaw as `0x${string}`);
-					}
-				}
-			} catch {}
+
+			
 
 			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account });
 		} catch (e: any) {
@@ -141,7 +131,7 @@ export function AgentTable() {
 		}
 	}
 
-	function decodeAgentRegistry(registryHex?: string | null): { chainId: number; address: `0x${string}`; agentId: string } | null {
+	function decodeAgentIdentity(registryHex?: string | null): { chainId: number; address: `0x${string}`; agentId: string } | null {
 		try {
 			if (!registryHex || !/^0x[0-9a-fA-F]+$/.test(registryHex)) return null;
 			const hex = registryHex.slice(2);
@@ -165,9 +155,9 @@ export function AgentTable() {
 			if (!name) { setEnsDetailsError('No ENS name'); return; }
 			const tokenId = BigInt(namehash(name)).toString();
 			const urlText = await ensService.getTextRecord(name, 'url', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
-			const agentRegistryHex = await ensService.getTextRecord(name, 'agent-registry', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
-			const decoded = decodeAgentRegistry(agentRegistryHex);
-			setEnsDetails({ name, tokenId, urlText, agentRegistry: agentRegistryHex ?? null, decodedRegistry: decoded });
+			const agentIdentityHex = await ensService.getTextRecord(name, 'agent-identity', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
+			const decoded = decodeAgentIdentity(agentIdentityHex);
+			setEnsDetails({ name, tokenId, urlText, agentIdentity: agentIdentityHex ?? null, decodedIdentity: decoded });
 		} catch (e: any) {
 			setEnsDetailsError(e?.message || 'Failed to load ENS details');
 		} finally {
@@ -1583,12 +1573,12 @@ export function AgentTable() {
 						<Typography variant="body2"><strong>Name:</strong> {ensDetails.name}</Typography>
 						<Typography variant="body2"><strong>NFT tokenId:</strong> {ensDetails.tokenId}</Typography>
 						<Typography variant="body2"><strong>URL:</strong> {ensDetails.urlText ?? '—'}</Typography>
-						<Typography variant="body2"><strong>agent-registry:</strong> {ensDetails.agentRegistry ?? '—'}</Typography>
-						{ensDetails.decodedRegistry && (
+						<Typography variant="body2"><strong>agent-identity:</strong> {ensDetails.agentIdentity ?? '—'}</Typography>
+						{ensDetails.decodedIdentity && (
 							<Stack spacing={0.5} sx={{ pl: 1 }}>
-								<Typography variant="caption" color="text.secondary">chainId: {ensDetails.decodedRegistry.chainId}</Typography>
-								<Typography variant="caption" color="text.secondary">address: {ensDetails.decodedRegistry.address}</Typography>
-								<Typography variant="caption" color="text.secondary">agentId: {ensDetails.decodedRegistry.agentId}</Typography>
+								<Typography variant="caption" color="text.secondary">chainId: {ensDetails.decodedIdentity.chainId}</Typography>
+								<Typography variant="caption" color="text.secondary">address: {ensDetails.decodedIdentity.address}</Typography>
+								<Typography variant="caption" color="text.secondary">agentId: {ensDetails.decodedIdentity.agentId}</Typography>
 							</Stack>
 						)}
 					</Stack>
