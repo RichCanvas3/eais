@@ -138,7 +138,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     registerByDomainWithProvider,
   };
 }
-
+/*
 // -------------------- AA helpers for Identity Registration (per user spec) --------------------
 
 const identityRegistryAbi = [
@@ -314,18 +314,18 @@ const identityRegistryAbi = [
     outputs: [{ name: "", type: "bytes" }]
   }
 ] as const;
-
+*/
 export function encodeMintAgent(params: { to: `0x${string}`; uri?: string | null }): `0x${string}` {
   const { to, uri } = params;
   if (uri && uri.trim() !== '') {
     return encodeFunctionData({
-      abi: identityRegistryAbi as any,
+      abi: registryAbi as any,
       functionName: 'mintWithURI' as any,
       args: [to, uri],
     });
   }
   return encodeFunctionData({
-    abi: identityRegistryAbi as any,
+    abi: registryAbi as any,
     functionName: 'mint' as any,
     args: [to],
   });
@@ -333,7 +333,7 @@ export function encodeMintAgent(params: { to: `0x${string}`; uri?: string | null
 
 export function encodeNewAgent(domain: string, agentAccount: `0x${string}`): `0x${string}` {
   return encodeFunctionData({
-    abi: identityRegistryAbi as any,
+    abi: registryAbi as any,
     functionName: 'mintWithURI' as any,
     args: [agentAccount, domain],
   });
@@ -348,14 +348,14 @@ export async function getAgentByDomain(params: {
   const domain = params.domain.trim().toLowerCase();
   const zero = '0x0000000000000000000000000000000000000000';
   try {
-    const info: any = await publicClient.readContract({ address: registry, abi: identityRegistryAbi as any, functionName: 'getMetadata' as any, args: [1n, '0x0000000000000000000000000000000000000000000000000000000000000000'] });
+    const info: any = await publicClient.readContract({ address: registry, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [1n, '0x0000000000000000000000000000000000000000000000000000000000000000'] });
     const addr = (info?.agentAddress ?? info?.[2]) as `0x${string}` | undefined;
     if (addr && addr !== zero) return addr;
   } catch {}
   const fns: Array<'agentOfDomain' | 'getAgent' | 'agents'> = ['agentOfDomain', 'getAgent', 'agents'];
   for (const fn of fns) {
     try {
-      const addr = await publicClient.readContract({ address: registry, abi: identityRegistryAbi as any, functionName: fn as any, args: [domain] }) as `0x${string}`;
+      const addr = await publicClient.readContract({ address: registry, abi: registryAbi as any, functionName: fn as any, args: [domain] }) as `0x${string}`;
       if (addr && addr !== zero) return addr;
     } catch {}
   }
@@ -372,7 +372,7 @@ export async function getAgentInfoByDomain(params: {
   try {
     const info: any = await publicClient.readContract({
       address: registry,
-      abi: identityRegistryAbi as any,
+      abi: registryAbi as any,
       functionName: 'resolveByDomain' as any,
       args: [domain],
     });
@@ -442,11 +442,16 @@ export async function ensureIdentityWithAA(params: {
   // If an EOA wallet with registry ownership is provided, use it to mint directly
 
   console.info('********************* identityRegistryOwnerWallet write contract');
+  // Use register(tokenURI_, MetadataEntry[]) with initial metadata
+  const initialMetadata: { key: string; value: string }[] = [
+    { key: 'agentName', value: params.name },
+    { key: 'agentAccount', value: agentAddress as `0x${string}` },
+  ];
   const hash = await identityRegistryOwnerWallet.writeContract({
     address: registry,
-    abi: identityRegistryAbi as any,
-    functionName: (tokenUri && tokenUri.trim() !== '') ? 'mintWithURI' : 'mint',
-    args: (tokenUri && tokenUri.trim() !== '') ? [agentAddress as `0x${string}`, tokenUri] : [agentAddress as `0x${string}`],
+    abi: registryAbi as any,
+    functionName: 'register' as any,
+    args: [tokenUri ?? '', initialMetadata],
     account: identityRegistryOwnerWallet.account,
     chain,
   });
@@ -455,7 +460,7 @@ export async function ensureIdentityWithAA(params: {
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   console.info("............receipt: ", receipt)
   const logs = parseEventLogs({
-    abi: identityRegistryAbi,
+    abi: registryAbi,
     eventName: 'Transfer',
     logs: receipt.logs,
   });
@@ -463,34 +468,7 @@ export async function ensureIdentityWithAA(params: {
   const tokenId = logs[0]?.args.tokenId as bigint;
   console.info("............tokenId: ", tokenId)
 
-  // Set on-chain metadata via AA: agentAccount and agentName
-  try {
-    const keyAgentAccount = keccak256(stringToHex('agentAccount')) as `0x${string}`;
-    const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
-    const agentAddrBytes = (await agentAccount.getAddress()) as `0x${string}`;
-    const nameBytes = stringToHex(params.name) as `0x${string}`;
-    const dataSetAccount = encodeFunctionData({
-      abi: identityRegistryAbi as any,
-      functionName: 'setMetadata' as any,
-      args: [tokenId, keyAgentAccount, agentAddrBytes],
-    });
-    const dataSetName = encodeFunctionData({
-      abi: identityRegistryAbi as any,
-      functionName: 'setMetadata' as any,
-      args: [tokenId, keyAgentName, nameBytes],
-    });
-    await sendSponsoredUserOperation({
-      bundlerUrl,
-      chain,
-      account: agentAccount,
-      calls: [
-        { to: registry, data: dataSetAccount },
-        { to: registry, data: dataSetName },
-      ]
-    });
-  } catch (e) {
-    console.warn('setMetadata via AA failed', e);
-  }
+  // Optional: no-op as metadata was set during register
 
   /*
   const updated = await getAgentByDomain({ publicClient, registry, domain });

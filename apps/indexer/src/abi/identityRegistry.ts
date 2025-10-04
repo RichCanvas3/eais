@@ -34,25 +34,16 @@ export const identityRegistryAbi = [
   },
 
   // --- IdentityRegistry custom events ---
-  {
-    type: "event",
-    name: "MetadataSet",
-    inputs: [
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "key", type: "bytes32", indexed: true },
-      { name: "value", type: "bytes", indexed: false }
-    ],
-    anonymous: false
-  },
-  {
-    type: "event",
-    name: "MetadataDeleted",
-    inputs: [
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "key", type: "bytes32", indexed: true }
-    ],
-    anonymous: false
-  },
+  { type: "event", name: "MetadataSet", inputs: [
+    { name: "agentId", type: "uint256", indexed: true },
+    { name: "key", type: "string", indexed: false },
+    { name: "value", type: "string", indexed: false }
+  ], anonymous: false },
+  { type: "event", name: "Registered", inputs: [
+    { name: "agentId", type: "uint256", indexed: true },
+    { name: "tokenURI", type: "string", indexed: false },
+    { name: "owner", type: "address", indexed: true }
+  ], anonymous: false },
 
   // --- ERC165 ---
   {
@@ -108,28 +99,11 @@ export const identityRegistryAbi = [
     outputs: [{ name: "", type: "bool" }]
   },
 
-  // --- Admin minting ---
-  {
-    type: "function",
-    name: "mint",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "to", type: "address" }],
-    outputs: [{ name: "agentId", type: "uint256" }]
-  },
-  {
-    type: "function",
-    name: "mintWithURI",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "to", type: "address" }, { name: "uri", type: "string" }],
-    outputs: [{ name: "agentId", type: "uint256" }]
-  },
-  {
-    type: "function",
-    name: "setNextId",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "nextId_", type: "uint256" }],
-    outputs: []
-  },
+  // --- Registration ---
+  { type: "function", name: "register", stateMutability: "nonpayable", inputs: [
+    { name: "tokenURI_", type: "string" },
+    { name: "metadata", type: "tuple[]", components: [ { name: "key", type: "string" }, { name: "value", type: "string" } ] }
+  ], outputs: [{ name: "agentId", type: "uint256" }] },
 
   // --- Controller/operator actions ---
   {
@@ -141,38 +115,16 @@ export const identityRegistryAbi = [
   },
 
 
-  // --- On-chain metadata ---
-  {
-    type: "function",
-    name: "setMetadata",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "key", type: "bytes32" },
-      { name: "value", type: "bytes" }
-    ],
-    outputs: []
-  },
-  {
-    type: "function",
-    name: "deleteMetadata",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "key", type: "bytes32" }
-    ],
-    outputs: []
-  },
-  {
-    type: "function",
-    name: "getMetadata",
-    stateMutability: "view",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "key", type: "bytes32" }
-    ],
-    outputs: [{ name: "", type: "bytes" }]
-  }
+  // --- On-chain metadata (string) ---
+  { type: "function", name: "setMetadata", stateMutability: "nonpayable", inputs: [
+    { name: "agentId", type: "uint256" },
+    { name: "key", type: "string" },
+    { name: "value", type: "string" }
+  ], outputs: [] },
+  { type: "function", name: "getMetadata", stateMutability: "view", inputs: [
+    { name: "agentId", type: "uint256" },
+    { name: "key", type: "string" }
+  ], outputs: [{ type: "string" }] }
 ] as const satisfies Abi;
 
 export default identityRegistryAbi;
