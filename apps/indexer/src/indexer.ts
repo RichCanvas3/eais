@@ -112,10 +112,10 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         console.info("............insert into table: image: ", image)
         console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
         console.info("............insert into table: ensEndpoint: ", ensEndpoint)
-        console.info("............insert into table: agentAccountEndpoint: ", agentAccountEndpoint)
+        console.info("AA............insert into table: agentAccountEndpoint: ", agentAccountEndpoint)
         db.prepare(`
           INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
-          VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @wallet, @trust, @raw, strftime('%s','now'))
+          VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @account, @trust, @raw, strftime('%s','now'))
           ON CONFLICT(agentId) DO UPDATE SET
             type=excluded.type,
             name=excluded.name,
@@ -135,12 +135,15 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
           image,
           a2a: a2aEndpoint,
           ens: ensEndpoint,
-          wallet: agentAccountEndpoint,
+          account: agentAccountEndpoint,
           trust: JSON.stringify(supportedTrust),
           raw: JSON.stringify(meta),
         });
+
         recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId });
-      } catch {}
+      } catch (error) {
+        console.info("........... error updating a2aEndpoint", error)
+      }
     }
 
 

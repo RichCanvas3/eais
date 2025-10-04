@@ -624,11 +624,25 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           description: description || '',
           image: null,
           endpoints,
-          registrations: [],
+          registrations: (async () => {
+            try {
+              const count = await adapter.getAgentCount();
+              const nextId = Number((count ?? 0n) + 1n);
+              if (nextId > 0 && registryAddress) {
+                return [{ agentId: nextId, agentRegistry: `eip155:${sepolia.id}:${registryAddress}` }];
+              }
+            } catch {}
+            return [];
+          })(),
           supportedTrust: ['reputation', 'crypto-economic', 'tee-attestation']
         } as any;
 
-        const upload = await IdentityService.uploadJson({ data: metadata, filename: `agent_${ensPreviewLower}.json` });
+        // Resolve async registrations if function above returned a Promise
+        const resolvedMeta = { ...metadata } as any;
+        if (typeof (resolvedMeta.registrations as any)?.then === 'function') {
+          resolvedMeta.registrations = await (resolvedMeta.registrations as Promise<any[]>);
+        }
+        const upload = await IdentityService.uploadJson({ data: resolvedMeta, filename: `agent_${ensPreviewLower}.json` });
         tokenUri = upload.url;
       } catch (e) {
         console.warn('IPFS upload failed, proceeding without tokenUri', e);
