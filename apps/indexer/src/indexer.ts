@@ -65,7 +65,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
   const agentId = toDecString(tokenId);
   const ownerAddress = to;
   const agentAddress = to; // mirror owner for now
-  const domain = ""; // not modeled in ERC-721; leave empty
+  const agentName = ""; // not modeled in ERC-721; leave empty
 
   console.info(".... ownerAddress", ownerAddress)
 
@@ -73,18 +73,18 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
 
 
     db.prepare(`
-      INSERT INTO agents(agentId, agent, owner, domain, metadataURI, createdAtBlock, createdAtTime)
-      VALUES(@agentId, @agent, @owner, @domain, @metadataURI, @block, strftime('%s','now'))
+      INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
+      VALUES(@agentId, @agent, @owner, @agentName, @metadataURI, @block, strftime('%s','now'))
       ON CONFLICT(agentId) DO UPDATE SET
-        agent=excluded.agent,
-        owner=excluded.owner,
-        domain=excluded.domain,
+        agentAddress=excluded.agentAddress,
+        agentOwner=excluded.agentOwner,
+        agentName=excluded.agentName,
         metadataURI=COALESCE(excluded.metadataURI, metadataURI)
     `).run({
       agentId,
       agent: agentAddress,
       owner: ownerAddress,
-      domain,
+      agentName,
       metadataURI: tokenURI,
       block: Number(blockNumber),
     });
@@ -114,11 +114,11 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         console.info("............insert into table: ensEndpoint: ", ensEndpoint)
         console.info("AA............insert into table: agentAccountEndpoint: ", agentAccountEndpoint)
         db.prepare(`
-          INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
+          INSERT INTO agent_metadata(agentId, type, agentName, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
           VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @account, @trust, @raw, strftime('%s','now'))
           ON CONFLICT(agentId) DO UPDATE SET
             type=excluded.type,
-            name=excluded.name,
+            agentName=excluded.agentName,
             description=excluded.description,
             image=excluded.image,
             a2aEndpoint=excluded.a2aEndpoint,
@@ -216,10 +216,8 @@ async function backfill() {
             recordEvent(log, 'MetadataSet', { ...(decoded.args as any), agentId: toDecString((decoded.args as any).agentId) });
             break;
           }
-          case 'MetadataDeleted': {
-            recordEvent(log, 'MetadataDeleted', { ...(decoded.args as any), agentId: toDecString((decoded.args as any).agentId) });
-            break;
-          }
+          // MetadataDeleted was removed in new ABI; ignore if present in older logs
+          // case 'MetadataDeleted': { break; }
           default:
             // ignore other events
             break;
@@ -309,12 +307,7 @@ function watch() {
         setCheckpoint(log.blockNumber!);
       }
     }}),
-    client.watchContractEvent({ address, abi: identityRegistryAbi, eventName: 'MetadataDeleted', onLogs: (logs) => {
-      for (const log of logs) {
-        recordEvent(log, 'MetadataDeleted', { ...(log.args as any), agentId: toDecString((log.args as any).agentId) });
-        setCheckpoint(log.blockNumber!);
-      }
-    }}),
+    // Removed MetadataDeleted watcher (no longer in ABI)
   ];
   return () => unsubs.forEach((u) => u?.());
 }

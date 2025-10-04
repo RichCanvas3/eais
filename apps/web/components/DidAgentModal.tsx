@@ -61,7 +61,9 @@ interface DidAgentDocument {
 interface Agent {
   agentId: string;
   agentAddress: string;
-  agentDomain: string;
+  agentName: string;
+  agentENSDomain: string;
+  agentDNSDomain: string;
 }
 
 interface Props {
@@ -93,19 +95,19 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
 
   // Set service endpoints based on agent data when agent changes
   useEffect(() => {
-    if (agent?.agentDomain) {
+    if (agent?.agentDNSDomain && agent?.agentENSDomain) {
       console.log('🔍 Setting service endpoints from agent data:', {
-        agentDomain: agent.agentDomain,
-        ensName: ensName
+        agentENSDomain: agent.agentENSDomain,
+        agentDNSDomain: agent.agentDNSDomain,
       });
       
       // Set the A2A service endpoint to the actual agent card URL
-      const a2aUrl = `https://${agent.agentDomain}/.well-known/agent-card.json`;
+      const a2aUrl = `https://${agent.agentDNSDomain}/.well-known/agent-card.json`;
       setA2aEndpoint(a2aUrl);
       setAgentCardUrl(a2aUrl);
       
       // Set MCP endpoint based on agent domain (assuming MCP service runs on same domain)
-      const mcpUrl = `wss://${agent.agentDomain}/.well-known/mcp`;
+      const mcpUrl = `wss://${agent.agentDNSDomain}/.well-known/mcp`;
       setMcpEndpoint(mcpUrl);
       
       console.log('✅ Service endpoints set:', {
@@ -152,7 +154,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
 
       // Create alsoKnownAs array
       const alsoKnownAs = [
-        `https://${agent.agentDomain}`,
+        `https://${agent.agentDNSDomain}`,
         ...(ensName ? [`ens:${ensName}`] : [])
       ];
 
@@ -174,7 +176,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
             id: "#mcp-ws",
             type: "MCP",
             serviceEndpoint: {
-              uri: mcpEndpoint || `wss://${agent.agentDomain}/.well-known/mcp`,
+              uri: mcpEndpoint || `wss://${agent.agentDNSDomain}/.well-known/mcp`,
               protocol: "model-context-protocol",
               version: "0.1",
               transport: "websocket",
@@ -190,8 +192,8 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
               network: "eip155:1",
               records: {
                 addr: agent.agentAddress,
-                contenthash: `ipfs://bafy.../${agent.agentDomain}/agent-card.json`,
-                url: `https://${agent.agentDomain}`,
+                contenthash: `ipfs://bafy.../${agent.agentDNSDomain}/agent-card.json`,
+                url: `https://${agent.agentDNSDomain}`,
                 "org.did": `did:agent:eip155:11155111:${agent.agentId}`
               },
               auth: ["eip-1271", "eip-712"]
@@ -201,18 +203,18 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
             id: "#linked-domains",
             type: "LinkedDomains",
             serviceEndpoint: {
-              origins: [`https://${agent.agentDomain}`]
+              origins: [`https://${agent.agentDNSDomain}`]
             }
           },
           {
             id: "#agent-card",
             type: "AgentCard",
-            serviceEndpoint: a2aEndpoint || `https://${agent.agentDomain}/.well-known/agent-card.json`
+            serviceEndpoint: a2aEndpoint || `https://${agent.agentDNSDomain}/.well-known/agent-card.json`
           },
           {
             id: "#agent-interface",
             type: "AgentInterface",
-            serviceEndpoint: `https://${agent.agentDomain}/.well-known/a2a`
+            serviceEndpoint: `https://${agent.agentDNSDomain}/.well-known/a2a`
           },
           {
             id: "#reputation",
@@ -226,7 +228,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
         ],
         agent: {
           standard: "ERC-8004",
-          domain: agent.agentDomain,
+          domain: agent.agentENSDomain,
           address: agent.agentAddress
         }
       };
@@ -246,7 +248,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
         ],
         id: `did:agent:eip155:11155111:${agent.agentId}`,
         alsoKnownAs: [
-          `https://${agent.agentDomain}`,
+          `https://${agent.agentDNSDomain}`,
           ...(ensName ? [`ens:${ensName}`] : [])
         ],
         verificationMethod: [
@@ -272,12 +274,12 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
           {
             id: "#agent-card",
             type: "AgentCard",
-            serviceEndpoint: a2aEndpoint || `https://${agent.agentDomain}/.well-known/agent-card.json`
+            serviceEndpoint: a2aEndpoint || `https://${agent.agentDNSDomain}/.well-known/agent-card.json`
           }
         ],
         agent: {
           standard: "ERC-8004",
-          domain: agent.agentDomain,
+          domain: agent.agentENSDomain,
           address: agent.agentAddress
         }
       };
@@ -489,7 +491,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
                   label="MCP Service Endpoint"
                   value={mcpEndpoint}
                   onChange={(e) => setMcpEndpoint(e.target.value)}
-                  placeholder={`wss://${agent?.agentDomain || 'example.com'}/.well-known/mcp`}
+                  placeholder={`wss://${agent?.agentDNSDomain || 'example.com'}/.well-known/mcp`}
                   helperText="WebSocket endpoint for MCP (Model Context Protocol) service - derived from agent domain"
                 />
               </Grid>
@@ -500,7 +502,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
                   label="Agent Card Endpoint"
                   value={a2aEndpoint}
                   onChange={(e) => setA2aEndpoint(e.target.value)}
-                  placeholder={`https://${agent?.agentDomain || 'example.com'}/.well-known/agent-card.json`}
+                  placeholder={`https://${agent?.agentDNSDomain || 'example.com'}/.well-known/agent-card.json`}
                   helperText="HTTP endpoint for Agent Card service - derived from agent domain"
                 />
               </Grid>
@@ -521,7 +523,10 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
                   <strong>Agent Address:</strong> {agent.agentAddress}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  <strong>Agent Domain:</strong> {agent.agentDomain}
+                  <strong>Agent ENSDomain:</strong> {agent.agentENSDomain}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Agent DNSDomain:</strong> {agent.agentDNSDomain}
                 </Typography>
                 {ensName && (
                   <Typography variant="body2" color="text.secondary">

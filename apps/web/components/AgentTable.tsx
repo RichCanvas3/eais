@@ -25,12 +25,11 @@ import IdentityService from '@/service/identityService';
 export type Agent = {
 	agentId: string;
 	agentAddress: string;
+	agentName: string;
 	owner?: string;
-	agentDomain: string;
 	metadataURI?: string | null;
 	createdAtBlock: number;
 	createdAtTime: number;
-  name?: string | null;
   description?: string | null;
   a2aEndpoint?: string | null;
   ensEndpoint?: string | null;
@@ -607,11 +606,13 @@ export function AgentTable() {
             const feedbackURIMap: Record<string, string> = {};
             for (const row of data.rows) {
                 try {
-                    const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentDomain)}`);
+					/*
+                    const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentName)}`);
                     const cardData = await response.json();
                     if (cardData.found && cardData.card?.feedbackDataURI) {
                         feedbackURIMap[row.agentId] = cardData.card.feedbackDataURI;
                     }
+					*/
                 } catch {
                     // Ignore errors, just don't add feedback URI
                 }
@@ -644,11 +645,60 @@ export function AgentTable() {
 		try { localStorage.setItem(`agent_card:${domain.trim().toLowerCase()}`, value); } catch {}
 	}
 
+	async function loadIdentityDefaults(row: Agent): Promise<{ name?: string; description?: string; url?: string }> {
+		const out: { name?: string; description?: string; url?: string } = {};
+		try {
+			const cid = extractCidFromUri(row.metadataURI ?? null);
+			if (cid) {
+				const identity = await IdentityService.downloadJson(cid) as any;
+				if (identity && typeof identity === 'object' && !Array.isArray(identity)) {
+					if (typeof (identity as any).name === 'string' && (identity as any).name.trim()) out.name = (identity as any).name.trim();
+					if (typeof (identity as any).description === 'string' && (identity as any).description.trim()) out.description = (identity as any).description.trim();
+					if (typeof (identity as any).url === 'string' && /^https?:\/\//i.test((identity as any).url)) out.url = (identity as any).url;
+					try {
+						const endpoints = Array.isArray((identity as any).endpoints) ? (identity as any).endpoints : [];
+						const a2a = endpoints.find((e: any) => String(e?.name || '').toUpperCase() === 'A2A');
+						const a2aUrl = (a2a?.endpoint || a2a?.url) as string | undefined;
+						if (a2aUrl && /^https?:\/\//i.test(a2aUrl)) {
+							const res = await fetch(a2aUrl);
+							if (res.ok) {
+								const cardJson: any = await res.json().catch(() => null);
+								if (cardJson && typeof cardJson === 'object' && !Array.isArray(cardJson)) {
+									if (!out.name && typeof cardJson.name === 'string' && cardJson.name.trim()) out.name = cardJson.name.trim();
+									if (!out.description && typeof cardJson.description === 'string' && cardJson.description.trim()) out.description = cardJson.description.trim();
+									if (!out.url && typeof cardJson.url === 'string' && /^https?:\/\//i.test(cardJson.url)) out.url = cardJson.url;
+								}
+							}
+						}
+					} catch {}
+				}
+			}
+		} catch {}
+		return out;
+	}
+
 	async function viewOrCreateCard(row: Agent) {
-		const domain = row.agentDomain.trim().toLowerCase();
+		console.info("viewOrCreateCard: ", row)
+		console.info("row: ", row)
+		const domain = row.agentName.trim().toLowerCase();
 		if (!owned[row.agentId]) return; // only mine
 		setCardDomain(domain);
 		setCardError(null);
+		// Prefer loading the Agent Card directly from the discovered A2A endpoint
+		if (row.a2aEndpoint && typeof row.a2aEndpoint === 'string' && /^https?:\/\//i.test(row.a2aEndpoint)) {
+			try {
+				const res = await fetch(row.a2aEndpoint);
+				if (res.ok) {
+					const cardObj = await res.json();
+					const json = JSON.stringify(cardObj, null, 2);
+					setStoredCard(domain, json);
+					setCardJson(json);
+					try { await populateFieldsFromObj(cardObj); } catch {}
+					setCardOpen(true);
+					return;
+				}
+			} catch {}
+		}
 		let existing = getStoredCard(domain);
 		if (!existing) {
 			try {
@@ -667,10 +717,31 @@ export function AgentTable() {
 	}
 
 	async function regenerateCard(row: Agent) {
-		const domain = row.agentDomain.trim().toLowerCase();
+		const domain = row.agentName.trim().toLowerCase();
 		setCardLoading(true);
 		setCardError(null);
 		try {
+			// If A2A endpoint is present, load the Agent Card directly
+			if (row.a2aEndpoint && typeof row.a2aEndpoint === 'string' && /^https?:\/\//i.test(row.a2aEndpoint)) {
+				try {
+					const res = await fetch(row.a2aEndpoint);
+					if (res.ok) {
+						const cardObj = await res.json();
+						const json = JSON.stringify(cardObj, null, 2);
+						setStoredCard(domain, json);
+						setCardJson(json);
+						await populateFieldsFromObj(cardObj);
+						// Persist to backend storage
+						try {
+							await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, card: cardObj }) });
+						} catch (e: any) {
+							setCardError(e?.message ?? 'Save failed');
+						}
+						setCardOpen(true);
+						return;
+					}
+				} catch {}
+			}
 			const registry = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`;
 			if (!provider || !eoa) throw new Error('Not connected');
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
@@ -683,6 +754,12 @@ export function AgentTable() {
 					return await walletClient.signMessage({ account: eoa as `0x${string}`, message }) as any;
 				},
 			});
+			// Merge defaults from identity JSON and A2A URL
+			const defaults = await loadIdentityDefaults(row);
+			console.info("............defaults: ", defaults)
+			if (defaults.name && !cardObj.name) (cardObj as any).name = defaults.name;
+			if (defaults.description && !cardObj.description) (cardObj as any).description = defaults.description;
+			if (defaults.url && !cardObj.url) (cardObj as any).url = defaults.url;
 			const json = JSON.stringify(cardObj, null, 2);
 			setStoredCard(domain, json);
 			setCardJson(json);
@@ -807,205 +884,10 @@ export function AgentTable() {
 		}
 	}
 
-	async function createEnsSubdomain() {
-		if (!ensCurrentAgent || !ensSubdomainName.trim() || !ensParentName.trim()) {
-			setEnsError('Please provide both subdomain name and parent domain name');
-			return;
-		}
 
-		if (!isParentWrapped) {
-			setEnsError('Parent domain is not wrapped. Please wrap the parent domain first.');
-			return;
-		}
-
-		setEnsCreating(true);
-		setEnsError(null);
-
-		try {
-			console.log('🚀 Creating ENS subdomain using ENS owner AA with paymaster...');
-			console.log('Agent Address:', ensCurrentAgent.agentAddress);
-			console.log('Subdomain:', ensSubdomainName);
-			console.log('Parent:', ensParentName);
-
-			// Get ENS private key from environment
-			const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
-			if (!ensPrivateKey) {
-				throw new Error('NEXT_PUBLIC_ENS_PRIVATE_KEY not configured');
-			}
-
-			// Create ENS owner EOA from private key
-			const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
-			console.log('🔍 ENS Owner EOA:', ensOwnerEOA.address);
-
-			// Create public client
-			const publicClient = createPublicClient({
-				chain: sepolia,
-				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
-			});
-
-			// Create ENS owner account abstraction
-
-
-			const ensOwnerAA = await toMetaMaskSmartAccount({
-				client: publicClient,
-				implementation: Implementation.Hybrid,
-				deployParams: [ensOwnerEOA.address, [], [], []],
-				signatory: { account: ensOwnerEOA },
-				deploySalt: `0x${(10000).toString(16)}` as `0x${string}`, // Organization salt like in test
-			  });
-
-			console.log('🔧 ENS Owner AA Address:', await ensOwnerAA.getAddress());
-
-			// Clean the parent name first
-			const cleanParentName = ensParentName.replace(/\.eth$/i, '').toLowerCase();
-			const subdomainName = ensSubdomainName.trim().toLowerCase();
-
-			// Check if ENS owner AA is the actual owner of the parent domain
-			const ensOwnerAAAddress = await ensOwnerAA.getAddress();
-			console.log('🔍 Checking if ENS owner AA is the actual owner of parent domain...');
-			console.log('ENS Owner AA Address:', ensOwnerAAAddress);
-			console.log('Parent ENS Owner from check:', parentEnsOwner);
-			
-			if (parentEnsOwner && parentEnsOwner.toLowerCase() !== ensOwnerAAAddress.toLowerCase()) {
-				console.log('⚠️  ENS Owner AA is not the actual owner of the parent domain');
-				console.log('Attempting to transfer parent domain to ENS owner AA...');
-				
-				try {
-					// Create an ethers provider and wallet for the current owner
-					const { ethers } = await import('ethers');
-					const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
-					const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
-					
-					// We need to use the current owner's private key to transfer ownership
-					// For now, let's check if the current owner is the EOA from the private key
-					if (parentEnsOwner.toLowerCase() === ensOwnerEOA.address.toLowerCase()) {
-						console.log('✅ Current owner is the EOA, transferring to ENS owner AA...');
-						
-						// Create NameWrapper contract instance
-						const nameWrapper = new ethers.Contract(
-							(process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
-							[
-								{
-									"inputs": [
-										{"name": "tokenId", "type": "uint256"},
-										{"name": "to", "type": "address"},
-										{"name": "data", "type": "bytes"}
-									],
-									"name": "safeTransferFrom",
-									"outputs": [],
-									"stateMutability": "nonpayable",
-									"type": "function"
-								}
-							],
-							ensOwnerWallet
-						);
-						
-						const parentNode = namehash(cleanParentName + '.eth');
-						const tokenId = BigInt(parentNode);
-						
-						// Transfer ownership to ENS owner AA
-						const transferTx = await nameWrapper.safeTransferFrom(
-							ensOwnerEOA.address,
-							ensOwnerAAAddress,
-							tokenId,
-							'0x'
-						);
-						
-						console.log('⏳ Waiting for transfer transaction...');
-						await transferTx.wait();
-						console.log('✅ Parent domain transferred to ENS owner AA');
-					} else {
-						throw new Error(`Cannot transfer parent domain: Current owner (${parentEnsOwner}) is not the EOA (${ensOwnerEOA.address})`);
-					}
-				} catch (error: any) {
-					console.error('❌ Error transferring parent domain:', error);
-					setEnsError(`Failed to transfer parent domain to ENS owner AA: ${error.message}`);
-					return;
-				}
-			}
-
-			// Deploy ENS owner AA if needed
-			const ensOwnerCode = await publicClient.getCode({ address: ensOwnerAAAddress as `0x${string}` });
-			
-			if (ensOwnerCode === '0x') {
-				console.log('📦 Deploying ENS owner AA...');
-				
-				// Create bundler client for deployment
-				const BUNDLER_URL = process.env.NEXT_PUBLIC_BUNDLER_URL as string;
-				const bundlerClient = createBundlerClient({
-					transport: http(BUNDLER_URL),
-					paymaster: true,
-					chain: sepolia,
-					paymasterContext: {
-						mode: 'SPONSORED',
-					},
-				});
-
-				// Deploy ENS owner AA
-				const userOperationHash = await bundlerClient.sendUserOperation({
-					account: ensOwnerAA,
-					calls: [{ to: zeroAddress }],
-				});
-
-				console.log('⏳ Waiting for ENS owner AA deployment...');
-				const { receipt } = await bundlerClient.waitForUserOperationReceipt({
-					hash: userOperationHash,
-				});
-
-				console.log('✅ ENS owner AA deployed successfully:', receipt);
-			} else {
-				console.log('✅ ENS owner AA already deployed');
-			}
-
-			// Create an ethers provider and signer for the ENS owner EOA (using private key directly)
-			const { ethers } = await import('ethers');
-			const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
-			const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
-			const ensOwnerSigner = ensOwnerWallet.connect(ethersProvider);
-
-			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
-
-			console.info("*********** agent domain name: ", ensCurrentAgent.agentDomain);
-			const deploySalt = BigInt(keccak256(stringToHex(ensCurrentAgent.agentDomain.trim().toLowerCase())));
-			const agentAA = await toMetaMaskSmartAccount({
-				client: publicClient,
-				implementation: Implementation.Hybrid,
-				deployParams: [eoa as `0x${string}`, [], [], []],
-				signatory: { walletClient },
-				deploySalt: toHex(deploySalt) as `0x${string}`,
-			} as any);
-			console.log('🔧 **************8888 Agent AA Address:', await agentAA.getAddress());
-
-			// Create subdomain using ENS owner AA with paymaster
-			// The agent address will be the owner of the subdomain
-			const result = await ensService.createSubdomainForOrg(
-				ensOwnerSigner as any, // Cast to any to bypass type issues
-				ensOwnerAA,
-				agentAA,
-				ensCurrentAgent.agentAddress as `0x${string}`, // Agent address as subdomain owner
-				cleanParentName, 
-				subdomainName, 
-				sepolia
-			);
-
-			await ensService.forwardFromEnsName(result, sepolia, ensOwnerAA, agentAA, subdomainName);
-			await ensService.reverseFromEnsAddress(result, sepolia, ensOwnerAA, agentAA, subdomainName);
-
-			console.log('✅ ENS subdomain created successfully:', result);
-			
-			// Refresh ENS data to show the new subdomain
-			await openEnsFor(ensCurrentAgent);
-			
-		} catch (error: any) {
-			console.error('❌ Error creating ENS subdomain:', error);
-			setEnsError(error?.message ?? 'Failed to create ENS subdomain');
-		} finally {
-			setEnsCreating(false);
-		}
-	}
 
 	async function openSessionFor(row: Agent) {
-		console.log('Starting session creation for:', row.agentDomain);
+		console.log('Starting session creation for:', row.agentName);
 		setSessionLoading(true);
 		try {
 			if (!provider || !eoa) throw new Error('Not connected');
@@ -1014,9 +896,9 @@ export function AgentTable() {
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
 			// Build AA address derived from domain same as ownership check
-			console.info("*********** agent domain name: ", row.agentDomain);
+			console.info("*********** agent name: ", row.agentName);
 			console.info("********* eoa: ", eoa)
-			const deploySalt = BigInt(keccak256(stringToHex(row.agentDomain.trim().toLowerCase())));
+			const deploySalt = BigInt(keccak256(stringToHex(row.agentName.trim().toLowerCase())));
 			const smartAccount = await toMetaMaskSmartAccount({
 				client: publicClient,
 				implementation: Implementation.Hybrid,
@@ -1522,9 +1404,9 @@ export function AgentTable() {
 													backgroundColor: 'action.hover'
 												}
 											}}
-											title={`Give feedback to ${row.agentDomain.replace(/\/$/, '')}`}
+											title={`Give feedback to ${row.agentName?.replace(/\/$/, '')}`}
 											onClick={() => {
-												const cleanDomain = row.agentDomain.replace(/\/$/, '');
+												const cleanDomain = row.agentName?.replace(/\/$/, '');
 												const url = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
 												window.open(url, '_blank');
 											}}
@@ -1780,7 +1662,7 @@ export function AgentTable() {
 			{/* Feedback Dialog */}
 			<Dialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} maxWidth="md" fullWidth>
 				<DialogTitle>
-					Feedback for {currentAgent?.agentDomain}
+					Feedback for {currentAgent?.agentName}
 				</DialogTitle>
 				<DialogContent>
 					{feedbackLoading && (
@@ -2084,20 +1966,7 @@ export function AgentTable() {
 												helperText="Enter a single label (no dots). Example: 'finder' creates 'finder.orgtrust.eth'"
 												error={ensSubdomainName.includes('.')}
 											/>
-											<Button
-												variant="contained"
-												onClick={createEnsSubdomain}
-												disabled={
-													ensCreating || 
-													!ensSubdomainName.trim() || 
-													!ensParentName.trim() || 
-													!isParentWrapped ||
-													ensSubdomainName.includes('.')
-												}
-												sx={{ alignSelf: 'flex-start' }}
-											>
-												{ensCreating ? 'Creating...' : 'Create Subdomain'}
-											</Button>
+
 											{!isParentWrapped && (
 												<Typography variant="body2" color="error" sx={{ mt: 1 }}>
 													⚠️ Cannot create subdomain: Parent domain is not wrapped
@@ -2241,7 +2110,11 @@ export function AgentTable() {
 			<DidWebModal
 				open={didWebOpen}
 				onClose={() => setDidWebOpen(false)}
-				agent={currentAgentForDid || { agentId: '', agentAddress: '', agentDomain: '' }}
+				agent={{
+					agentId: (currentAgentForDid as any)?.agentId ?? '',
+					agentAddress: (currentAgentForDid as any)?.agentAddress ?? '',
+					agentDomain: (currentAgentForDid as any)?.agentName ?? ''
+				}}
 				ensName={currentAgentEnsName}
 			/>
 
@@ -2249,7 +2122,13 @@ export function AgentTable() {
 			<DidAgentModal
 				open={didAgentOpen}
 				onClose={() => setDidAgentOpen(false)}
-				agent={currentAgentForDid || { agentId: '', agentAddress: '', agentDomain: '' }}
+				agent={{
+					agentId: (currentAgentForDid as any)?.agentId ?? '',
+					agentAddress: (currentAgentForDid as any)?.agentAddress ?? '',
+					agentName: (currentAgentForDid as any)?.agentName ?? '',
+					agentENSDomain: currentAgentEnsName ?? '',
+					agentDNSDomain: currentAgentEnsName ?? ''
+				}}
 				ensName={currentAgentEnsName}
 			/>
 

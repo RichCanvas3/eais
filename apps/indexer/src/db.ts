@@ -21,9 +21,9 @@ db.pragma("journal_mode = WAL");
 db.exec(`
 CREATE TABLE IF NOT EXISTS agents (
   agentId TEXT PRIMARY KEY,
-  agent TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  domain TEXT NOT NULL,
+  agentAddress TEXT NOT NULL,
+  agentOwner TEXT NOT NULL,
+  agentName TEXT NOT NULL,
   metadataURI TEXT,
   createdAtBlock INTEGER NOT NULL,
   createdAtTime  INTEGER NOT NULL
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 CREATE TABLE IF NOT EXISTS agent_metadata (
   agentId TEXT PRIMARY KEY,
   type TEXT,
-  name TEXT,
+  agentName TEXT,
   description TEXT,
   image TEXT,
   a2aEndpoint TEXT,

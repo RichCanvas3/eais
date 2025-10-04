@@ -715,32 +715,30 @@ app.get('/api/agents/by-address/:address', async (req, res) => {
     try {
       row = db.prepare(`
         SELECT a.agentId,
-               a.agent as agentAddress,
-               a.owner,
-               a.domain as agentDomain,
+               a.agentAddress,
+               a.agentOwner,
                a.metadataURI,
                a.createdAtBlock,
                a.createdAtTime,
-               m.name,
+               m.agentName,
                m.description,
                m.a2aEndpoint,
                m.ensEndpoint
         FROM agents a
         LEFT JOIN agent_metadata m ON m.agentId = a.agentId
-        WHERE lower(a.agent) LIKE @addrLike OR lower(a.owner) LIKE @addrLike
+        WHERE lower(a.agentAddress) LIKE @addrLike OR lower(a.agentOwner) LIKE @addrLike
         LIMIT 1
       `).get({ addrLike: `%${address}%` });
     } catch (e) {
       row = db.prepare(`
         SELECT agentId,
-               agent as agentAddress,
-               owner,
-               domain as agentDomain,
+               agentAddress,
+               agentOwner,
                metadataURI,
                createdAtBlock,
                createdAtTime
         FROM agents
-        WHERE lower(agent) LIKE @addrLike OR lower(owner) LIKE @addrLike
+        WHERE lower(agentAddress) LIKE @addrLike OR lower(agentOwner) LIKE @addrLike
         LIMIT 1
       `).get({ addrLike: `%${address}%` });
     }
@@ -762,33 +760,31 @@ app.get('/api/agents/by-name/:name', async (req, res) => {
     try {
       row = db.prepare(`
         SELECT a.agentId,
-               a.agent as agentAddress,
-               a.owner,
-               a.domain as agentDomain,
+               a.agentAddress,
+               a.agentOwner,
                a.metadataURI,
                a.createdAtBlock,
                a.createdAtTime,
-               m.name,
+               m.agentName,
                m.description,
                m.a2aEndpoint,
                m.ensEndpoint
         FROM agents a
         LEFT JOIN agent_metadata m ON m.agentId = a.agentId
-        WHERE lower(m.name) LIKE @nameLike OR lower(m.ensEndpoint) LIKE @nameLike
+        WHERE lower(m.agentName) LIKE @nameLike OR lower(m.ensEndpoint) LIKE @nameLike
         ORDER BY a.agentId ASC
         LIMIT 1
       `).get({ nameLike: `%${name}%` });
     } catch (e) {
       row = db.prepare(`
         SELECT agentId,
-               agent as agentAddress,
-               owner,
-               domain as agentDomain,
+               agentAddress,
+               agentOwner,
                metadataURI,
                createdAtBlock,
                createdAtTime
         FROM agents
-        WHERE lower(domain) LIKE @nameLike
+        WHERE lower(agentName) LIKE @nameLike
         ORDER BY agentId ASC
         LIMIT 1
       `).get({ nameLike: `%${name}%` });
@@ -807,11 +803,10 @@ app.get('/api/agents/debug', async (req, res) => {
     try {
       rows = db.prepare(`
         SELECT a.agentId,
-               a.agent as agentAddress,
-               a.owner,
-               a.domain as agentDomain,
+               a.agentAddress,
+               a.agentOwner,
                a.metadataURI,
-               m.name,
+               m.agentName,
                m.ensEndpoint,
                m.a2aEndpoint
         FROM agents a
@@ -822,9 +817,8 @@ app.get('/api/agents/debug', async (req, res) => {
     } catch {
       rows = db.prepare(`
         SELECT agentId,
-               agent as agentAddress,
-               owner,
-               domain as agentDomain,
+               agentAddress,
+               agentOwner,
                metadataURI
         FROM agents
         ORDER BY agentId ASC
