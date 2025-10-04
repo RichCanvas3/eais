@@ -616,7 +616,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         const endpoints: any[] = [];
         if (a2aEndpoint) endpoints.push({ name: 'A2A', endpoint: a2aEndpoint, version: '0.3.0' });
         if (ensPreviewLower) endpoints.push({ name: 'ENS', endpoint: ensPreviewLower, version: 'v1' });
-        endpoints.push({ name: 'agentWallet', endpoint: `eip155:11155111:${agentAddress}`, version: 'v1' });
+        endpoints.push({ name: 'agentAccount', endpoint: `eip155:11155111:${agentAddress}`, version: 'v1' });
 
         const metadata = {
           type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',

@@ -19,6 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import WebIcon from '@mui/icons-material/Web';
 import ensService from '@/service/ensService';
+import IdentityService from '@/service/identityService';
 
 export type Agent = {
 	agentId: string;
@@ -43,6 +44,46 @@ export function AgentTable() {
 	const [mineOnly, setMineOnly] = React.useState(false);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
 	const { provider, address: eoa } = useWeb3Auth();
+
+	// Identity JSON modal state
+	const [identityJsonOpen, setIdentityJsonOpen] = React.useState(false);
+	const [identityJsonLoading, setIdentityJsonLoading] = React.useState(false);
+	const [identityJsonError, setIdentityJsonError] = React.useState<string | null>(null);
+	const [identityJsonData, setIdentityJsonData] = React.useState<any | null>(null);
+
+	function extractCidFromUri(tokenUri?: string | null): string | null {
+		try {
+			if (!tokenUri) return null;
+			if (tokenUri.startsWith('ipfs://')) {
+				const rest = tokenUri.slice('ipfs://'.length);
+				const cid = rest.split('/')[0]?.trim();
+				return cid || null;
+			}
+			const m = tokenUri.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
+			if (m && m[1]) return m[1];
+		} catch {}
+		return null;
+	}
+
+	async function openIdentityJson(row: Agent) {
+		try {
+			setIdentityJsonOpen(true);
+			setIdentityJsonLoading(true);
+			setIdentityJsonError(null);
+			setIdentityJsonData(null);
+			const cid = extractCidFromUri(row.metadataURI ?? null);
+			if (!cid) {
+				setIdentityJsonError('No CID found in tokenUri');
+				return;
+			}
+			const data = await IdentityService.downloadJson(cid);
+			setIdentityJsonData(data);
+		} catch (e: any) {
+			setIdentityJsonError(e?.message || 'Failed to load Identity JSON');
+		} finally {
+			setIdentityJsonLoading(false);
+		}
+	}
 
 	// Helper function to clean ENS name
 	const cleanEnsName = (name: string) => {
@@ -1239,6 +1280,7 @@ export function AgentTable() {
 											)}
 											{owned[row.agentId] && (
 												<Tooltip title="Burn Identity (send to 0x000…dEaD)">
+													<span>
 													<IconButton
 														size="small"
 														color="error"
@@ -1292,11 +1334,20 @@ export function AgentTable() {
 														sx={{ minWidth: 'auto', p: 0.5, lineHeight: 1, height: 'auto' }}
 													>
 														<LocalFireDepartmentIcon fontSize="small" />
-													</IconButton>
+												</IconButton>
+													{/* JSON link moved outside tooltip to avoid burn hover text */}
+												</span>
 												</Tooltip>
 											)}
 											{owned[row.agentId] && (
 												<>
+													<Button 
+														size="small" 
+														onClick={() => openIdentityJson(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														Reg
+													</Button>
 													<Button 
 														size="small" 
 														onClick={() => viewOrCreateCard(row)}
@@ -1390,6 +1441,25 @@ export function AgentTable() {
 					</TableBody>
 				</Table>
 			</TableContainer>
+
+		{/* Identity JSON dialog */}
+		<Dialog open={identityJsonOpen} onClose={() => setIdentityJsonOpen(false)} fullWidth maxWidth="md">
+			<DialogTitle>Agent Identity Registration</DialogTitle>
+			<DialogContent dividers>
+				{identityJsonLoading ? (
+					<Typography variant="body2" color="text.secondary">Loading…</Typography>
+				) : identityJsonError ? (
+					<Typography variant="body2" color="error">{identityJsonError}</Typography>
+				) : identityJsonData ? (
+					<pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(identityJsonData, null, 2)}</pre>
+				) : (
+					<Typography variant="body2" color="text.secondary">No data</Typography>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
+			</DialogActions>
+		</Dialog>
 
 			{/* Agent Card dialog */}
 			<Dialog open={cardOpen} onClose={() => setCardOpen(false)} fullWidth maxWidth="md">

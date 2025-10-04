@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS agent_metadata (
   image TEXT,
   a2aEndpoint TEXT,
   ensEndpoint TEXT,
-  agentWalletEndpoint TEXT,
+  agentAccountEndpoint TEXT,
   supportedTrust TEXT,
   rawJson TEXT,
   updatedAtTime INTEGER NOT NULL

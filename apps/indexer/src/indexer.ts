@@ -103,7 +103,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         };
         const a2aEndpoint = findEndpoint('A2A');
         const ensEndpoint = findEndpoint('ENS');
-        const agentWalletEndpoint = findEndpoint('agentWallet');
+        const agentAccountEndpoint = findEndpoint('agentAccount');
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
         console.info("............insert into table: agentId: ", agentId)
         console.info("............insert into table: type: ", type)
@@ -112,9 +112,9 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         console.info("............insert into table: image: ", image)
         console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
         console.info("............insert into table: ensEndpoint: ", ensEndpoint)
-        console.info("............insert into table: agentWalletEndpoint: ", agentWalletEndpoint)
+        console.info("............insert into table: agentAccountEndpoint: ", agentAccountEndpoint)
         db.prepare(`
-          INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentWalletEndpoint, supportedTrust, rawJson, updatedAtTime)
+          INSERT INTO agent_metadata(agentId, type, name, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
           VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @wallet, @trust, @raw, strftime('%s','now'))
           ON CONFLICT(agentId) DO UPDATE SET
             type=excluded.type,
@@ -123,7 +123,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
             image=excluded.image,
             a2aEndpoint=excluded.a2aEndpoint,
             ensEndpoint=excluded.ensEndpoint,
-            agentWalletEndpoint=excluded.agentWalletEndpoint,
+            agentAccountEndpoint=excluded.agentAccountEndpoint,
             supportedTrust=excluded.supportedTrust,
             rawJson=excluded.rawJson,
             updatedAtTime=strftime('%s','now')
@@ -135,7 +135,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
           image,
           a2a: a2aEndpoint,
           ens: ensEndpoint,
-          wallet: agentWalletEndpoint,
+          wallet: agentAccountEndpoint,
           trust: JSON.stringify(supportedTrust),
           raw: JSON.stringify(meta),
         });
@@ -255,6 +255,12 @@ async function backfillByIds() {
 
   if (max === 0n) {
     console.log('No tokens found via ID scan.');
+    try {
+      console.info('Clearing database rows: agents, agent_metadata, events');
+      try { db.prepare('DELETE FROM agent_metadata').run(); } catch {}
+      try { db.prepare('DELETE FROM agents').run(); } catch {}
+      try { db.prepare('DELETE FROM events').run(); } catch {}
+    } catch {}
     return;
   }
 
