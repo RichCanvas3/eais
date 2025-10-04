@@ -695,7 +695,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
         const metadata = {
           type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
-          name: name || ensPreviewLower,
+          name: ensPreviewLower,
           description: description || '',
           image: null,
           endpoints,
@@ -747,7 +747,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         identityRegistryOwnerWallet: identityRegistryOwnerWallet,
         registry: registryAddress,
         agentAccount: agentAccountClient,
-        name: name,
+        name: ensPreviewLower,
         tokenUri: tokenUri,
       })
 

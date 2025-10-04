@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
-import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData } from 'viem';
+import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { identityRegistryAbi as registryAbi } from '@/lib/abi/identityRegistry';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
@@ -51,6 +51,18 @@ export function AgentTable() {
 	const [identityJsonError, setIdentityJsonError] = React.useState<string | null>(null);
 	const [identityJsonData, setIdentityJsonData] = React.useState<any | null>(null);
 
+	// ENS details modal state
+	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
+	const [ensDetailsLoading, setEnsDetailsLoading] = React.useState(false);
+	const [ensDetailsError, setEnsDetailsError] = React.useState<string | null>(null);
+	const [ensDetails, setEnsDetails] = React.useState<{ name: string; tokenId: string; urlText?: string | null; agentRegistry?: string | null; decodedRegistry?: { chainId: number; address: `0x${string}`; agentId: string } | null } | null>(null);
+
+	// Agent INFO modal
+	const [infoOpen, setInfoOpen] = React.useState(false);
+	const [infoLoading, setInfoLoading] = React.useState(false);
+	const [infoError, setInfoError] = React.useState<string | null>(null);
+	const [infoData, setInfoData] = React.useState<{ agentName?: string | null; agentId?: string | null } | null>(null);
+
 	function extractCidFromUri(tokenUri?: string | null): string | null {
 		try {
 			if (!tokenUri) return null;
@@ -82,6 +94,61 @@ export function AgentTable() {
 			setIdentityJsonError(e?.message || 'Failed to load Identity JSON');
 		} finally {
 			setIdentityJsonLoading(false);
+		}
+	}
+
+	async function openAgentInfo(row: Agent) {
+		try {
+			setInfoOpen(true);
+			setInfoLoading(true);
+			setInfoError(null);
+			setInfoData(null);
+			const agentId = row.agentId;
+			const agentIdNum = BigInt(agentId);
+			// Read on-chain metadata: agentName key
+			const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
+			const bytes = await createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) }).readContract({ address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [agentIdNum, keyAgentName] }) as `0x${string}`;
+			let name: string | null = null;
+			try { name = hexToString(bytes); } catch { name = null; }
+			setInfoData({ agentName: name, agentId: agentId });
+		} catch (e: any) {
+			setInfoError(e?.message || 'Failed to load agent info');
+		} finally {
+			setInfoLoading(false);
+		}
+	}
+
+	function decodeAgentRegistry(registryHex?: string | null): { chainId: number; address: `0x${string}`; agentId: string } | null {
+		try {
+			if (!registryHex || !/^0x[0-9a-fA-F]+$/.test(registryHex)) return null;
+			const hex = registryHex.slice(2);
+			// version(1) ns(1) chainId(4) address(20) idLen(1) id(var)
+			const chainIdHex = hex.slice(4, 12);
+			const chainId = parseInt(chainIdHex, 16);
+			const addressHex = hex.slice(12, 52);
+			const idLen = parseInt(hex.slice(52, 54), 16);
+			const idHex = hex.slice(54, 54 + idLen * 2);
+			return { chainId, address: (`0x${addressHex}`) as `0x${string}`, agentId: BigInt(`0x${idHex || '0'}`).toString() };
+		} catch { return null; }
+	}
+
+	async function openEnsDetails(row: Agent) {
+		try {
+			setEnsDetailsOpen(true);
+			setEnsDetailsLoading(true);
+			setEnsDetailsError(null);
+			setEnsDetails(null);
+			const name = (row.ensEndpoint || agentEnsNames[row.agentAddress]) as string | undefined;
+			if (!name) { setEnsDetailsError('No ENS name'); return; }
+			const tokenId = BigInt(namehash(name)).toString();
+			const urlText = await ensService.getTextRecord(name, 'url', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
+			const agentRegistryHex = await ensService.getTextRecord(name, 'agent-registry', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
+			const decoded = decodeAgentRegistry(agentRegistryHex);
+			setEnsDetails({ name, tokenId, urlText, agentRegistry: agentRegistryHex ?? null, decodedRegistry: decoded });
+		} catch (e: any) {
+			setEnsDetailsError(e?.message || 'Failed to load ENS details');
+		} finally {
+			setEnsDetailsLoading(false);
 		}
 	}
 
@@ -1259,6 +1326,24 @@ export function AgentTable() {
 							) : (
 								<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>—</Typography>
 							)}
+													{(row.ensEndpoint || agentEnsNames[row.agentAddress]) && (
+														<>
+															<Button 
+																size="small" 
+																onClick={() => openEnsDetails(row)}
+																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+															>
+																ENS
+															</Button>
+															<Button 
+																size="small" 
+																onClick={() => openAgentInfo(row)}
+																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+															>
+																INFO
+															</Button>
+														</>
+													)}
 						</TableCell>
 
 									<TableCell>
@@ -1458,6 +1543,59 @@ export function AgentTable() {
 			</DialogContent>
 			<DialogActions>
 				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
+			</DialogActions>
+		</Dialog>
+
+		{/* ENS details dialog */}
+		<Dialog open={ensDetailsOpen} onClose={() => setEnsDetailsOpen(false)} fullWidth maxWidth="sm">
+			<DialogTitle>ENS Details</DialogTitle>
+			<DialogContent dividers>
+				{ensDetailsLoading ? (
+					<Typography variant="body2" color="text.secondary">Loading…</Typography>
+				) : ensDetailsError ? (
+					<Typography variant="body2" color="error">{ensDetailsError}</Typography>
+				) : ensDetails ? (
+					<Stack spacing={1}>
+						<Typography variant="body2"><strong>Name:</strong> {ensDetails.name}</Typography>
+						<Typography variant="body2"><strong>NFT tokenId:</strong> {ensDetails.tokenId}</Typography>
+						<Typography variant="body2"><strong>URL:</strong> {ensDetails.urlText ?? '—'}</Typography>
+						<Typography variant="body2"><strong>agent-registry:</strong> {ensDetails.agentRegistry ?? '—'}</Typography>
+						{ensDetails.decodedRegistry && (
+							<Stack spacing={0.5} sx={{ pl: 1 }}>
+								<Typography variant="caption" color="text.secondary">chainId: {ensDetails.decodedRegistry.chainId}</Typography>
+								<Typography variant="caption" color="text.secondary">address: {ensDetails.decodedRegistry.address}</Typography>
+								<Typography variant="caption" color="text.secondary">agentId: {ensDetails.decodedRegistry.agentId}</Typography>
+							</Stack>
+						)}
+					</Stack>
+				) : (
+					<Typography variant="body2" color="text.secondary">No details</Typography>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={() => setEnsDetailsOpen(false)}>Close</Button>
+			</DialogActions>
+		</Dialog>
+
+		{/* Agent INFO dialog */}
+		<Dialog open={infoOpen} onClose={() => setInfoOpen(false)} fullWidth maxWidth="sm">
+			<DialogTitle>Agent Identity Info</DialogTitle>
+			<DialogContent dividers>
+				{infoLoading ? (
+					<Typography variant="body2" color="text.secondary">Loading…</Typography>
+				) : infoError ? (
+					<Typography variant="body2" color="error">{infoError}</Typography>
+				) : infoData ? (
+					<Stack spacing={1}>
+						<Typography variant="body2"><strong>Agent Name:</strong> {infoData.agentName ?? '—'}</Typography>
+						<Typography variant="body2"><strong>Agent ID:</strong> {infoData.agentId ?? '—'}</Typography>
+					</Stack>
+				) : (
+					<Typography variant="body2" color="text.secondary">No info</Typography>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={() => setInfoOpen(false)}>Close</Button>
 			</DialogActions>
 		</Dialog>
 
