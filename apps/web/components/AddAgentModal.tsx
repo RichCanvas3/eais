@@ -761,7 +761,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         if (agentIdNum > 0n) {
           // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]
           const chainHex = (sepolia.id >>> 0).toString(16).padStart(8, '0');
-          const addrHex = (await agentAccountClient.getAddress()).slice(2).toLowerCase().padStart(40, '0');
+          const addrHex = (registryAddress).slice(2).toLowerCase().padStart(40, '0');
           const idHex = BigInt(agentIdNum).toString(16);
           const idLen = Math.ceil(idHex.length / 2);
           const idLenHex = idLen.toString(16).padStart(2, '0');
