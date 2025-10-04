@@ -719,7 +719,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       });
 
       console.info('********************* identityRegistryOwnerWallet: ', identityRegistryOwnerWallet);
-      await ensureIdentityWithAA({
+      const agentIdNum = await ensureIdentityWithAA({
         publicClient,
         bundlerUrl: BUNDLER_URL,
         chain: sepolia,
@@ -733,6 +733,39 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
       setIsSubmitting(false);
       onClose();
+      
+      try {
+        // After on-chain metadata is set, also set ENS text: agent-registry per ENSIP
+        console.info("set ensip agent registry")
+        if (agentIdNum > 0n) {
+          // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]
+          const chainHex = (sepolia.id >>> 0).toString(16).padStart(8, '0');
+          const addrHex = (await agentAccountClient.getAddress()).slice(2).toLowerCase().padStart(40, '0');
+          const idHex = BigInt(agentIdNum).toString(16);
+          const idLen = Math.ceil(idHex.length / 2);
+          const idLenHex = idLen.toString(16).padStart(2, '0');
+          const valueHex = `0x01` + `01` + chainHex + addrHex + idLenHex + idHex.padStart(idLen * 2, '0');
+
+          const node = namehash(ensPreviewLower) as `0x${string}`;
+          // Ensure resolver is present
+          let resolverToUse = agentResolver as `0x${string}` | null;
+          if (!resolverToUse) {
+            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            resolverToUse = await publicClient.readContract({
+              address: ENS_REGISTRY_ADDRESS,
+              abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+              functionName: 'resolver',
+              args: [node]
+            }) as `0x${string}`;
+          }
+          if (resolverToUse && resolverToUse !== '0x0000000000000000000000000000000000000000') {
+            console.info("set ensip agent registry", 'agent-registry', valueHex);
+            await ensService.setTextWithAA(agentAccountClient as any, resolverToUse, node, 'agent-registry', valueHex, sepolia);
+          }
+        }
+      } catch (e) {
+        console.info('failed to set agent-registry text', e);
+      }
     } catch (err: any) {
       setIsSubmitting(false);
       setError(err?.message ?? 'Failed to submit');

@@ -425,7 +425,7 @@ export async function ensureIdentityWithAA(params: {
   agentAccount: any,
   name: string,
   tokenUri: string,
-}): Promise<`0x${string}`> {
+}): Promise<bigint> {
   const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri, identityRegistryOwnerWallet } = params;
 
   console.info("....... inside ensureIdentityWithAA");
@@ -497,7 +497,7 @@ export async function ensureIdentityWithAA(params: {
   console.log('********************* ensureIdentityWithAA: updated', updated);
   return (updated ?? agentAddress) as `0x${string}`;
   */
- return agentAddress as `0x${string}`;
+ return tokenId;
 }
 
 
