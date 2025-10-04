@@ -437,7 +437,7 @@ export async function ensureIdentityWithAA(params: {
 
   console.log('********************* deploySmartAccountIfNeeded');
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
-  const agentAddress = await agentAccount.getAddress();
+  const agentAddress = 'eip155:11155111:${await agentAccount.getAddress()}'
 
   // If an EOA wallet with registry ownership is provided, use it to mint directly
 

@@ -1,5 +1,6 @@
 'use client';
 import * as React from 'react';
+import { getAddress } from 'viem';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
@@ -61,7 +62,7 @@ export function AgentTable() {
 	const [infoOpen, setInfoOpen] = React.useState(false);
 	const [infoLoading, setInfoLoading] = React.useState(false);
 	const [infoError, setInfoError] = React.useState<string | null>(null);
-	const [infoData, setInfoData] = React.useState<{ agentName?: string | null; agentId?: string | null } | null>(null);
+	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
 
 	function extractCidFromUri(tokenUri?: string | null): string | null {
 		try {
@@ -107,10 +108,28 @@ export function AgentTable() {
 			const agentIdNum = BigInt(agentId);
 			// Read on-chain metadata: agentName key
 			const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
-			const bytes = await createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) }).readContract({ address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [agentIdNum, keyAgentName] }) as `0x${string}`;
-			let name: string | null = null;
-			try { name = hexToString(bytes); } catch { name = null; }
-			setInfoData({ agentName: name, agentId: agentId });
+			const keyAgentAccount = keccak256(stringToHex('agentAccount')) as `0x${string}`;
+			
+			const nameBytes = await createPublicClient({ 
+				chain: sepolia, 
+				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) 
+			}).readContract({ address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`, 
+				abi: registryAbi as any, 
+				functionName: 'getMetadata' as any, 
+				args: [agentIdNum, keyAgentName] }) as `0x${string}`;
+
+			const accountBytes = await createPublicClient({ 
+				chain: sepolia, 
+				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) 
+			}).readContract({ address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`, 
+				abi: registryAbi as any, 
+				functionName: 'getMetadata' as any, 
+				args: [agentIdNum, keyAgentAccount] }) as `0x${string}`;
+			
+			const name = hexToString(nameBytes); 
+			const account = getAddress(`0x${accountBytes.slice(-40)}`);
+
+			setInfoData({ agentId: agentId, agentName: name, agentAccount: account });
 		} catch (e: any) {
 			setInfoError(e?.message || 'Failed to load agent info');
 		} finally {
@@ -1588,8 +1607,9 @@ export function AgentTable() {
 					<Typography variant="body2" color="error">{infoError}</Typography>
 				) : infoData ? (
 					<Stack spacing={1}>
-						<Typography variant="body2"><strong>Agent Name:</strong> {infoData.agentName ?? '—'}</Typography>
 						<Typography variant="body2"><strong>Agent ID:</strong> {infoData.agentId ?? '—'}</Typography>
+						<Typography variant="body2"><strong>Agent Name:</strong> {infoData.agentName ?? '—'}</Typography>
+						<Typography variant="body2"><strong>Agent Account:</strong> {infoData.agentAccount ?? '—'}</Typography>
 					</Stack>
 				) : (
 					<Typography variant="body2" color="text.secondary">No info</Typography>
