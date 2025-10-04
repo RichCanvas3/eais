@@ -1335,13 +1335,6 @@ export function AgentTable() {
 															>
 																ENS
 															</Button>
-															<Button 
-																size="small" 
-																onClick={() => openAgentInfo(row)}
-																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
-															>
-																INFO
-															</Button>
 														</>
 													)}
 						</TableCell>
@@ -1426,13 +1419,21 @@ export function AgentTable() {
 											)}
 											{owned[row.agentId] && (
 												<>
-													<Button 
+												<Button 
+																size="small" 
+																onClick={() => openAgentInfo(row)}
+																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+															>
+																INFO
+															</Button>
+															<Button 
 														size="small" 
 														onClick={() => openIdentityJson(row)}
 														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
 													>
 														Reg
 													</Button>
+															
 													<Button 
 														size="small" 
 														onClick={() => viewOrCreateCard(row)}
