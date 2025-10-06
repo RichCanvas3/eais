@@ -1041,6 +1041,35 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 				signedDelegation,
 			} as any;
 
+			// Approve sessionAA as operator for this specific Identity tokenId on IdentityRegistry
+			try {
+				const registry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
+				if (registry) {
+					const approveCalldata = encodeFunctionData({
+						abi: registryAbi as any,
+						functionName: 'approve' as any,
+						args: [sessionAA as `0x${string}`, BigInt(row.agentId)],
+					});
+					const pimlicoApprove = createPimlicoClient({ transport: http(bundlerUrl) });
+					const bundlerApprove = createBundlerClient({
+						transport: http(bundlerUrl),
+						paymaster: true as any,
+						chain: sepolia as any,
+						paymasterContext: { mode: 'SPONSORED' },
+					} as any);
+					const { fast: feeApprove } = await pimlicoApprove.getUserOperationGasPrice();
+					const uoHashApprove = await bundlerApprove.sendUserOperation({
+						account: smartAccount as any,
+						calls: [{ to: registry, data: approveCalldata }],
+						...feeApprove,
+					});
+					await bundlerApprove.waitForUserOperationReceipt({ hash: uoHashApprove });
+					console.info('sessionAA approved for tokenId', row.agentId);
+				}
+			} catch (e) {
+				console.info('failed to approve sessionAA operator', e);
+			}
+
 			console.log('Session created successfully:', session);
 			setSessionJson(JSON.stringify(session, null, 2));
 			setSessionOpen(true);
