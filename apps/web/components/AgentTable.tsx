@@ -900,16 +900,13 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
-			// Build AA address derived from domain same as ownership check
-			console.info("*********** agent name: ", row.agentName);
-			console.info("********* eoa: ", eoa)
-			const deploySalt = BigInt(keccak256(stringToHex(row.agentName.trim().toLowerCase())));
+			// Use existing AA address from the table row instead of deriving via salt
+			console.info("*********** using agent account address from row: ", row.agentAddress);
 			const smartAccount = await toMetaMaskSmartAccount({
+				address: row.agentAddress as `0x${string}`,
 				client: publicClient,
 				implementation: Implementation.Hybrid,
-				deployParams: [eoa as `0x${string}`, [], [], []],
 				signatory: { walletClient },
-				deploySalt: toHex(deploySalt) as `0x${string}`,
 			} as any);
 			const aa = await smartAccount.getAddress() as `0x${string}`;
 
