@@ -146,7 +146,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
           accept: ["EIP-1271", "EIP-712"],
           erc8004: {
             agentId: agent.agentId,
-            registry: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS || "0xREG1STRYADDRE55",
+            registry: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY || "0xREG1STRYADDRE55",
             chainId: 11155111
           }
         }
@@ -261,7 +261,7 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
             accept: ["EIP-1271", "EIP-712"],
             erc8004: {
               agentId: agent.agentId,
-              registry: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS || "0xREG1STRYADDRE55",
+              registry: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY || "0xREG1STRYADDRE55",
               chainId: 11155111
             }
           }

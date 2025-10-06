@@ -18,7 +18,7 @@ function must(name: string) {
   return v;
 }
 
-export const REGISTRY_ADDRESS = must("REGISTRY_ADDRESS") as `0x${string}`;
+export const IDENTITY_REGISTRY = must("IDENTITY_REGISTRY") as `0x${string}`;
 export const RPC_HTTP_URL      = must("RPC_HTTP_URL");
 export const RPC_WS_URL        = process.env.RPC_WS_URL; // optional
 export const CONFIRMATIONS     = Number(process.env.CONFIRMATIONS ?? 12);

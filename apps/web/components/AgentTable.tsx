@@ -108,13 +108,13 @@ export function AgentTable() {
 			// Read on-chain metadata: string keys, string values
 			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) });
 			const name = await publicClient.readContract({
-				address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`,
+				address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
 				abi: registryAbi as any,
 				functionName: 'getMetadata' as any,
 				args: [agentIdNum, 'agentName']
 			}) as string;
 			const account = await publicClient.readContract({
-				address: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`,
+				address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
 				abi: registryAbi as any,
 				functionName: 'getMetadata' as any,
 				args: [agentIdNum, 'agentAccount']
@@ -311,7 +311,8 @@ export function AgentTable() {
 		}
 	};
 
-	const [cardOpen, setCardOpen] = React.useState(false);
+const [cardOpen, setCardOpen] = React.useState(false);
+const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | null>(null);
 	const [cardJson, setCardJson] = React.useState<string | null>(null);
 	const [cardDomain, setCardDomain] = React.useState<string | null>(null);
 	const [cardError, setCardError] = React.useState<string | null>(null);
@@ -370,22 +371,30 @@ export function AgentTable() {
 		const version = cardFields.version || obj.version;
 		const preferredTransport = cardFields.preferredTransport || obj.preferredTransport;
 		const protocolVersion = cardFields.protocolVersion || obj.protocolVersion;
-		const skills: any[] = Array.isArray(cardFields.skills) ? cardFields.skills.map((s: any) => ({
-			id: s?.id || undefined,
-			name: s?.name || undefined,
-			description: s?.description || undefined,
-			tags: Array.isArray(s?.tags) ? s.tags.filter(Boolean) : [],
-			examples: Array.isArray(s?.examples) ? s.examples.filter(Boolean) : [],
-			inputModes: Array.isArray(s?.inputModes) ? s.inputModes.filter(Boolean) : undefined,
-			outputModes: Array.isArray(s?.outputModes) ? s.outputModes.filter(Boolean) : undefined,
-		})) : (() => {
-			// fallback to legacy single-skill fields
+		const skills: any[] = Array.isArray(cardFields.skills) ? cardFields.skills.map((s: any, idx: number) => {
+			const baseSkills = Array.isArray((obj as any).skills) ? (obj as any).skills : [];
+			const existing = (s?.id ? baseSkills.find((x: any) => x?.id === s.id) : baseSkills[idx]) || {};
+			return {
+				...existing,
+				id: s?.id ?? existing.id,
+				name: s?.name ?? existing.name,
+				description: s?.description ?? existing.description,
+				tags: Array.isArray(s?.tags) ? s.tags.filter(Boolean) : (Array.isArray(existing?.tags) ? existing.tags : []),
+				examples: Array.isArray(s?.examples) ? s.examples.filter(Boolean) : (Array.isArray(existing?.examples) ? existing.examples : []),
+				inputModes: Array.isArray(s?.inputModes) ? s.inputModes.filter(Boolean) : (Array.isArray(existing?.inputModes) ? existing.inputModes : []),
+				outputModes: Array.isArray(s?.outputModes) ? s.outputModes.filter(Boolean) : (Array.isArray(existing?.outputModes) ? existing.outputModes : []),
+			};
+		}) : (() => {
+			// fallback to legacy single-skill fields, preserve existing when present
+			const existing0 = Array.isArray((obj as any).skills) ? (obj as any).skills[0] || {} : {};
 			const fallback = {
-				id: cardFields.skillId || obj?.skills?.[0]?.id,
-				name: cardFields.skillName || obj?.skills?.[0]?.name,
-				description: cardFields.skillDesc || obj?.skills?.[0]?.description,
-				tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-				examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean),
+				id: cardFields.skillId || existing0.id,
+				name: cardFields.skillName || existing0.name,
+				description: cardFields.skillDesc || existing0.description,
+				tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean).concat(Array.isArray(existing0.tags) ? existing0.tags : []).filter(Boolean),
+				examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean).concat(Array.isArray(existing0.examples) ? existing0.examples : []).filter(Boolean),
+				inputModes: Array.isArray(existing0.inputModes) ? existing0.inputModes : [],
+				outputModes: Array.isArray(existing0.outputModes) ? existing0.outputModes : [],
 			};
 			return [fallback];
 		})();
@@ -606,13 +615,11 @@ export function AgentTable() {
             const feedbackURIMap: Record<string, string> = {};
             for (const row of data.rows) {
                 try {
-					/*
                     const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentName)}`);
                     const cardData = await response.json();
                     if (cardData.found && cardData.card?.feedbackDataURI) {
                         feedbackURIMap[row.agentId] = cardData.card.feedbackDataURI;
                     }
-					*/
                 } catch {
                     // Ignore errors, just don't add feedback URI
                 }
@@ -680,33 +687,32 @@ export function AgentTable() {
 	async function viewOrCreateCard(row: Agent) {
 		console.info("viewOrCreateCard: ", row)
 		console.info("row: ", row)
-		const domain = row.agentName.trim().toLowerCase();
+		const agentName = row.agentName.trim().toLowerCase();
 		if (!owned[row.agentId]) return; // only mine
-		setCardDomain(domain);
+		setCurrentAgentForCard(row);
+		setCardDomain(agentName);
 		setCardError(null);
 		// Prefer loading the Agent Card directly from the discovered A2A endpoint
+		/*
 		if (row.a2aEndpoint && typeof row.a2aEndpoint === 'string' && /^https?:\/\//i.test(row.a2aEndpoint)) {
 			try {
 				const res = await fetch(row.a2aEndpoint);
 				if (res.ok) {
 					const cardObj = await res.json();
 					const json = JSON.stringify(cardObj, null, 2);
-					setStoredCard(domain, json);
+					setStoredCard(agentName, json);
 					setCardJson(json);
 					try { await populateFieldsFromObj(cardObj); } catch {}
 					setCardOpen(true);
+					console.info("............cardObj aaa: ", cardObj)
 					return;
+					
 				}
 			} catch {}
 		}
-		let existing = getStoredCard(domain);
-		if (!existing) {
-			try {
-				const res = await fetch(`/api/agent-cards?domain=${encodeURIComponent(domain)}`);
-				const json = await res.json();
-				if (json?.found && json?.card) existing = JSON.stringify(json.card);
-			} catch {}
-		}
+			*/
+		console.info("............getStoredCard for agentName: ", agentName)
+		let existing = getStoredCard(agentName);
 		if (existing) {
 			setCardJson(existing);
 			try { await populateFieldsFromObj(JSON.parse(existing)); } catch {}
@@ -717,37 +723,36 @@ export function AgentTable() {
 	}
 
 	async function regenerateCard(row: Agent) {
-		const domain = row.agentName.trim().toLowerCase();
+		const agentName = row.agentName.trim().toLowerCase();
 		setCardLoading(true);
 		setCardError(null);
 		try {
 			// If A2A endpoint is present, load the Agent Card directly
+			/*
 			if (row.a2aEndpoint && typeof row.a2aEndpoint === 'string' && /^https?:\/\//i.test(row.a2aEndpoint)) {
 				try {
 					const res = await fetch(row.a2aEndpoint);
 					if (res.ok) {
 						const cardObj = await res.json();
 						const json = JSON.stringify(cardObj, null, 2);
-						setStoredCard(domain, json);
+						setStoredCard(agentName, json);
 						setCardJson(json);
 						await populateFieldsFromObj(cardObj);
-						// Persist to backend storage
-						try {
-							await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, card: cardObj }) });
-						} catch (e: any) {
-							setCardError(e?.message ?? 'Save failed');
-						}
+						
 						setCardOpen(true);
+						console.info("............cardObj: ", cardObj)
 						return;
 					}
 				} catch {}
 			}
-			const registry = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`;
+			*/
+			const registry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
 			if (!provider || !eoa) throw new Error('Not connected');
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 			const cardObj = await buildAgentCard({
+				a2aUrl: row.a2aEndpoint ?? undefined,
 				registry,
-				domain,
+				agentName,
 				chainId: 11155111,
 				trustModels: (process.env.NEXT_PUBLIC_ERC8004_TRUST_MODELS || 'feedback').split(',').map((x) => x.trim()).filter(Boolean),
 				signMessage: async (message: string) => {
@@ -757,16 +762,16 @@ export function AgentTable() {
 			// Merge defaults from identity JSON and A2A URL
 			const defaults = await loadIdentityDefaults(row);
 			console.info("............defaults: ", defaults)
-			if (defaults.name && !cardObj.name) (cardObj as any).name = defaults.name;
-			if (defaults.description && !cardObj.description) (cardObj as any).description = defaults.description;
-			if (defaults.url && !cardObj.url) (cardObj as any).url = defaults.url;
+			if (defaults.name) (cardObj as any).name = defaults.name;
+			if (defaults.description) (cardObj as any).description = defaults.description;
+			if (defaults.url) (cardObj as any).url = defaults.url;
 			const json = JSON.stringify(cardObj, null, 2);
-			setStoredCard(domain, json);
+			setStoredCard(agentName, json);
 			setCardJson(json);
 			await populateFieldsFromObj(cardObj);
 			// Persist immediately on first creation
 			try {
-				await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, card: cardObj }) });
+				await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: agentName, card: cardObj }) });
 			} catch (e: any) {
 				setCardError(e?.message ?? 'Save failed');
 			}
@@ -1074,7 +1079,7 @@ export function AgentTable() {
 							)}
 							<Stack direction="row" spacing={1}>
 								<Chip
-									label={`Identity: ${(process.env.NEXT_PUBLIC_REGISTRY_ADDRESS || 'Not configured').slice(0, 10)}...`}
+									label={`Identity: ${(process.env.NEXT_PUBLIC_IDENTITY_REGISTRY || 'Not configured').slice(0, 10)}...`}
 									size="small"
 									variant="outlined"
 									sx={{ 
@@ -1085,7 +1090,7 @@ export function AgentTable() {
 										}
 									}}
 									onClick={() => {
-										const address = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS;
+										const address = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
 										if (address) {
 											window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
 										}
@@ -1236,10 +1241,10 @@ export function AgentTable() {
 
 									<TableCell>
 										<Stack direction="row" spacing={1} alignItems="center">
-											{process.env.NEXT_PUBLIC_REGISTRY_ADDRESS ? (
+											{process.env.NEXT_PUBLIC_IDENTITY_REGISTRY ? (
 												<Typography
 													component="a"
-													href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_REGISTRY_ADDRESS}/${row.agentId}`}
+													href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_IDENTITY_REGISTRY}/${row.agentId}`}
 													target="_blank"
 													rel="noopener noreferrer"
 													variant="body2"
@@ -1259,7 +1264,7 @@ export function AgentTable() {
 														color="error"
 														onClick={async () => {
 															try {
-																const registry = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`;
+																const registry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
 																if (!registry) throw new Error('Registry address not configured');
 																const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
 																const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
@@ -1635,10 +1640,11 @@ export function AgentTable() {
 							</Box>
 						</Grid>
 					</Grid>
-				</DialogContent>
-				<DialogActions>
-					<Button onClick={() => { if (cardJson && cardDomain) setStoredCard(cardDomain, cardJson); setCardOpen(false); }}>Close</Button>
-				</DialogActions>
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={async () => { if (currentAgentForCard) { await regenerateCard(currentAgentForCard); } }}>Reset</Button>
+				<Button onClick={() => { if (cardJson && cardDomain) setStoredCard(cardDomain, cardJson); setCardOpen(false); }}>Close</Button>
+			</DialogActions>
 			</Dialog>
 
 			{/* Session dialog */}
@@ -2102,7 +2108,7 @@ export function AgentTable() {
 			<AddAgentModal
 				open={addAgentOpen}
 				onClose={() => setAddAgentOpen(false)}
-				registryAddress={process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`}
+				registryAddress={process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`}
 				rpcUrl={process.env.NEXT_PUBLIC_RPC_URL as string}
 			/>
 

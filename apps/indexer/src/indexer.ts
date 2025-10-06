@@ -1,12 +1,13 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { identityRegistryAbi } from "./abi/identityRegistry";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { REGISTRY_ADDRESS, RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL } from "./env";
+import { IDENTITY_REGISTRY, RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL } from "./env";
 
 // ---- client ----
 const transport = RPC_WS_URL ? webSocket(RPC_WS_URL) : http(RPC_HTTP_URL);
 const client = createPublicClient({ transport });
-const address = REGISTRY_ADDRESS as Address;
+const address = IDENTITY_REGISTRY as Address;
+console.info("............IDENTITY_REGISTRY: ", address)
 
 // ---- helpers ----
 function toDecString(x: bigint | number | string) {

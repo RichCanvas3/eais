@@ -684,10 +684,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       // Build ERC-8004 registration metadata and upload to IPFS to get tokenUri
       let tokenUri = '';
       try {
-        const baseDomainUrl = domainUrlText || '';
+        const baseDomainUrl = agentUrlText || '';
         const cleanBase = baseDomainUrl.replace(/\/$/, '');
         const label = cleanAgentLabel(name);
-        const a2aEndpoint = cleanBase && label ? `${cleanBase}/${label}/.well-known/agent-card.json` : `${cleanBase}/.well-known/agent-card.json`;
+        const a2aEndpoint = cleanBase && label ? `${cleanBase}/.well-known/agent-card.json` : `${cleanBase}/.well-known/agent-card.json`;
         const endpoints: any[] = [];
         if (a2aEndpoint) endpoints.push({ name: 'A2A', endpoint: a2aEndpoint, version: '0.3.0' });
         if (ensPreviewLower) endpoints.push({ name: 'ENS', endpoint: ensPreviewLower, version: 'v1' });
@@ -1030,40 +1030,38 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     ) : 'not set'}
                   </Typography>
                   
-                  {!agentUrlText && !agentUrlLoading && (
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <TextField label="Set Agent URL" placeholder="https://example.com" value={agentUrlEdit} onChange={(e) => { setAgentUrlEdit(e.target.value); setAgentUrlIsAuto(false); }} fullWidth />
-                      <Button
-                        variant="outlined"
-                        disabled={Boolean(
-                          agentUrlSaving ||
-                          !provider ||
-                          !/^https?:\/\//i.test(agentUrlEdit.trim()) ||
-                          !agentResolver
-                        )}
-                        onClick={async () => {
-                          try {
-                            setAgentUrlSaving(true);
-                            setAgentUrlError(null);
-                            const node = namehash(ensPreview) as `0x${string}`;
-                            // Build AA client for the agent AA (ensResolvedAddress)
-                            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-                            const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
-                            try { (walletClient as any).account = address as Address; } catch {}
-                            // Use the agent AA derived from the name to authorize setText via AA
-                            const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IdentityService, publicClient, walletClient);
-                            console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
-                            await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
-                            setAgentUrlText(agentUrlEdit.trim());
-                          } catch (e: any) {
-                            setAgentUrlError(e?.message ?? 'Failed to set agent url');
-                          } finally {
-                            setAgentUrlSaving(false);
-                          }
-                        }}
-                      >Save URL</Button>
-                    </Stack>
-                  )}
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField label="Set Agent URL" placeholder="https://example.com" value={agentUrlEdit} onChange={(e) => { setAgentUrlEdit(e.target.value); setAgentUrlIsAuto(false); }} fullWidth />
+                    <Button
+                      variant="outlined"
+                      disabled={Boolean(
+                        agentUrlSaving ||
+                        !provider ||
+                        !/^https?:\/\//i.test(agentUrlEdit.trim()) ||
+                        !agentResolver
+                      )}
+                      onClick={async () => {
+                        try {
+                          setAgentUrlSaving(true);
+                          setAgentUrlError(null);
+                          const node = namehash(ensPreview) as `0x${string}`;
+                          // Build AA client for the agent AA (ensResolvedAddress)
+                          const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                          const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
+                          try { (walletClient as any).account = address as Address; } catch {}
+                          // Use the agent AA derived from the name to authorize setText via AA
+                          const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IdentityService, publicClient, walletClient);
+                          console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
+                          await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
+                          setAgentUrlText(agentUrlEdit.trim());
+                        } catch (e: any) {
+                          setAgentUrlError(e?.message ?? 'Failed to set agent url');
+                        } finally {
+                          setAgentUrlSaving(false);
+                        }
+                      }}
+                    >Save URL</Button>
+                  </Stack>
                 </>
               )}
             </>

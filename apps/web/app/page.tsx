@@ -8,7 +8,7 @@ import { AddAgentModal } from '@/components/AddAgentModal';
 export default function Page() {
   const { isLoggedIn, login, logout } = useWeb3Auth();
   const [open, setOpen] = React.useState(false);
-  const registryAddress = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}`;
+  const registryAddress = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
   const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>

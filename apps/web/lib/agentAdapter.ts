@@ -362,19 +362,19 @@ export async function getAgentByDomain(params: {
   return null;
 }
 
-export async function getAgentInfoByDomain(params: {
+export async function getAgentInfoByName(params: {
   publicClient: PublicClient,
   registry: `0x${string}`,
-  domain: string,
+  agentName: string,
 }): Promise<{ agentId: bigint; agentAddress: `0x${string}` } | null> {
   const { publicClient, registry } = params;
-  const domain = params.domain.trim().toLowerCase();
+  const agentName = params.agentName.trim().toLowerCase();
   try {
     const info: any = await publicClient.readContract({
       address: registry,
       abi: registryAbi as any,
       functionName: 'resolveByDomain' as any,
-      args: [domain],
+      args: [agentName],
     });
     const agentId = BigInt(info?.agentId ?? info?.[0] ?? 0);
     const agentAddress = (info?.agentAddress ?? info?.[2]) as `0x${string}` | undefined;
