@@ -8,6 +8,7 @@ import { identityRegistryAbi as registryAbi } from '@/lib/abi/identityRegistry';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
+import { reputationRegistryAbi } from '@/lib/abi/reputationRegistry';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
@@ -328,8 +329,13 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 	const [feedbackData, setFeedbackData] = React.useState<any[]>([]);
 	const [feedbackLoading, setFeedbackLoading] = React.useState(false);
 	const [feedbackError, setFeedbackError] = React.useState<string | null>(null);
+	const [allFeedbackOpen, setAllFeedbackOpen] = React.useState(false);
+	const [allFeedbackData, setAllFeedbackData] = React.useState<any[]>([]);
+	const [allFeedbackLoading, setAllFeedbackLoading] = React.useState(false);
+	const [allFeedbackError, setAllFeedbackError] = React.useState<string | null>(null);
 	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
-	const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
+// legacy state no longer used; feedback is read from Reputation Registry
+// const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
 	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
 
 	const [ensOpen, setEnsOpen] = React.useState(false);
@@ -443,9 +449,7 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 		if (cardFields.supportsAuthenticatedExtendedCard !== undefined) {
 			ordered.supportsAuthenticatedExtendedCard = cardFields.supportsAuthenticatedExtendedCard;
 		}
-		if (cardFields.feedbackDataURI !== undefined) {
-			ordered.feedbackDataURI = cardFields.feedbackDataURI;
-		}
+
 		return ordered;
 	}
 
@@ -509,7 +513,6 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 			providerOrganization: obj?.provider?.organization ?? '',
 			providerUrl: obj?.provider?.url ?? '',
 			supportsAuthenticatedExtendedCard: !!obj?.supportsAuthenticatedExtendedCard,
-			feedbackDataURI: obj?.feedbackDataURI ?? '',
 			skills: skills.map((s: any) => ({
 				id: s?.id ?? '',
 				name: s?.name ?? '',
@@ -611,20 +614,6 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
             }
             setOwned(entries);
 
-            // Check for feedback URIs for all agents
-            const feedbackURIMap: Record<string, string> = {};
-            for (const row of data.rows) {
-                try {
-                    const response = await fetch(`/api/agent-cards?domain=${encodeURIComponent(row.agentName)}`);
-                    const cardData = await response.json();
-                    if (cardData.found && cardData.card?.feedbackDataURI) {
-                        feedbackURIMap[row.agentId] = cardData.card.feedbackDataURI;
-                    }
-                } catch {
-                    // Ignore errors, just don't add feedback URI
-                }
-            }
-            setAgentFeedbackURIs(feedbackURIMap);
         }
         computeOwnership();
     }, [data?.rows, provider, eoa]);
@@ -806,43 +795,42 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 		setFeedbackError(null);
 		setFeedbackData([]);
 
-		try {
-			// Use the pre-fetched feedback URI
-			const feedbackURI = agentFeedbackURIs[row.agentId];
-			if (!feedbackURI) {
-				setFeedbackError('No feedback data URI found for this agent');
-				setFeedbackLoading(false);
-				return;
-			}
-
-			// Fetch feedback data from the URI
-			const feedbackResponse = await fetch(feedbackURI);
-			if (!feedbackResponse.ok) {
-				throw new Error(`Failed to fetch feedback data: ${feedbackResponse.statusText}`);
-			}
-			
-			const feedback = await feedbackResponse.json();
-			
-			// Handle different response formats
-			let feedbackList = [];
-			if (Array.isArray(feedback)) {
-				feedbackList = feedback;
-			} else if (feedback.data && Array.isArray(feedback.data)) {
-				feedbackList = feedback.data;
-			} else if (feedback.feedback && Array.isArray(feedback.feedback)) {
-				feedbackList = feedback.feedback;
-			} else {
-				feedbackList = [feedback]; // Single feedback item
-			}
-			
-			setFeedbackData(feedbackList);
-		} catch (error: any) {
-			console.error('Error fetching feedback data:', error);
-			setFeedbackError(error.message || 'Failed to fetch feedback data');
-		} finally {
-			setFeedbackLoading(false);
-		}
+    try {
+		console.info("............xxxx openFeedbackFor for agentId: ", row.agentId)
+        const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+        const reputationRegistry = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`;
+        if (!reputationRegistry) throw new Error('Reputation registry not configured');
+        const zero32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
+        console.info("............readAllFeedback for agentId: ", row.agentId)
+		const res: any = await publicClient.readContract({
+            address: reputationRegistry,
+            abi: reputationRegistryAbi as any,
+            functionName: 'readAllFeedback' as any,
+            args: [BigInt(row.agentId), [], zero32, zero32, true],
+        });
+		console.info("............res: ", res)
+        const clients = (res?.outClients ?? res?.[0]) || [];
+        const scores = (res?.scores ?? res?.[1]) || [];
+        const tag1s = (res?.tag1s ?? res?.[2]) || [];
+        const tag2s = (res?.tag2s ?? res?.[3]) || [];
+        const revoked = (res?.revokedStatuses ?? res?.[4]) || [];
+        const list = clients.map((addr: string, i: number) => ({
+            client: addr,
+            score: Number(scores[i] ?? 0),
+            tag1: tag1s[i] as `0x${string}`,
+            tag2: tag2s[i] as `0x${string}`,
+            revoked: Boolean(revoked[i]),
+        }));
+        setFeedbackData(list);
+    } catch (error: any) {
+        console.error('Error fetching feedback data:', error);
+        setFeedbackError(error.message || 'Failed to fetch feedback data');
+    } finally {
+        setFeedbackLoading(false);
+    }
 	}
+
 
 	async function openEnsFor(row: Agent) {
 		setEnsCurrentAgent(row);
@@ -1391,11 +1379,11 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 													</Button>
 												</>
 											)}
-											{agentFeedbackURIs[row.agentId] && (
-												<Button size="small" onClick={() => openFeedbackFor(row)} sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}>
-													Feedback
-												</Button>
-											)}
+									
+											
+												
+											
+										
 										</Stack>
 									</TableCell>
 
@@ -1425,6 +1413,9 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 								</TableCell>
 								{eoa && (
 									<TableCell>
+										<Button size="small" onClick={() => openFeedbackFor(row)} sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}>
+											Feedback
+										</Button>
 										<IconButton
 											size="small"
 											sx={{ 
@@ -1545,11 +1536,7 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 								<Typography variant="subtitle2">Provider</Typography>
 								<TextField label="Provider Organization" size="small" value={cardFields.providerOrganization ?? ''} onChange={(e) => handleFieldChange('providerOrganization', e.target.value)} />
 								<TextField label="Provider URL" size="small" value={cardFields.providerUrl ?? ''} onChange={(e) => handleFieldChange('providerUrl', e.target.value)} />
-								
-								<Divider sx={{ my: 1 }} />
-								<Typography variant="subtitle2">Feedback</Typography>
-								<TextField label="Feedback Data URI" size="small" value={cardFields.feedbackDataURI ?? ''} onChange={(e) => handleFieldChange('feedbackDataURI', e.target.value)} />
-								
+		
 								<Divider sx={{ my: 1 }} />
 								<Typography variant="subtitle2">Capabilities</Typography>
 								<FormControlLabel 
@@ -1744,6 +1731,40 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 					<Button onClick={() => setFeedbackOpen(false)}>Close</Button>
 				</DialogActions>
 			</Dialog>
+
+		{/* All Feedback Dialog */}
+		<Dialog open={allFeedbackOpen} onClose={() => setAllFeedbackOpen(false)} maxWidth="md" fullWidth>
+			<DialogTitle>
+				All Feedback for {currentAgent?.agentName}
+			</DialogTitle>
+			<DialogContent dividers>
+				{allFeedbackLoading && (
+					<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+						<Typography>Loading…</Typography>
+					</Box>
+				)}
+				{allFeedbackError && (
+					<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
+						<Typography color="error">{allFeedbackError}</Typography>
+					</Box>
+				)}
+				{!allFeedbackLoading && !allFeedbackError && allFeedbackData.length === 0 && (
+					<Typography variant="body2" color="text.secondary">No feedback found.</Typography>
+				)}
+				{!allFeedbackLoading && !allFeedbackError && allFeedbackData.length > 0 && (
+					<Stack spacing={1}>
+						{allFeedbackData.map((fb: any, idx: number) => (
+							<Box key={idx} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+								<Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{typeof fb === 'string' ? fb : JSON.stringify(fb)}</Typography>
+							</Box>
+						))}
+					</Stack>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={() => setAllFeedbackOpen(false)}>Close</Button>
+			</DialogActions>
+		</Dialog>
 
 			{/* ENS Dialog */}
 			<Dialog open={ensOpen} onClose={() => setEnsOpen(false)} maxWidth="md" fullWidth>
