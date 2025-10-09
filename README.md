@@ -1,6 +1,7 @@
-# Agent Explorer
+# Agentic EcoSystem - Agent Explorer
 
-![ERC-8004 Overview](docs/images/ERC8004OverviewDNS.png)
+![ERC-8004 Identity Overview](docs/images/ERC8004overview.png)
+![ERC-8004 Reputation Overview](docs/images/FeedbackFlow.png)
 
 ## 🛡️ EAIS: Agent Identity Service for Ethereum Blockchain
 
@@ -31,11 +32,6 @@ Built-in support for **Ethereum Name Service (ENS)** integration, allowing agent
 * **Scalable & Secure by Design**  
 Developers can seamlessly onboard organizations or services, roll out multiple agents under one wallet, and enable them to transact, verify credentials, and build reputation — all anchored on Ethereum.
 
-### 🎥 Demo Video
-
-Watch our demo video from the [MetaMask Embedded Wallets and Solana Dev Cook-Off](https://www.hackquest.io/projects/MetaMask-Embedded-Wallets-and-Solana-Dev-Cook-Off-EAIS-Agent-Identity-Service):
-
-[![Demo Video](https://img.shields.io/badge/📹_Watch_Demo-Video-blue)](https://www.hackquest.io/projects/MetaMask-Embedded-Wallets-and-Solana-Dev-Cook-Off-EAIS-Agent-Identity-Service)
 
 👉 In essence: **EAIS + ERC-8004 + ERC-4337** enables a decentralized, secure, and scalable identity layer for the emerging agent economy on Ethereum.
 
@@ -77,14 +73,16 @@ rm -f pnpm-lock.yaml
 pnpm install
 
 
-
-
+# run agent indexer
 pnpm dev:indexer
 
+# run agent services
+pnpm --filter identity-service dev
 
+
+# run explorer
 pnpm dev:web
 
-pnpm --filter identity-service dev
 
 ```
 
@@ -126,16 +124,7 @@ WEB3_STORAGE_EMAIL=you@example.com
 WEB3_STORAGE_SPACE_DID=did:key:...
 
 # OAuth (optional)
-LINKEDIN_CLIENT_ID=...
-LINKEDIN_CLIENT_SECRET=...
-LINKEDIN_REDIRECT_URI=http://localhost:4000/linkedin-callback
-X_CLIENT_ID=...
-X_CLIENT_SECRET=...
-X_REDIRECT_URI=http://localhost:4000/x-callback
-SHOPIFY_CLIENT_ID=...
-SHOPIFY_CLIENT_SECRET=...
-SHOPIFY_SHOP_NAME=yourshop
-```
+
 
 Place it where you launch the service (e.g., repo root or use a process manager that loads env).
 
