@@ -1235,7 +1235,7 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 			<Box component="form" onSubmit={(e) => { e.preventDefault(); runDiscover(); }}>
 				<Grid container spacing={2} alignItems="center">
 					<Grid item xs={12} md={9}>
-						<TextField fullWidth label="Discover agents" placeholder="Describe what you're looking for…" value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} size="small" />
+						<TextField fullWidth label="discover agents" placeholder="Describe what you're looking for…" value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} size="small" />
 					</Grid>
 					<Grid item xs={12} md={3}>
 						<Stack direction="row" spacing={1} sx={{ height: '100%' }}>

@@ -14,7 +14,7 @@ export default function Page() {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h5" fontWeight={600}>AI Agent Explorer - Agentic Ecosystem</Typography>
+          <Typography variant="h5" fontWeight={600}>Agentic AI - Agent Explorer</Typography>
           <Button variant="contained" onClick={isLoggedIn ? logout : login} disableElevation size="small">
             {isLoggedIn ? 'Disconnect' : 'Login'}
           </Button>
