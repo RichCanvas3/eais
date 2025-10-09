@@ -14,6 +14,7 @@ import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
 import { DidWebModal } from './DidWebModal';
 import { DidAgentModal } from './DidAgentModal';
+import { TrustGraphModal } from './TrustGraphModal';
 import { buildAgentCard } from '@/lib/agentCard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
@@ -370,6 +371,10 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 	const [didAgentOpen, setDidAgentOpen] = React.useState(false);
 	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
 	const [currentAgentEnsName, setCurrentAgentEnsName] = React.useState<string | null>(null);
+	
+	// Trust graph modal state
+	const [trustGraphOpen, setTrustGraphOpen] = React.useState(false);
+	const [currentAgentForGraph, setCurrentAgentForGraph] = React.useState<Agent | null>(null);
 
 	function scheduleAutoSave() {
 		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -1254,7 +1259,7 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 			</Paper>
 
 			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
-				<Table size="small" sx={{ minWidth: 600 }}>
+				<Table size="small" sx={{ minWidth: 1200 }}>
                     <TableHead>
 								<TableRow>
 								<TableCell>Account Address</TableCell>
@@ -1453,6 +1458,16 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
 													>
 														Card
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => {
+															setCurrentAgentForGraph(row);
+															setTrustGraphOpen(true);
+														}}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														Graph
 													</Button>
 													<Button 
 														size="small" 
@@ -1759,7 +1774,9 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 											if (obj?.registrations?.[0]?.signature) {
 												merged.registrations[0].signature = obj.registrations[0].signature;
 											}
-											const shortJson = JSON.stringify(merged, null, 2);
+											// Remove description field from display
+											const { description, ...mergedWithoutDesc } = merged;
+											const shortJson = JSON.stringify(mergedWithoutDesc, null, 2);
 											return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>{shortJson}</Box>;
 										} catch {
 											return <Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>{cardJson}</Box>;
@@ -2299,6 +2316,14 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 					agentDNSDomain: currentAgentEnsName ?? ''
 				}}
 				ensName={currentAgentEnsName}
+			/>
+
+			{/* Trust Graph Modal */}
+			<TrustGraphModal
+				open={trustGraphOpen}
+				onClose={() => setTrustGraphOpen(false)}
+				agentId={currentAgentForGraph?.agentId ?? ''}
+				agentName={currentAgentForGraph?.agentName ?? ''}
 			/>
 
 			<Stack direction="row" alignItems="center" justifyContent="space-between">
