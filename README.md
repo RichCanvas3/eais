@@ -1,4 +1,4 @@
-# Agentic EcoSystem - Agent Explorer
+# Agentic Trust Layer, for Ministry - Agent Explorer
 
 ![ERC-8004 Identity Overview](docs/images/ERC8004overview.png)
 ![ERC-8004 Reputation Overview](docs/images/FeedbackFlow.png)
