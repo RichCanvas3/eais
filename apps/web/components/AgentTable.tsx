@@ -46,6 +46,13 @@ export function AgentTable() {
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
 	const { provider, address: eoa } = useWeb3Auth();
 
+	// Discover state
+	const [discoverQuery, setDiscoverQuery] = React.useState("");
+	const [discoverLoading, setDiscoverLoading] = React.useState(false);
+	const [discoverError, setDiscoverError] = React.useState<string | null>(null);
+	const [discoverMatches, setDiscoverMatches] = React.useState<Set<string> | null>(null);
+	const [discoverTrustScores, setDiscoverTrustScores] = React.useState<Record<string, { score: number; reasoning?: string }>>({});
+
 	// Identity JSON modal state
 	const [identityJsonOpen, setIdentityJsonOpen] = React.useState(false);
 	const [identityJsonLoading, setIdentityJsonLoading] = React.useState(false);
@@ -632,6 +639,59 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 			fetchData(1, { name: "", address: "", agentId: "" });
 	}
 
+	async function runDiscover() {
+		try {
+			setDiscoverLoading(true);
+			setDiscoverError(null);
+			if (!data?.rows || data.rows.length === 0) {
+				setDiscoverMatches(new Set());
+				setDiscoverTrustScores({});
+				return;
+			}
+			const agents = data.rows.map((r) => ({
+				agentId: r.agentId,
+				agentName: r.agentName,
+				description: r.description ?? null,
+			}));
+			const res = await fetch('/api/discover', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ query: discoverQuery, agents }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({} as any));
+				throw new Error(err?.error || 'Discover request failed');
+			}
+			const json = await res.json();
+			const matches: any[] = Array.isArray(json?.matches) ? json.matches : [];
+			const ids = new Set<string>();
+			const scores: Record<string, { score: number; reasoning?: string }> = {};
+			matches.forEach((m) => {
+				const id = typeof m === 'string' ? m : m?.agentId;
+				if (id) {
+					ids.add(id);
+					scores[id] = {
+						score: typeof m === 'object' && typeof m.trustScore === 'number' ? m.trustScore : 50,
+						reasoning: typeof m === 'object' ? m.reasoning : undefined,
+					};
+				}
+			});
+			setDiscoverMatches(ids);
+			setDiscoverTrustScores(scores);
+		} catch (e: any) {
+			setDiscoverError(e?.message || 'Failed to run discover');
+		} finally {
+			setDiscoverLoading(false);
+		}
+	}
+
+	function clearDiscover() {
+		setDiscoverQuery("");
+		setDiscoverError(null);
+		setDiscoverMatches(null);
+		setDiscoverTrustScores({});
+	}
+
 
 	function getStoredCard(domain: string): string | null {
 		try { return localStorage.getItem(`agent_card:${domain.trim().toLowerCase()}`); } catch { return null; }
@@ -1163,8 +1223,33 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 								<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={isLoading} onClick={clearFilters}>Clear</Button>
 							</Stack>
 						</Grid>
+				</Grid>
+			</Box>
+
+			{/* Discover below search */}
+			<Box component="form" onSubmit={(e) => { e.preventDefault(); runDiscover(); }}>
+				<Grid container spacing={2} alignItems="center">
+					<Grid item xs={12} md={9}>
+						<TextField fullWidth label="Discover agents" placeholder="Describe what you're looking for…" value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} size="small" />
 					</Grid>
-				</Box>
+					<Grid item xs={12} md={3}>
+						<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
+							<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={discoverLoading || !discoverQuery.trim()}>{discoverLoading ? 'Discovering…' : 'Discover'}</Button>
+							<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={discoverLoading && !discoverMatches} onClick={clearDiscover}>Clear</Button>
+						</Stack>
+					</Grid>
+					{discoverError && (
+						<Grid item xs={12}>
+							<Typography variant="body2" color="error">{discoverError}</Typography>
+						</Grid>
+					)}
+					{discoverMatches && (
+						<Grid item xs={12}>
+							<Typography variant="caption" color="text.secondary">Showing {discoverMatches.size} discovered match(es)</Typography>
+						</Grid>
+					)}
+				</Grid>
+			</Box>
 				</Stack>
 			</Paper>
 
@@ -1176,29 +1261,43 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 								<TableCell>ENS Name</TableCell>
 								<TableCell>Identity ID</TableCell>
 								<TableCell>A2A</TableCell>
+								{discoverMatches && <TableCell>Trust Score</TableCell>}
 								<TableCell>Mine</TableCell>
 								{eoa && <TableCell></TableCell>}
 							</TableRow>
 						</TableHead>
 					<TableBody>
-						{!isLoading && (data?.rows?.filter((row) => {
-							const agentIdNum = parseInt(row.agentId);
-							return (!mineOnly || owned[row.agentId]);
-						}).length ?? 0) === 0 && (
+					{!isLoading && (data?.rows?.filter((row) => {
+						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+						return inDiscover && (!mineOnly || owned[row.agentId]);
+					}).length ?? 0) === 0 && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 6 : 5} align="center">
+								<TableCell colSpan={eoa ? (discoverMatches ? 7 : 6) : (discoverMatches ? 6 : 5)} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
 							<TableRow>
-								<TableCell colSpan={eoa ? 6 : 5} align="center">
+								<TableCell colSpan={eoa ? (discoverMatches ? 7 : 6) : (discoverMatches ? 6 : 5)} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
 						)}
-						{data?.rows?.filter((row) => (!mineOnly || owned[row.agentId]))?.map((row) => (
+					{data?.rows?.filter((row) => {
+						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+						return inDiscover && (!mineOnly || owned[row.agentId]);
+					}).sort((a, b) => {
+						// Sort by trust score if discover is active (highest first)
+						if (discoverMatches && discoverTrustScores[a.agentId] && discoverTrustScores[b.agentId]) {
+							return discoverTrustScores[b.agentId].score - discoverTrustScores[a.agentId].score;
+						}
+						// If only one has a score, prioritize it
+						if (discoverMatches && discoverTrustScores[a.agentId]) return -1;
+						if (discoverMatches && discoverTrustScores[b.agentId]) return 1;
+						// Default: maintain original order
+						return 0;
+					})?.map((row) => (
 									<TableRow key={row.agentId} hover>
 										<TableCell>
 											<Stack direction="row" spacing={0.25} alignItems="center">
@@ -1407,6 +1506,23 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 									<Typography variant="body2" color="text.secondary">—</Typography>
 								)}
 							</TableCell>
+
+							{discoverMatches && (
+								<TableCell>
+									{discoverTrustScores[row.agentId] ? (
+										<Tooltip title={discoverTrustScores[row.agentId].reasoning || 'Trust score based on feedback and relationships'} arrow>
+											<Chip 
+												label={`${discoverTrustScores[row.agentId].score}/100`}
+												size="small"
+												color={discoverTrustScores[row.agentId].score >= 70 ? 'success' : discoverTrustScores[row.agentId].score >= 40 ? 'warning' : 'error'}
+												sx={{ fontWeight: 600 }}
+											/>
+										</Tooltip>
+									) : (
+										<Typography variant="body2" color="text.secondary">—</Typography>
+									)}
+								</TableCell>
+							)}
 
 								<TableCell>
 									{owned[row.agentId] ? <Chip label="Mine" color="primary" size="small" /> : null}
