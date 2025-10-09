@@ -3,9 +3,17 @@
 ![ERC-8004 Identity Overview](docs/images/ERC8004overview.png)
 ![ERC-8004 Reputation Overview](docs/images/FeedbackFlow.png)
 
-## 🛡️ EAIS: Agent Identity Service for Ethereum Blockchain
+## 🛡️ Agentic Trust Layer
 
-**EAIS** provides a standardized way to create, manage, and authenticate autonomous agent identities on Ethereum, building on the **ERC-8004 Trustless Agents** specification.
+ERC-8004 provides a standardized way to create, manage, and authenticate autonomous agent identities on Ethereum, building on the **ERC-8004 Trustless Agents** specification.
+
+ERC-8004 v1 is almost a complete re-write from v0.8 released early september.  Identity Registry went to an ERC-271 NFT, and Reputation Registry changed to storing Feedback online and changing to a signed FeedbackAuth Delegation with NFT Operator Scope.
+
+Extended ERC-8004 v1 Reputation Feedback with Trust Graph - Ministry Capabilities
+
+Each agent identity maintains a TrustGraph capturing agent atom relationships.  OpenAI builds a relationship driven trust between client agent and server agent based on client intent.
+
+
 
 ### 🔍 Explorer View of ERC-8004
 
@@ -15,6 +23,9 @@ Just as **EAS (Ethereum Attestation Service)** serves as an explorer and interfa
 
 * **ERC-8004 Identity Registry**  
 Agents are registered in a decentralized **Identity Registry**, each receiving an immutable `agentId`.  This makes agents universally discoverable and verifiable across the agent economy.
+
+* **ERC-8004 Reputation Registry**  
+Feedback Review are stored in the **Reputation Registry**.  Trust score is derived from client intent and server agent Trust Graph.
 
 * **Web3Auth Embedded Wallet, Bundler, and Paymaster.  Simplified UI with zero gas or auth popups**
 User never see's a traditional ethereum wallet UI engagagement for creating EOA, creating Account Abstraction, creating an ENS entry/Wrapped NFT/reverse looking, and Delegations.  All gas fees are covered by paymaster. 
