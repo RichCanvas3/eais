@@ -5,6 +5,8 @@ import { createBundlerClient, createPaymasterClient } from 'viem/account-abstrac
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { encodeNonce } from 'permissionless/utils';
 
+import { BlockchainAdapter, ERC8004Client, EthersAdapter } from '../../erc8004-src';
+
 export type AgentInfo = {
   agentId: bigint;
   agentDomain: string;
@@ -417,6 +419,8 @@ export async function sendSponsoredUserOperation(params: {
 }
 
 export async function ensureIdentityWithAA(params: {
+  erc8004Client: ERC8004Client,
+  adapter: any,
   publicClient: PublicClient,
   bundlerUrl: string,
   chain: Chain,
@@ -434,6 +438,18 @@ export async function ensureIdentityWithAA(params: {
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
   const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
+  const result = await params.erc8004Client.identity.registerWithMetadata(
+    tokenUri ?? '',
+    [
+      { key: 'agentName', value: params.name },
+      { key: 'agentAccount', value: agentAddress }
+    ]
+  );
+
+  const tokenId = result.agentId;
+  console.info("............tokenId from ERC8004Client: ", tokenId);
+
+  /*
   // Register via AA so the Identity owner is the AA (msg.sender)
   console.info('********************* register via AA (sponsored)');
   const initialMetadata: { key: string; value: string }[] = [
@@ -458,8 +474,9 @@ export async function ensureIdentityWithAA(params: {
   console.info("............logs: ", logs)
   const tokenId = logs[0]?.args.tokenId as bigint;
   console.info("............tokenId: ", tokenId)
+  */
 
- return tokenId;
+  return tokenId;
 }
 
 

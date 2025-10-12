@@ -4,7 +4,6 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, S
 import { useWeb3Auth } from './Web3AuthProvider';
 import { createAgentAdapter, ensureIdentityWithAA } from '@/lib/agentAdapter';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
-import PublicResolverABI from '../abis/PublicResolver.json';
 import { identityRegistryAbi as registryAbi } from '@/lib/abi/identityRegistry';
 import { sepolia } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
@@ -14,7 +13,13 @@ import ensService from '@/service/ensService';
 import IdentityService from '@/service/identityService';
 
 
-import { privateKeyToAccount } from 'viem/accounts';
+import { ethers } from 'ethers';
+import { BlockchainAdapter, ERC8004Client, EthersAdapter } from '../../erc8004-src';
+
+
+
+
+import { privateKeyToAccount } from 'viem/accounts';  
 
 
 type Props = {
@@ -739,8 +744,28 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         account: ownerAccount,
       });
 
+      const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
+      const agentOwner = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
+      const agentAdapter = new EthersAdapter(ethersProvider, agentOwner);
+
+      const IDENTITY_REGISTRY = '0x7177a6867296406881E20d6647232314736Dd09A';
+      const REPUTATION_REGISTRY = '0xB5048e3ef1DA4E04deB6f7d0423D06F63869e322';
+      const VALIDATION_REGISTRY = '0x662b40A526cb4017d947e71eAF6753BF3eeE66d8';
+
+      const erc8004Client = new ERC8004Client({
+        adapter: agentAdapter,
+        addresses: {
+          identityRegistry: IDENTITY_REGISTRY,
+          reputationRegistry: REPUTATION_REGISTRY,
+          validationRegistry: VALIDATION_REGISTRY,
+          chainId: sepolia.id,
+        },
+      });
+
       console.info('********************* identityRegistryOwnerWallet: ', identityRegistryOwnerWallet);
       const agentIdNum = await ensureIdentityWithAA({
+        erc8004Client,
+        adapter: agentAdapter,
         publicClient,
         bundlerUrl: BUNDLER_URL,
         chain: sepolia,
