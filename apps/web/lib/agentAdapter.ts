@@ -1,11 +1,12 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
 import { stringToHex, keccak256 } from "viem";
-import { identityRegistryAbi as registryAbi } from "@/lib/abi/identityRegistry";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { encodeNonce } from 'permissionless/utils';
-
 import { BlockchainAdapter, ERC8004Client, EthersAdapter } from '../../erc8004-src';
+import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
+
+const registryAbi = IdentityRegistryABI as any;
 
 export type AgentInfo = {
   agentId: bigint;
@@ -140,183 +141,7 @@ export function createAgentAdapter(config: AgentAdapterConfig) {
     registerByDomainWithProvider,
   };
 }
-/*
-// -------------------- AA helpers for Identity Registration (per user spec) --------------------
 
-const identityRegistryAbi = [
-  // --- ERC721 Standard Events ---
-  {
-    type: "event",
-    name: "Transfer",
-    inputs: [
-      { name: "from", type: "address", indexed: true },
-      { name: "to", type: "address", indexed: true },
-      { name: "tokenId", type: "uint256", indexed: true }
-    ],
-    anonymous: false
-  },
-  {
-    type: "event",
-    name: "Approval",
-    inputs: [
-      { name: "owner", type: "address", indexed: true },
-      { name: "approved", type: "address", indexed: true },
-      { name: "tokenId", type: "uint256", indexed: true }
-    ],
-    anonymous: false
-  },
-  {
-    type: "event",
-    name: "ApprovalForAll",
-    inputs: [
-      { name: "owner", type: "address", indexed: true },
-      { name: "operator", type: "address", indexed: true },
-      { name: "approved", type: "bool", indexed: false }
-    ],
-    anonymous: false
-  },
-
-  // --- IdentityRegistry custom events ---
-  {
-    type: "event",
-    name: "MetadataSet",
-    inputs: [
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "key", type: "bytes32", indexed: true },
-      { name: "value", type: "bytes", indexed: false }
-    ],
-    anonymous: false
-  },
-  {
-    type: "event",
-    name: "MetadataDeleted",
-    inputs: [
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "key", type: "bytes32", indexed: true }
-    ],
-    anonymous: false
-  },
-
-  // --- ERC165 ---
-  {
-    type: "function",
-    name: "supportsInterface",
-    stateMutability: "view",
-    inputs: [{ name: "interfaceId", type: "bytes4" }],
-    outputs: [{ name: "", type: "bool" }]
-  },
-
-  // --- ERC721 Metadata ---
-  { type: "function", name: "name", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
-  { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
-  {
-    type: "function",
-    name: "tokenURI",
-    stateMutability: "view",
-    inputs: [{ name: "tokenId", type: "uint256" }],
-    outputs: [{ type: "string" }]
-  },
-
-  // --- ERC721 Core ---
-  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "ownerOf", stateMutability: "view", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ type: "address" }] },
-  { type: "function", name: "getApproved", stateMutability: "view", inputs: [{ name: "tokenId", type: "uint256" }], outputs: [{ type: "address" }] },
-  { type: "function", name: "isApprovedForAll", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "operator", type: "address" }], outputs: [{ type: "bool" }] },
-  { type: "function", name: "approve", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }, { name: "tokenId", type: "uint256" }], outputs: [] },
-  { type: "function", name: "setApprovalForAll", stateMutability: "nonpayable", inputs: [{ name: "operator", type: "address" }, { name: "approved", type: "bool" }], outputs: [] },
-  { type: "function", name: "transferFrom", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }], outputs: [] },
-  { type: "function", name: "safeTransferFrom", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }], outputs: [] },
-  { type: "function", name: "safeTransferFrom", stateMutability: "nonpayable", inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }, { name: "data", type: "bytes" }], outputs: [] },
-
-  // --- IdentityRegistry helpers ---
-  {
-    type: "function",
-    name: "registryChainId",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint64" }]
-  },
-  {
-    type: "function",
-    name: "identityRegistryAddress",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address" }]
-  },
-  {
-    type: "function",
-    name: "exists",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ name: "", type: "bool" }]
-  },
-
-  // --- Admin minting ---
-  {
-    type: "function",
-    name: "mint",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "to", type: "address" }],
-    outputs: [{ name: "agentId", type: "uint256" }]
-  },
-  {
-    type: "function",
-    name: "mintWithURI",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "to", type: "address" }, { name: "uri", type: "string" }],
-    outputs: [{ name: "agentId", type: "uint256" }]
-  },
-  {
-    type: "function",
-    name: "setNextId",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "nextId_", type: "uint256" }],
-    outputs: []
-  },
-
-  // --- Controller/operator actions ---
-  {
-    type: "function",
-    name: "setTokenURI",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "agentId", type: "uint256" }, { name: "uri", type: "string" }],
-    outputs: []
-  },
-
-  // --- On-chain metadata ---
-  {
-    type: "function",
-    name: "setMetadata",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "key", type: "bytes32" },
-      { name: "value", type: "bytes" }
-    ],
-    outputs: []
-  },
-  {
-    type: "function",
-    name: "deleteMetadata",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "key", type: "bytes32" }
-    ],
-    outputs: []
-  },
-  {
-    type: "function",
-    name: "getMetadata",
-    stateMutability: "view",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "key", type: "bytes32" }
-    ],
-    outputs: [{ name: "", type: "bytes" }]
-  }
-] as const;
-*/
 export function encodeMintAgent(params: { to: `0x${string}`; uri?: string | null }): `0x${string}` {
   const { to, uri } = params;
   if (uri && uri.trim() !== '') {
@@ -408,13 +233,19 @@ export async function sendSponsoredUserOperation(params: {
   calls: { to: `0x${string}`; data?: `0x${string}`; value?: bigint }[],
 }): Promise<`0x${string}`> {
   const { bundlerUrl, chain, account, calls } = params;
-  const key1 = BigInt(Date.now());
-  const nonce1 = encodeNonce({ key: key1, sequence: 0n });
-  const paymasterClient = createPaymasterClient({ transport: http(bundlerUrl) } as any);
   const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) } as any);
-  const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: paymasterClient as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
+  const bundlerClient = createBundlerClient({ 
+    transport: http(bundlerUrl), 
+    paymaster: true as any,
+    chain: chain as any, 
+    paymasterContext: { mode: 'SPONSORED' } 
+  } as any);
   const { fast: fee } = await (pimlicoClient as any).getUserOperationGasPrice();
-  const userOpHash = await (bundlerClient as any).sendUserOperation({ account, calls, nonce: nonce1 as any, paymaster: paymasterClient as any, ...fee });
+  const userOpHash = await (bundlerClient as any).sendUserOperation({ 
+    account, 
+    calls,
+    ...fee 
+  });
   return userOpHash as `0x${string}`;
 }
 
@@ -438,29 +269,17 @@ export async function ensureIdentityWithAA(params: {
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
   const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
-  const result = await params.erc8004Client.identity.registerWithMetadata(
+  // Use ERC8004Client to encode calldata (like EAS SDK pattern), then send via bundler
+  console.info('********************* encode register calldata via ERC8004Client');
+  const dataRegister = params.erc8004Client.identity.encodeRegisterWithMetadata(
     tokenUri ?? '',
     [
       { key: 'agentName', value: params.name },
       { key: 'agentAccount', value: agentAddress }
     ]
-  );
+  ) as `0x${string}`;
 
-  const tokenId = result.agentId;
-  console.info("............tokenId from ERC8004Client: ", tokenId);
-
-  /*
-  // Register via AA so the Identity owner is the AA (msg.sender)
-  console.info('********************* register via AA (sponsored)');
-  const initialMetadata: { key: string; value: string }[] = [
-    { key: 'agentName', value: params.name },
-    { key: 'agentAccount', value: agentAddress as `0x${string}` },
-  ];
-  const dataRegister = encodeFunctionData({
-    abi: registryAbi as any,
-    functionName: 'register' as any,
-    args: [tokenUri ?? '', initialMetadata],
-  });
+  console.info('********************* send via bundler (sponsored)');
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
     chain,
@@ -470,11 +289,10 @@ export async function ensureIdentityWithAA(params: {
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
   console.info("............receipt: ", aaReceipt)
-  const logs = parseEventLogs({ abi: registryAbi, eventName: 'Transfer', logs: aaReceipt.logs });
-  console.info("............logs: ", logs)
-  const tokenId = logs[0]?.args.tokenId as bigint;
+  
+  // Use ERC8004Client to extract agentId from receipt
+  const tokenId = params.erc8004Client.identity.extractAgentIdFromLogs(aaReceipt);
   console.info("............tokenId: ", tokenId)
-  */
 
   return tokenId;
 }

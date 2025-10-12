@@ -93,4 +93,13 @@ export class EthersAdapter implements BlockchainAdapter {
 
     throw new Error('Signer does not support EIP-712 typed data signing');
   }
+
+  encodeCall(
+    abi: any[],
+    functionName: string,
+    args: any[]
+  ): string {
+    const iface = new ethers.Interface(abi);
+    return iface.encodeFunctionData(functionName, args);
+  }
 }

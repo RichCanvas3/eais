@@ -60,6 +60,37 @@ export class IdentityClient {
   }
 
   /**
+   * Encode register calldata without sending (for bundler/AA - like EAS SDK pattern)
+   * @param tokenURI - URI pointing to agent registration file
+   * @param metadata - OPTIONAL on-chain metadata entries
+   * @returns Encoded calldata as hex string
+   */
+  encodeRegisterWithMetadata(
+    tokenURI: string,
+    metadata: MetadataEntry[] = []
+  ): string {
+    const metadataFormatted = metadata.map(m => ({
+      key: m.key,
+      value: this.stringToBytes(m.value)
+    }));
+
+    return this.adapter.encodeCall(
+      IdentityRegistryABI,
+      'register(string,(string,bytes)[])',
+      [tokenURI, metadataFormatted]
+    );
+  }
+
+  /**
+   * Extract agentId from transaction receipt (for bundler/custom tx flows)
+   * @param receipt - Transaction receipt with logs
+   * @returns The newly created agentId
+   */
+  extractAgentIdFromLogs(receipt: any): bigint {
+    return this.extractAgentIdFromReceipt(receipt);
+  }
+
+  /**
    * Register a new agent with URI and optional on-chain metadata
    * Spec: function register(string tokenURI, MetadataEntry[] calldata metadata) returns (uint256 agentId)
    * @param tokenURI - URI pointing to agent registration file
@@ -198,7 +229,7 @@ export class IdentityClient {
 
   /**
    * Helper: Extract agentId from transaction receipt
-   * Looks for the Registered event which contains the agentId
+   * Looks for the Registered event or Transfer event (ERC721 mint)
    */
   private extractAgentIdFromReceipt(result: any): bigint {
     // Look for Registered event in parsed events
@@ -207,9 +238,36 @@ export class IdentityClient {
       if (registeredEvent && registeredEvent.args) {
         return BigInt(registeredEvent.args.agentId || registeredEvent.args[0]);
       }
+      
+      // Fallback: Look for Transfer event (ERC721 mint from zero address)
+      const transferEvent = result.events.find((e: any) => 
+        e.name === 'Transfer' && 
+        (e.args.from === '0x0000000000000000000000000000000000000000' || 
+         e.args.from === 0 || 
+         e.args.from === 0n)
+      );
+      if (transferEvent && transferEvent.args) {
+        return BigInt(transferEvent.args.tokenId || transferEvent.args[2]);
+      }
+    }
+    
+    // Also check raw logs array if events array not available
+    if (result.logs && Array.isArray(result.logs)) {
+      // Try to find Transfer event from logs
+      for (const log of result.logs) {
+        // Transfer event signature: Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
+        if (log.topics && log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef') {
+          const from = log.topics[1];
+          // Check if from is zero address (mint)
+          if (from === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+            const tokenId = BigInt(log.topics[3] || log.data);
+            return tokenId;
+          }
+        }
+      }
     }
 
-    throw new Error('Could not extract agentId from transaction receipt - Registered event not found');
+    throw new Error('Could not extract agentId from transaction receipt - Registered or Transfer event not found');
   }
 
   /**

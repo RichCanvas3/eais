@@ -4,11 +4,9 @@ import { getAddress } from 'viem';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
-import { identityRegistryAbi as registryAbi } from '@/lib/abi/identityRegistry';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
-import { reputationRegistryAbi } from '@/lib/abi/reputationRegistry';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
@@ -23,6 +21,11 @@ import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import WebIcon from '@mui/icons-material/Web';
 import ensService from '@/service/ensService';
 import IdentityService from '@/service/identityService';
+import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
+import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
+
+const registryAbi = IdentityRegistryABI as any;
+const reputationRegistryAbi = ReputationRegistryABI as any;
 
 export type Agent = {
 	agentId: string;

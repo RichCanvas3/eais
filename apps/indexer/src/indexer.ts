@@ -1,13 +1,37 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
-import { identityRegistryAbi } from "./abi/identityRegistry";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { IDENTITY_REGISTRY, RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL } from "./env";
+import { RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL } from "./env";
+import { ethers } from 'ethers';
+import { ERC8004Client } from '../../erc8004-src';
+import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
+import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 
-// ---- client ----
+const identityRegistryAbi = IdentityRegistryABI as any;
+
+// ---- clients ----
 const transport = RPC_WS_URL ? webSocket(RPC_WS_URL) : http(RPC_HTTP_URL);
 const client = createPublicClient({ transport });
-const address = IDENTITY_REGISTRY as Address;
-console.info("............IDENTITY_REGISTRY: ", address)
+//const address = IDENTITY_REGISTRY as Address;
+//console.info("............IDENTITY_REGISTRY: ", address)
+//const address = IDENTITY_REGISTRY as Address;
+//console.info("............IDENTITY_REGISTRY: ", address)
+
+const IDENTITY_REGISTRY = '0xf8fFC3E3F5F1A614EEA52566f3aa3d41d369D0bB'
+
+// ERC8004Client for standardized interactions (read-only for indexer)
+const ethersProvider = new ethers.JsonRpcProvider(RPC_HTTP_URL);
+const ethersAdapter = new EthersAdapter(ethersProvider); // No signer needed for reads
+
+console.info("********************* IDENTITY_REGISTRY: ", IDENTITY_REGISTRY);
+const erc8004Client = new ERC8004Client({
+  adapter: ethersAdapter,
+  addresses: {
+    identityRegistry: IDENTITY_REGISTRY,
+    reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
+    validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
+    chainId: 11155111, // Sepolia
+  }
+});
 
 // ---- helpers ----
 function toDecString(x: bigint | number | string) {
@@ -16,7 +40,7 @@ function toDecString(x: bigint | number | string) {
 
 async function tryReadTokenURI(tokenId: bigint): Promise<string | null> {
   try {
-    const uri = await client.readContract({ address, abi: identityRegistryAbi, functionName: "tokenURI", args: [tokenId] }) as string;
+    const uri = await erc8004Client.identity.getTokenURI(tokenId);
     return uri ?? null;
   } catch {
     return null;
@@ -189,14 +213,14 @@ async function backfill() {
     const end = start + (CHUNK - 1n) > to ? to : start + (CHUNK - 1n);
 
     const logs = await client.getLogs({
-      address,
+      address: IDENTITY_REGISTRY as `0x${string}`,
       fromBlock: start,
       toBlock: end,
     });
 
     for (const log of logs) {
       try {
-        const decoded = decodeEventLog({ abi: identityRegistryAbi, data: log.data, topics: log.topics });
+        const decoded = decodeEventLog({ abi: identityRegistryAbi, data: log.data, topics: log.topics }) as any;
         switch (decoded.eventName) {
           case 'Transfer': {
             const { from, to, tokenId } = decoded.args as any;
@@ -237,7 +261,9 @@ async function backfillByIds() {
   // Optional ID-based backfill for sequential tokenIds starting at 1
   async function idExists(id: bigint): Promise<boolean> {
     try {
-      return await client.readContract({ address, abi: identityRegistryAbi, functionName: 'exists', args: [id] }) as boolean;
+      // Use ownerOf - if it doesn't throw, the token exists
+      await erc8004Client.identity.getOwner(id);
+      return true;
     } catch {
       return false;
     }
@@ -269,7 +295,7 @@ async function backfillByIds() {
   console.log(`ID backfill: scanning 1 → ${max}`);
   for (let id = 1n; id <= max; id++) {
     try {
-      const owner = await client.readContract({ address, abi: identityRegistryAbi, functionName: 'ownerOf', args: [id] }) as string;
+      const owner = await erc8004Client.identity.getOwner(id);
       const uri = await tryReadTokenURI(id);
       console.info("............uri: ", uri)
       await upsertFromTransfer(owner, id, 0n, uri);
@@ -281,30 +307,30 @@ async function backfillByIds() {
 
 function watch() {
   const unsubs = [
-    client.watchContractEvent({ address, abi: identityRegistryAbi, eventName: 'Transfer', onLogs: async (logs) => {
+    client.watchContractEvent({ address: IDENTITY_REGISTRY as `0x${string}`, abi: identityRegistryAbi, eventName: 'Transfer', onLogs: async (logs) => {
       for (const log of logs) {
-        const { from, to, tokenId } = log.args as any;
+        const { from, to, tokenId } = (log as any).args;
         const uri = await tryReadTokenURI(tokenId as bigint);
         await upsertFromTransfer(to as string, tokenId as bigint, log.blockNumber!, uri);
         recordEvent(log, 'Transfer', { from, to, tokenId: toDecString(tokenId) });
         setCheckpoint(log.blockNumber!);
       }
     }}),
-    client.watchContractEvent({ address, abi: identityRegistryAbi, eventName: 'Approval', onLogs: (logs) => {
+    client.watchContractEvent({ address: IDENTITY_REGISTRY as `0x${string}`, abi: identityRegistryAbi, eventName: 'Approval', onLogs: (logs) => {
       for (const log of logs) {
-        recordEvent(log, 'Approval', { ...(log.args as any), tokenId: toDecString((log.args as any).tokenId) });
+        recordEvent(log, 'Approval', { ...((log as any).args), tokenId: toDecString(((log as any).args).tokenId) });
         setCheckpoint(log.blockNumber!);
       }
     }}),
-    client.watchContractEvent({ address, abi: identityRegistryAbi, eventName: 'ApprovalForAll', onLogs: (logs) => {
+    client.watchContractEvent({ address: IDENTITY_REGISTRY as `0x${string}`, abi: identityRegistryAbi, eventName: 'ApprovalForAll', onLogs: (logs) => {
       for (const log of logs) {
-        recordEvent(log, 'ApprovalForAll', log.args);
+        recordEvent(log, 'ApprovalForAll', (log as any).args);
         setCheckpoint(log.blockNumber!);
       }
     }}),
-    client.watchContractEvent({ address, abi: identityRegistryAbi, eventName: 'MetadataSet', onLogs: (logs) => {
+    client.watchContractEvent({ address: IDENTITY_REGISTRY as `0x${string}`, abi: identityRegistryAbi, eventName: 'MetadataSet', onLogs: (logs) => {
       for (const log of logs) {
-        recordEvent(log, 'MetadataSet', { ...(log.args as any), agentId: toDecString((log.args as any).agentId) });
+        recordEvent(log, 'MetadataSet', { ...((log as any).args), agentId: toDecString(((log as any).args).agentId) });
         setCheckpoint(log.blockNumber!);
       }
     }}),
