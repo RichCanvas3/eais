@@ -268,43 +268,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
     return { agentId, ensName, agentAccount };
   }
 
-  async getresolver(ensName: string) : Promise<`0x${string}` | null>  {
-    //const ensName = "testc1.orgtrust.eth";
-    console.info(".................ensName: ", ensName);
-    const node = namehash(ensName);
-    if (this.publicClient) {
-      const resolver = await this.publicClient.readContract({
-        address: this.ensRegistryAddress,
-        abi: [{ name: "resolver", stateMutability: "view", type: "function",
-                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
-        functionName: "resolver",
-        args: [node],
-      });
-      console.info(".................resolver 1: ", resolver);
-
-      const owner = await this.publicClient.readContract({
-        address: this.ensRegistryAddress,
-        abi: [{ name: "owner", stateMutability: "view", type: "function",
-                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
-        functionName: "owner",
-        args: [node],
-      });
-      console.log("........... owner 1:", owner);
-
-
-      const tokenId = BigInt(node);
-      const actualOwner = await this.publicClient.readContract({
-          address: ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
-          abi: NameWrapperABI.abi,
-          functionName: 'ownerOf',
-          args: [tokenId]
-        }) as `0x${string}`;
-      console.log("........... actual owner 1:", actualOwner);
-
-      return resolver;
-    }
-    return null;
-  }
 
   /**
    * Resolve account address for an ENS name via resolver.addr(namehash(name)).
@@ -542,9 +505,9 @@ export class AgentIdentityClient extends BaseIdentityClient {
     const parent = clean(params.orgName);
     const label = clean(params.agentName).replace(/\s+/g, '-');
     const childDomain = `${label}.${parent}`;
-    console.info(">>>>>>>>>>>>>>>>>> childDomain: ", childDomain);
-
-    const childNode = namehash(childDomain + ".eth");
+    
+    const ensFullName = childDomain + ".eth";
+    const childNode = namehash(ensFullName);
 
     // 1) Create subdomain owned by agentAddress and set resolver
 
@@ -590,38 +553,7 @@ export class AgentIdentityClient extends BaseIdentityClient {
       }
 
 
-    }
 
- 
-
-    return { calls };
-  }
-
-
-  async encodeSetAgentNameReverseLookup(params: {
-    orgName: string;            // e.g., 'airbnb.eth'
-    agentName: string;                   // e.g., 'my-agent'
-    agentAddress: `0x${string}`;     // AA address for the agent name
-  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[]   }> {
-
-
-    const clean = (s: string) => (s || '').trim().toLowerCase();
-    const parent = clean(params.orgName);
-    const label = clean(params.agentName).replace(/\s+/g, '-');
-    const childDomain = `${label}.${parent}`;
-    const ensFullName = childDomain + ".eth";
-    console.info(">>>>>>>>>>>>>>>>>> ensFullName: ", ensFullName);
-
-    //const childNode = namehash(childDomain + ".eth");
-
-    // 1) Create subdomain owned by agentAddress and set resolver
-
-    
-    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
-
-    console.info(".................publicClient: ", this.publicClient);
-    console.info(".................ensRegistryAddress: ", this.ensRegistryAddress);
-    if (this.publicClient) {
 
 
       const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
@@ -677,13 +609,15 @@ export class AgentIdentityClient extends BaseIdentityClient {
       calls.push(call);
 
 
-
     }
 
  
 
     return { calls };
   }
+
+
+
 
 
   /**

@@ -23,6 +23,7 @@ import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk/AgentIdentityClient';
 import { EthersAdapter } from '../../erc8004-src';
 import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
+import { useAgentIdentityClient } from './AgentIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
@@ -74,7 +75,8 @@ export function AgentTable() {
 	const [infoLoading, setInfoLoading] = React.useState(false);
 	const [infoError, setInfoError] = React.useState<string | null>(null);
 	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
-
+	
+	const agentIdentityClient = useAgentIdentityClient();
 
 	async function openIdentityJson(row: Agent) {
 		try {
@@ -120,10 +122,25 @@ export function AgentTable() {
 			let name: string | null = null;
 			let account: string | null = null;
 			try {
+				console.info(".................openAgentInfo: ");
 				const identityClient = identityClientRef.current;
 				if (identityClient) {
 					name = await identityClient.getAgentName(agentIdNum);
 					account = await identityClient.getAgentAccount(agentIdNum);
+					console.info(".................name by agent id: ", name);
+					console.info(".................account by agent id: ", account);
+
+					if (name) {
+						const acc = await identityClient.getAgentAccountByName(name);
+						console.info(".................get account by name: ", acc);
+					}
+					
+					if (account) {
+						const nm = await identityClient.getAgentNameByAccount(account as `0x${string}`);
+						console.info(".................get name by account: ", nm);
+					}
+
+					
 				}
 			} catch {}
 			if (!name || !account) {
@@ -614,11 +631,7 @@ const [metadataNames, setMetadataNames] = React.useState<Record<string, string |
                 const { ethers } = await import('ethers');
                 const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL as string);
                 const adapter = new EthersAdapter(provider);
-                identityClientRef.current = new AgentIdentityClient(
-                    adapter as any,
-                    process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as string,
-                    { ensRegistry: (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' }
-                );
+                identityClientRef.current = agentIdentityClient;
             } catch {}
         })();
         async function computeOwnership() {

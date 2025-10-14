@@ -309,6 +309,7 @@ export async function addAgentNameToOrg(params: {
   const { receipt: agentReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash2 });
   console.info("agentReceipt: ", agentReceipt);
 
+  /*
 
   const { calls: agentReverseCalls } = await agentIdentityClient.encodeSetAgentNameReverseLookup({
     orgName,
@@ -328,6 +329,7 @@ export async function addAgentNameToOrg(params: {
   console.info("userOpHash3: ", userOpHash3);
   const { receipt: agentReverseReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash3 });
   console.info("agentReceipt: ", agentReverseReceipt);
+  */
 
   
 

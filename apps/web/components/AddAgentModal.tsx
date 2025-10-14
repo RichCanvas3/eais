@@ -158,10 +158,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setEnsPreview(full);
       let cancelled = false;
       (async () => {
-        console.info(".................label: ", label);
-        console.info(".................base: ", base);
-        const resolver = await agentIdentityClient.getresolver(full);
-        console.info(".................resolver 3: ", resolver);
 
         try {
           setEnsResolving(true);
