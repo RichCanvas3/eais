@@ -8,8 +8,8 @@ import { MetadataEntry, AgentRegistrationFile } from './types';
 import IdentityRegistryABI from './abis/IdentityRegistry.json';
 
 export class IdentityClient {
-  private adapter: BlockchainAdapter;
-  private contractAddress: string;
+  protected adapter: BlockchainAdapter;
+  protected contractAddress: string;
 
   constructor(adapter: BlockchainAdapter, contractAddress: string) {
     this.adapter = adapter;
@@ -59,27 +59,7 @@ export class IdentityClient {
     };
   }
 
-  /**
-   * Encode register calldata without sending (for bundler/AA - like EAS SDK pattern)
-   * @param tokenURI - URI pointing to agent registration file
-   * @param metadata - OPTIONAL on-chain metadata entries
-   * @returns Encoded calldata as hex string
-   */
-  encodeRegisterWithMetadata(
-    tokenURI: string,
-    metadata: MetadataEntry[] = []
-  ): string {
-    const metadataFormatted = metadata.map(m => ({
-      key: m.key,
-      value: this.stringToBytes(m.value)
-    }));
-
-    return this.adapter.encodeCall(
-      IdentityRegistryABI,
-      'register(string,(string,bytes)[])',
-      [tokenURI, metadataFormatted]
-    );
-  }
+  // encodeRegisterWithMetadata moved to agentic-trust SDK
 
   /**
    * Extract agentId from transaction receipt (for bundler/custom tx flows)
@@ -231,7 +211,7 @@ export class IdentityClient {
    * Helper: Extract agentId from transaction receipt
    * Looks for the Registered event or Transfer event (ERC721 mint)
    */
-  private extractAgentIdFromReceipt(result: any): bigint {
+  protected extractAgentIdFromReceipt(result: any): bigint {
     // Look for Registered event in parsed events
     if (result.events) {
       const registeredEvent = result.events.find((e: any) => e.name === 'Registered');

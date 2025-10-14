@@ -86,33 +86,8 @@ class IpfsService {
     return await httpJson(`/api/web3storage/status`);
   }
 
-  // Get agent by EVM address from backend DB
-  static async getAgentByAddress(address: string): Promise<any | null> {
-    try {
-      const base = getApiBaseUrl();
-      const url = `${base}/api/agents/by-address/${address}`;
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) return null;
-      const out = await res.json();
-      return out?.agent ?? null;
-    } catch {
-      return null;
-    }
-  }
 
-  // Get agent by name (ENS-like or metadata name) from backend DB
-  static async getAgentByName(name: string): Promise<any | null> {
-    try {
-      const base = getApiBaseUrl();
-      const url = `${base}/api/agents/by-name/${encodeURIComponent(name)}`;
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) return null;
-      const out = await res.json();
-      return out?.agent ?? null;
-    } catch {
-      return null;
-    }
-  }
+
 }
 
 export default IpfsService;

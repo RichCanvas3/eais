@@ -18,10 +18,10 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
-import WebIcon from '@mui/icons-material/Web';
 import ensService from '@/service/ensService';
-import IdentityService from '@/service/identityService';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
+import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk/AgentIdentityClient';
+import { EthersAdapter } from '../../erc8004-src';
 import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
 
 const registryAbi = IdentityRegistryABI as any;
@@ -75,19 +75,6 @@ export function AgentTable() {
 	const [infoError, setInfoError] = React.useState<string | null>(null);
 	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
 
-	function extractCidFromUri(tokenUri?: string | null): string | null {
-		try {
-			if (!tokenUri) return null;
-			if (tokenUri.startsWith('ipfs://')) {
-				const rest = tokenUri.slice('ipfs://'.length);
-				const cid = rest.split('/')[0]?.trim();
-				return cid || null;
-			}
-			const m = tokenUri.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
-			if (m && m[1]) return m[1];
-		} catch {}
-		return null;
-	}
 
 	async function openIdentityJson(row: Agent) {
 		try {
@@ -95,12 +82,23 @@ export function AgentTable() {
 			setIdentityJsonLoading(true);
 			setIdentityJsonError(null);
 			setIdentityJsonData(null);
-			const cid = extractCidFromUri(row.metadataURI ?? null);
-			if (!cid) {
-				setIdentityJsonError('No CID found in tokenUri');
-				return;
-			}
-			const data = await IdentityService.downloadJson(cid);
+			// Use ERC8004 SDK to fetch registration file (handles IPFS/HTTP URIs)
+			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const { ethers } = await import('ethers');
+			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
+			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
+			const { ERC8004Client } = await import('../../erc8004-src');
+			const adapter = new EthersAdapter(ethersProvider);
+			const erc8004Client = new ERC8004Client({
+				adapter,
+				addresses: {
+					identityRegistry: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as string,
+					reputationRegistry: '0x0000000000000000000000000000000000000000',
+					validationRegistry: '0x0000000000000000000000000000000000000000',
+					chainId: 11155111,
+				}
+			});
+			const data = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId));
 			setIdentityJsonData(data);
 		} catch (e: any) {
 			setIdentityJsonError(e?.message || 'Failed to load Identity JSON');
@@ -119,22 +117,37 @@ export function AgentTable() {
 			const agentIdNum = BigInt(agentId);
 			// Read on-chain metadata: string keys, string values
 			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) });
-			const name = await publicClient.readContract({
-				address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
-				abi: registryAbi as any,
-				functionName: 'getMetadata' as any,
-				args: [agentIdNum, 'agentName']
-			}) as string;
-			const account = await publicClient.readContract({
-				address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
-				abi: registryAbi as any,
-				functionName: 'getMetadata' as any,
-				args: [agentIdNum, 'agentAccount']
-			}) as string;
+			let name: string | null = null;
+			let account: string | null = null;
+			try {
+				const identityClient = identityClientRef.current;
+				if (identityClient) {
+					name = await identityClient.getAgentName(agentIdNum);
+					account = await identityClient.getAgentAccount(agentIdNum);
+				}
+			} catch {}
+			if (!name || !account) {
+				try {
+					const nameFallback = await publicClient.readContract({
+						address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
+						abi: registryAbi as any,
+						functionName: 'getMetadata' as any,
+						args: [agentIdNum, 'agentName']
+					}) as string;
+					const accountFallback = await publicClient.readContract({
+						address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
+						abi: registryAbi as any,
+						functionName: 'getMetadata' as any,
+						args: [agentIdNum, 'agentAccount']
+					}) as string;
+					name = name ?? nameFallback;
+					account = account ?? accountFallback;
+				} catch {}
+			}
 
 			
 
-			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account });
+			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null });
 		} catch (e: any) {
 			setInfoError(e?.message || 'Failed to load agent info');
 		} finally {
@@ -199,15 +212,28 @@ export function AgentTable() {
 	};
 
 	// Fetch ENS names when data changes
-	React.useEffect(() => {
-		if (data?.rows) {
-			data.rows.forEach(row => {
-				if (!agentEnsNames[row.agentAddress]) {
-					fetchEnsName(row.agentAddress);
-				}
-			});
-		}
-	}, [data]);
+    React.useEffect(() => {
+        if (data?.rows) {
+            data.rows.forEach(async (row) => {
+                try {
+                    const identityClient = identityClientRef.current;
+                    if (identityClient) {
+                        const agentIdNum = BigInt(row.agentId);
+                        const name = await identityClient.getAgentName(agentIdNum);
+                        const acct = await identityClient.getAgentAccount(agentIdNum);
+                        setMetadataNames(prev => ({ ...prev, [row.agentId]: name ?? null }));
+                        setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
+                        if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
+                            fetchEnsName(acct);
+                        }
+                    }
+                } catch {}
+                if (!agentEnsNames[row.agentAddress]) {
+                    fetchEnsName(row.agentAddress);
+                }
+            });
+        }
+    }, [data?.rows]);
 
 
 	// Check if parent ENS domain is already wrapped
@@ -347,7 +373,10 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
 // legacy state no longer used; feedback is read from Reputation Registry
 // const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
-	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
+const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
+const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
+const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
+	const identityClientRef = React.useRef<AgentIdentityClient | null>(null);
 
 	const [ensOpen, setEnsOpen] = React.useState(false);
 	const [ensData, setEnsData] = React.useState<{
@@ -580,6 +609,18 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 	React.useEffect(() => { fetchData(); }, []);
 
     React.useEffect(() => {
+        (async () => {
+            try {
+                const { ethers } = await import('ethers');
+                const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL as string);
+                const adapter = new EthersAdapter(provider);
+                identityClientRef.current = new AgentIdentityClient(
+                    adapter as any,
+                    process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as string,
+                    { ensRegistry: (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' }
+                );
+            } catch {}
+        })();
         async function computeOwnership() {
             if (!data?.rows || !provider || !eoa) { setOwned({}); return; }
             const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
@@ -591,44 +632,44 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
                     const code = await publicClient.getBytecode({ address: addr });
                     if (!code || code === '0x') {
                         // Agent is an EOA; ownership = EOA matches connected EOA
-                        entries[row.agentId] = addr.toLowerCase() === (eoa as string).toLowerCase();
-                        continue;
-                    }
-                    // Try common owner selectors on the AA
-                    let controller: string | null = null;
-                    try {
-                        controller = await publicClient.readContract({
-                            address: addr,
-                            abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-                            functionName: 'owner'
-                        }) as string;
-                    } catch {}
-                    if (!controller) {
+                        entries[row.agentId] = (eoa?.toLowerCase() === addr.toLowerCase());
+                    } else {
+                        // Contract: check owner() / getOwner() / owners()
+                        let controller: string | null = null;
                         try {
                             controller = await publicClient.readContract({
                                 address: addr,
-                                abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-                                functionName: 'getOwner'
-                            }) as string;
+                                abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+                                functionName: 'owner' as any,
+                                args: [],
+                            }) as `0x${string}`;
                         } catch {}
+                        if (!controller) {
+                            try {
+                                controller = await publicClient.readContract({
+                                    address: addr,
+                                    abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+                                    functionName: 'getOwner' as any,
+                                    args: [],
+                                }) as `0x${string}`;
+                            } catch {}
+                        }
+                        if (!controller) {
+                            try {
+                                const owners = await publicClient.readContract({
+                                    address: addr,
+                                    abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
+                                    functionName: 'owners' as any,
+                                    args: [],
+                                }) as `0x${string}`[];
+                                controller = owners?.[0] ?? null;
+                            } catch {}
+                        }
+                        entries[row.agentId] = !!controller && controller.toLowerCase() === eoa?.toLowerCase();
                     }
-                    if (!controller) {
-                        try {
-                            const owners = await publicClient.readContract({
-                                address: addr,
-                                abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
-                                functionName: 'owners'
-                            }) as string[];
-                            controller = Array.isArray(owners) && owners.length ? owners[0] : null;
-                        } catch {}
-                    }
-                    entries[row.agentId] = !!controller && (controller as string).toLowerCase() === (eoa as string).toLowerCase();
-                } catch {
-                    entries[row.agentId] = false;
-                }
+                } catch {}
             }
             setOwned(entries);
-
         }
         computeOwnership();
     }, [data?.rows, provider, eoa]);
@@ -712,30 +753,45 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 	async function loadIdentityDefaults(row: Agent): Promise<{ name?: string; description?: string; url?: string }> {
 		const out: { name?: string; description?: string; url?: string } = {};
 		try {
-			const cid = extractCidFromUri(row.metadataURI ?? null);
-			if (cid) {
-				const identity = await IdentityService.downloadJson(cid) as any;
-				if (identity && typeof identity === 'object' && !Array.isArray(identity)) {
-					if (typeof (identity as any).name === 'string' && (identity as any).name.trim()) out.name = (identity as any).name.trim();
-					if (typeof (identity as any).description === 'string' && (identity as any).description.trim()) out.description = (identity as any).description.trim();
-					if (typeof (identity as any).url === 'string' && /^https?:\/\//i.test((identity as any).url)) out.url = (identity as any).url;
-					try {
-						const endpoints = Array.isArray((identity as any).endpoints) ? (identity as any).endpoints : [];
-						const a2a = endpoints.find((e: any) => String(e?.name || '').toUpperCase() === 'A2A');
-						const a2aUrl = (a2a?.endpoint || a2a?.url) as string | undefined;
-						if (a2aUrl && /^https?:\/\//i.test(a2aUrl)) {
-							const res = await fetch(a2aUrl);
-							if (res.ok) {
-								const cardJson: any = await res.json().catch(() => null);
-								if (cardJson && typeof cardJson === 'object' && !Array.isArray(cardJson)) {
-									if (!out.name && typeof cardJson.name === 'string' && cardJson.name.trim()) out.name = cardJson.name.trim();
-									if (!out.description && typeof cardJson.description === 'string' && cardJson.description.trim()) out.description = cardJson.description.trim();
-									if (!out.url && typeof cardJson.url === 'string' && /^https?:\/\//i.test(cardJson.url)) out.url = cardJson.url;
-								}
+			// Use ERC8004 SDK to fetch registration file
+			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const { ethers } = await import('ethers');
+			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
+			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
+			const { ERC8004Client } = await import('../../erc8004-src');
+			const adapter = new EthersAdapter(ethersProvider);
+			const erc8004Client = new ERC8004Client({
+				adapter,
+				addresses: {
+					identityRegistry: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as string,
+					reputationRegistry: '0x0000000000000000000000000000000000000000',
+					validationRegistry: '0x0000000000000000000000000000000000000000',
+					chainId: 11155111,
+				}
+			});
+			const identity = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId)) as any;
+			console.info(">>>>>>>>>>>>>>>>> identity: ", identity);
+
+			if (identity && typeof identity === 'object' && !Array.isArray(identity)) {
+				if (typeof (identity as any).name === 'string' && (identity as any).name.trim()) out.name = (identity as any).name.trim();
+				if (typeof (identity as any).description === 'string' && (identity as any).description.trim()) out.description = (identity as any).description.trim();
+				if (typeof (identity as any).url === 'string' && /^https?:\/\//i.test((identity as any).url)) out.url = (identity as any).url;
+				try {
+					const endpoints = Array.isArray((identity as any).endpoints) ? (identity as any).endpoints : [];
+					const a2a = endpoints.find((e: any) => String(e?.name || '').toUpperCase() === 'A2A');
+					const a2aUrl = (a2a?.endpoint || a2a?.url) as string | undefined;
+					if (a2aUrl && /^https?:\/\//i.test(a2aUrl)) {
+						const res = await fetch(a2aUrl);
+						if (res.ok) {
+							const cardJson: any = await res.json().catch(() => null);
+							if (cardJson && typeof cardJson === 'object' && !Array.isArray(cardJson)) {
+								if (!out.name && typeof cardJson.name === 'string' && cardJson.name.trim()) out.name = cardJson.name.trim();
+								if (!out.description && typeof cardJson.description === 'string' && cardJson.description.trim()) out.description = cardJson.description.trim();
+								if (!out.url && typeof cardJson.url === 'string' && /^https?:\/\//i.test(cardJson.url)) out.url = cardJson.url;
 							}
 						}
-					} catch {}
-				}
+					}
+				} catch {}
 			}
 		} catch {}
 		return out;
@@ -1309,44 +1365,47 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 									<TableRow key={row.agentId} hover>
 										<TableCell>
 											<Stack direction="row" spacing={0.25} alignItems="center">
-												<Typography 
-													component="span" 
-													variant="body2" 
-													sx={{ 
-														fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-														cursor: 'pointer',
-														color: 'primary.main',
-														textDecoration: 'underline',
-														'&:hover': {
-															color: 'primary.dark',
-															textDecoration: 'none'
-														}
-													}} 
-													noWrap 
-													title={`Click to view on Etherscan: ${row.agentAddress}`}
-													onClick={() => window.open(`https://sepolia.etherscan.io/address/${row.agentAddress}`, '_blank')}
-												>
-													{`${row.agentAddress.slice(0, 6)}...${row.agentAddress.slice(-4)}`}
-												</Typography>
+												{(() => {
+													const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+													const display = `${acct.slice(0, 6)}...${acct.slice(-4)}`;
+													return (
+														<Typography 
+															component="span" 
+															variant="body2" 
+															sx={{ fontFamily: 'ui-monospace, monospace', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+															onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
+															noWrap 
+															title={`Click to view on Etherscan: ${acct}`}
+															onClick={() => window.open(`https://sepolia.etherscan.io/address/${acct}`, '_blank')}
+														>
+															{display}
+														</Typography>
+													);
+												})()}
 											</Stack>
 										</TableCell>
 						<TableCell>
-							{(row.ensEndpoint || agentEnsNames[row.agentAddress]) ? (
-								<Typography
-									component="a"
-									href={`https://sepolia.app.ens.domains/${(row.ensEndpoint || agentEnsNames[row.agentAddress]) as string}`}
-									target="_blank"
-									rel="noopener noreferrer"
-									variant="body2"
-									noWrap
-									sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-									title={row.ensEndpoint || agentEnsNames[row.agentAddress] || ''}
-								>
-									{row.ensEndpoint || agentEnsNames[row.agentAddress]}
-								</Typography>
-							) : (
-								<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>—</Typography>
-							)}
+							{(() => {
+								const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+								const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+								if (ens) {
+									return (
+										<Typography
+											component="a"
+											href={`https://sepolia.app.ens.domains/${ens as string}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											variant="body2"
+											noWrap
+											sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+											title={ens || ''}
+										>
+											{ens}
+										</Typography>
+									);
+								}
+								return <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>—</Typography>;
+							})()}
 													{(row.ensEndpoint || agentEnsNames[row.agentAddress]) && (
 														<>
 															<Button 

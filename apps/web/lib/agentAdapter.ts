@@ -1,9 +1,7 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
-import { stringToHex, keccak256 } from "viem";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
-import { encodeNonce } from 'permissionless/utils';
-import { BlockchainAdapter, ERC8004Client, EthersAdapter } from '../../erc8004-src';
+import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 
 const registryAbi = IdentityRegistryABI as any;
@@ -250,7 +248,7 @@ export async function sendSponsoredUserOperation(params: {
 }
 
 export async function ensureIdentityWithAA(params: {
-  erc8004Client: ERC8004Client,
+  agentIdentityClient: AgentIdentityClient,
   adapter: any,
   publicClient: PublicClient,
   bundlerUrl: string,
@@ -269,9 +267,9 @@ export async function ensureIdentityWithAA(params: {
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
   const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
-  // Use ERC8004Client to encode calldata (like EAS SDK pattern), then send via bundler
-  console.info('********************* encode register calldata via ERC8004Client');
-  const dataRegister = params.erc8004Client.identity.encodeRegisterWithMetadata(
+  // Use AgentIdentityClient to encode calldata (like EAS SDK pattern), then send via bundler
+  console.info('********************* encode register calldata via AgentIdentityClient');
+  const dataRegister = params.agentIdentityClient.encodeRegisterWithMetadata(
     tokenUri ?? '',
     [
       { key: 'agentName', value: params.name },
@@ -290,8 +288,8 @@ export async function ensureIdentityWithAA(params: {
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
   console.info("............receipt: ", aaReceipt)
   
-  // Use ERC8004Client to extract agentId from receipt
-  const tokenId = params.erc8004Client.identity.extractAgentIdFromLogs(aaReceipt);
+  // Use AgentIdentityClient to extract agentId from receipt
+  const tokenId = params.agentIdentityClient.extractAgentIdFromReceiptPublic(aaReceipt);
   console.info("............tokenId: ", tokenId)
 
   return tokenId;

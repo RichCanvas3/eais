@@ -10,13 +10,10 @@ import { createBundlerClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import ensService from '@/service/ensService';
-import IdentityService from '@/service/identityService';
+import IpfsService from '@/service/ipfsService';
 
-import { BlockchainAdapter, ERC8004Client, EthersAdapter } from '../../erc8004-src';
-import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
-
-const registryAbi = IdentityRegistryABI as any;
-
+import { EthersAdapter } from '../../erc8004-src';
+import { useAgentIdentityClient } from './AgentIdentityClientProvider';
 
 
 
@@ -33,6 +30,7 @@ type Props = {
 
 export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props) {
   const { provider, address } = useWeb3Auth();
+  const agentIdentityClient = useAgentIdentityClient();
   const [domain, setDomain] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -88,60 +86,16 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     return base.replace(/[^a-z0-9-]/g, '');
   }
 
-  async function getDefaultAgentAccount(agentName: string, identityService: any, publicClient: any, walletClient: any)  {
+  async function getDefaultAgentAccount(agentName: string, publicClient: any, walletClient: any)  {
     // Try DB lookup by name (guard empty to avoid 400)
     console.info("getDefaultAgentAccount", agentName);
-    const logAgent = async (addr: `0x${string}`) => {
-      try {
-        const row = await identityService.getAgentByAddress(addr);
-        console.info("agent nft row by address:", row);
-        try {
-          if (row?.agentId) {
-            const agentIdNum = BigInt(row.agentId);
-            const publicClient2 = publicClient;
-            // Read agentAccount and agentName from on-chain metadata
-            const keyAgentAccount = keccak256(stringToHex('agentAccount')) as `0x${string}`;
-            const keyAgentName = keccak256(stringToHex('agentName')) as `0x${string}`;
-            const agentAccountBytes = await publicClient2.readContract({ address: registryAddress as `0x${string}`, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [agentIdNum, keyAgentAccount] }) as `0x${string}`;
-            const agentNameBytes = await publicClient2.readContract({ address: registryAddress as `0x${string}`, abi: registryAbi as any, functionName: 'getMetadata' as any, args: [agentIdNum, keyAgentName] }) as `0x${string}`;
-            console.info('on-chain agentAccount (bytes):', agentAccountBytes);
-            try { console.info('on-chain agentName (utf8):', hexToString(agentNameBytes)); } catch {}
-            try {
-              const tokenUriOnChain = await publicClient2.readContract({ address: registryAddress as `0x${string}`, abi: registryAbi as any, functionName: 'tokenURI' as any, args: [agentIdNum] }) as string;
-              console.info('on-chain tokenURI:', tokenUriOnChain);
-            } catch {}
-          }
-        } catch (e) {
-          console.info('failed to read on-chain metadata for row', e);
-        }
-        const uri = row?.metadataURI as string | undefined;
-        if (uri) {
-          console.info("agent nft tokenUri:", uri);
-          const cid = (function extract(tokenUri: string): string | null {
-            try {
-              if (tokenUri.startsWith('ipfs://')) {
-                const rest = tokenUri.slice('ipfs://'.length);
-                const c = rest.split('/')[0]?.trim();
-                return c || null;
-              }
-              const m = tokenUri.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
-              if (m && m[1]) return m[1];
-            } catch {}
-            return null;
-          })(uri);
-          if (cid) {
-            const json = await IdentityService.downloadJson(cid);
-            console.info("agent nft ipfs json:", json);
-          }
-        }
-      } catch (e) {
-        console.info("no agent nft row/ipfs found for", addr);
-      }
-    };
+
+
     try {
       if (agentName && agentName.trim() !== '') {
-        const byName = await identityService.getAgentByName(agentName.trim());
-        const foundAddr = byName?.agentAddress || byName?.agent || null;
+        // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
+        const { agentId, agentAccount } = await agentIdentityClient.getAgentIdentityByName(agentName.trim());
+        const foundAddr = agentAccount;
         if (foundAddr) {
           const agentAccountClient = await toMetaMaskSmartAccount({
             address: foundAddr as `0x${string}`,
@@ -150,10 +104,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             signatory: { walletClient },
           });
           
-          console.info("identity found with name", agentName, agentAccountClient.address);
-          await logAgent(foundAddr as `0x${string}`);
           
-          console.info("get agent info from identity service", byName);
+          console.info("get agent info from SDK via ENS agent-identity", { agentId: agentId?.toString(), foundAddr });
           return agentAccountClient;
         }
       }
@@ -162,7 +114,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     }
 
     // first look for ENS match to get address
-    const ensAgentAddress = await ensService.getEnsAddress(agentName, sepolia);
+    
+    const ensAgentAddress = await agentIdentityClient.getAgentAccountByName(agentName);
     if (ensAgentAddress) {
       const agentAccountClient = await toMetaMaskSmartAccount({
         address: ensAgentAddress as `0x${string}`,
@@ -170,7 +123,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         implementation: Implementation.Hybrid,
         signatory: { walletClient },
       });
-      await logAgent(ensAgentAddress as `0x${string}`);
+
       console.info("ens found with name", agentName, agentAccountClient.address);
       return agentAccountClient
     }
@@ -185,7 +138,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       deploySalt: salt,
     } as any);
     console.info("salt found with name", agentName, agentAccountClient.address);
-    try { await logAgent(await agentAccountClient.getAddress()); } catch {}
+    //try { await logAgent(await agentAccountClient.getAddress()); } catch {}
     return agentAccountClient
 
 
@@ -202,7 +155,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       (async () => {
         try {
           setEnsResolving(true);
-          const addr = await ensService.getEnsAddress(full, sepolia);
+          const addr = await agentIdentityClient.getOrgAccount(full);
           if (!cancelled) setEnsResolvedAddress(addr);
           // Also check Registry ownership to determine if the name exists even without an addr record
           const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
@@ -263,16 +216,21 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       try {
         setAgentIdentityExists(null);
         if (!ensPreview || !provider || !address) return;
-    const ensPreviewLower = ensPreview.trim().toLowerCase();
+        
+        const ensPreviewLower = ensPreview.trim().toLowerCase();
         const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
         const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
         try { (walletClient as any).account = address as Address; } catch {}
 
-        const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IdentityService, publicClient, walletClient);
+        const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, publicClient, walletClient);
         const agentAddress = await agentAccountClient.getAddress();
         if (!cancelled) setAgentAADefaultAddress(agentAddress);
-        const existing = await IdentityService.getAgentByAddress(agentAddress);
-        if (!cancelled) setAgentIdentityExists(!!existing);
+        try {
+          const { agentId } = await agentIdentityClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
+          if (!cancelled) setAgentIdentityExists(!!agentId && agentId > 0n);
+        } catch {
+          if (!cancelled) setAgentIdentityExists(false);
+        }
       } catch {
         if (!cancelled) setAgentIdentityExists(false);
       }
@@ -362,19 +320,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         }
         // Read and decode agent-identity per ENSIP (ERC-7930 address + agentId)
         try {
-          const registryHex = await ensService.getTextRecord(ensPreview, 'agent-identity', sepolia, rpcUrl);
-          if (registryHex && /^0x[0-9a-fA-F]+$/.test(registryHex)) {
-            const hex = registryHex.slice(2);
-            const version = hex.slice(0, 2);
-            const namespace = hex.slice(2, 4); // eip155 => 01
-            const chainIdHex = hex.slice(4, 12);
-            const chainId = parseInt(chainIdHex, 16);
-            const addressHex = hex.slice(12, 52);
-            const agentAddr = `0x${addressHex}` as `0x${string}`;
-            const idLen = parseInt(hex.slice(52, 54), 16);
-            const idHex = hex.slice(54, 54 + idLen * 2);
-            const agentIdDecoded = BigInt(`0x${idHex || '0'}`);
-            console.info('agent-identity decoded:', { version, namespace, chainId, agentAddr, agentId: agentIdDecoded.toString() });
+          const agentIdentity = await agentIdentityClient.getAgentIdentityByName(ensPreview);
+          if (agentIdentity) {
+            console.info('agent-identity exists:', agentIdentity);
           } else {
             console.info('agent-identity text not set');
           }
@@ -646,7 +594,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       
       const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
       try { (walletClient as any).account = address as Address; } catch {}
-      const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, IdentityService, publicClient, walletClient);
+      const agentAccountClient = await getDefaultAgentAccount(ensPreviewLower, publicClient, walletClient);
         
       
 
@@ -678,10 +626,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
       // Check if an agent already exists for this AA address via backend DB
       try {
-        const existingAgent = await IdentityService.getAgentByAddress(agentAddress);
-        if (existingAgent) {
+        const { ethers } = await import('ethers');
+        const provider2 = new ethers.JsonRpcProvider(rpcUrl);
+        const readOnlyAdapter = new EthersAdapter(provider2);
+        const { agentId } = await agentIdentityClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
+        if (agentId && agentId > 0n) {
           setIsSubmitting(false);
-          setError(`Agent already exists for address ${agentAddress} (id ${existingAgent.agentId})`);
+          setError(`Agent already exists for address ${agentAddress} (id ${agentId.toString()})`);
           return;
         }
       } catch {}
@@ -724,7 +675,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         if (typeof (resolvedMeta.registrations as any)?.then === 'function') {
           resolvedMeta.registrations = await (resolvedMeta.registrations as Promise<any[]>);
         }
-        const upload = await IdentityService.uploadJson({ data: resolvedMeta, filename: `agent_${ensPreviewLower}.json` });
+        const upload = await IpfsService.uploadJson({ data: resolvedMeta, filename: `agent_${ensPreviewLower}.json` });
         tokenUri = upload.url;
       } catch (e) {
         console.warn('IPFS upload failed, proceeding without tokenUri', e);
@@ -755,23 +706,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       //const REPUTATION_REGISTRY = '0xB5048e3ef1DA4E04deB6f7d0423D06F63869e322';
       //const VALIDATION_REGISTRY = '0x662b40A526cb4017d947e71eAF6753BF3eeE66d8';
 
-      console.info("********************* ERC8004 registryAddress: ", registryAddress);
-      const IDENTITY_REGISTRY = registryAddress ;
-      const erc8004Client = new ERC8004Client({
-        adapter: agentAdapter,
-        addresses: {
-          identityRegistry: IDENTITY_REGISTRY,
-          reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
-          validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
-          chainId: sepolia.id,
-        },
-      });
+      console.info("********************* Identity registryAddress: ", registryAddress);
 
 
 
       console.info('********************* identityRegistryOwnerWallet: ', identityRegistryOwnerWallet);
       const agentIdNum = await ensureIdentityWithAA({
-        erc8004Client,
+        agentIdentityClient: agentIdentityClient,
         adapter: agentAdapter,
         publicClient,
         bundlerUrl: BUNDLER_URL,
@@ -987,7 +928,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     } as any);
 
                     // Agent AA for the agent name
-                    const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IdentityService, publicClient, walletClient);
+                    const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), publicClient, walletClient);
                     const agentAAAddress = await agentAccountClient.getAddress();
 
                     // Ethers signer for onchain write
@@ -1082,7 +1023,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                           const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: address as Address });
                           try { (walletClient as any).account = address as Address; } catch {}
                           // Use the agent AA derived from the name to authorize setText via AA
-                          const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), IdentityService, publicClient, walletClient);
+                          const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), publicClient, walletClient);
                           console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
                           await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
                           setAgentUrlText(agentUrlEdit.trim());
