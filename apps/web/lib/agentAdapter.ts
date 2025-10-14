@@ -227,10 +227,10 @@ export async function deploySmartAccountIfNeeded(params: {
 export async function sendSponsoredUserOperation(params: {
   bundlerUrl: string,
   chain: Chain,
-  account: any,
+  accountClient: any,
   calls: { to: `0x${string}`; data?: `0x${string}`; value?: bigint }[],
 }): Promise<`0x${string}`> {
-  const { bundlerUrl, chain, account, calls } = params;
+  const { bundlerUrl, chain, accountClient, calls } = params;
   const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) } as any);
   const bundlerClient = createBundlerClient({ 
     transport: http(bundlerUrl), 
@@ -240,14 +240,101 @@ export async function sendSponsoredUserOperation(params: {
   } as any);
   const { fast: fee } = await (pimlicoClient as any).getUserOperationGasPrice();
   const userOpHash = await (bundlerClient as any).sendUserOperation({ 
-    account, 
+    account: accountClient, 
     calls,
     ...fee 
   });
   return userOpHash as `0x${string}`;
 }
 
-export async function ensureIdentityWithAA(params: {
+export async function addAgentNameToOrg(params: {
+  agentIdentityClient: AgentIdentityClient,
+  bundlerUrl: string,
+  chain: Chain,
+  orgAccountClient: any,
+  orgName: string,
+  agentAccountClient: any,
+  agentName: string,
+  agentUrl?: string,
+  agentAccount: `0x${string}`
+}): Promise<`0x${string}`> {
+  const { agentIdentityClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
+
+  console.info("encodeAddAgentNameToOrg");
+  const { calls : orgCalls } = await agentIdentityClient.encodeAddAgentNameToOrg({
+    orgName,
+    agentName,
+    agentAddress: agentAccount
+  });
+  console.info("encodeAddAgentNameToOrg done");
+
+  console.info("calls: ", orgCalls);
+  console.info("bundlerUrl: ", bundlerUrl);
+  console.info("chain: ", chain);
+  console.info("orgAccountClient: ", orgAccountClient);
+  console.info("orgName: ", orgName);
+  console.info("agentName: ", agentName);
+  console.info("agentAccount: ", agentAccount);
+
+  console.info("sending org calls");
+  const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
+  const userOpHash1 = await sendSponsoredUserOperation({
+    bundlerUrl,
+    chain,
+    accountClient: orgAccountClient,
+    calls: orgCalls
+  });
+  console.info("userOpHash1: ", userOpHash1);
+  const { receipt: orgReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash1 });
+  console.info("orgReceipt: ", orgReceipt);
+
+  console.info("************* agentUrl: ", agentUrl);
+  const { calls: agentCalls } = await agentIdentityClient.encodeSetAgentNameInfo({
+    orgName,
+    agentName,
+    agentAddress: agentAccount,
+    agentUrl: agentUrl
+  });
+  
+
+  console.info("sending agent calls");
+  const userOpHash2 = await sendSponsoredUserOperation({
+    bundlerUrl,
+    chain,
+    accountClient: agentAccountClient,
+    calls: agentCalls,
+  });
+
+  console.info("userOpHash2: ", userOpHash2);
+  const { receipt: agentReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash2 });
+  console.info("agentReceipt: ", agentReceipt);
+
+
+  const { calls: agentReverseCalls } = await agentIdentityClient.encodeSetAgentNameReverseLookup({
+    orgName,
+    agentName,
+    agentAddress: agentAccount
+  });
+  
+
+  console.info("sending agent calls");
+  const userOpHash3 = await sendSponsoredUserOperation({
+    bundlerUrl,
+    chain,
+    accountClient: agentAccountClient,
+    calls: agentReverseCalls,
+  });
+
+  console.info("userOpHash3: ", userOpHash3);
+  const { receipt: agentReverseReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash3 });
+  console.info("agentReceipt: ", agentReverseReceipt);
+
+  
+
+  return userOpHash1 as `0x${string}`;
+}
+
+export async function createAIAgentIdentity(params: {
   agentIdentityClient: AgentIdentityClient,
   adapter: any,
   publicClient: PublicClient,
@@ -261,7 +348,7 @@ export async function ensureIdentityWithAA(params: {
 }): Promise<bigint> {
   const { publicClient, bundlerUrl, chain, registry, agentAccount, tokenUri, identityRegistryOwnerWallet } = params;
 
-  console.info("....... inside ensureIdentityWithAA");
+  console.info("....... inside createAIAgentIdentity");
 
   console.log('********************* deploySmartAccountIfNeeded');
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
@@ -281,7 +368,7 @@ export async function ensureIdentityWithAA(params: {
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
     chain,
-    account: agentAccount,
+    accountClient: agentAccount,
     calls: [{ to: registry, data: dataRegister }],
   });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);

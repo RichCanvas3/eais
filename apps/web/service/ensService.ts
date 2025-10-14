@@ -1639,7 +1639,19 @@ class ensService {
             // Don't throw here - subdomain creation was successful, reverse record is optional
           }
           
-          return label + '.' + parentName + '.eth';
+          // After subdomain is created, set forward (addr) and reverse records
+          try {
+            await this.forwardFromEnsName(parentName, chain, ensOwnerClient, orgAccountClient, label);
+          } catch (e) {
+            console.warn('Forward (addr) record setup failed:', e);
+          }
+          try {
+            await this.reverseFromEnsAddress(parentName, chain, ensOwnerClient, orgAccountClient, label);
+          } catch (e) {
+            console.warn('Reverse record setup failed:', e);
+          }
+
+          return label + "." + parentName + ".eth";
         } else {
           throw new Error(
             `Subdomain creation verification failed. ` +
@@ -1726,7 +1738,7 @@ class ensService {
               }) as `0x${string}`;
             console.log("........... actual owner:", actualOwner);
 
-            // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you’re the name owner,
+            // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you're the name owner,
             // or NameWrapper.setResolver if the name is wrapped.)
 
             // 1b) Set the addr record on the resolver
@@ -1965,7 +1977,7 @@ class ensService {
               }) as `0x${string}`;
             console.log("........... actual owner:", actualOwner);
 
-            // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you’re the name owner,
+            // (If resolver == 0x0, set one first: either via ENS Registry `setResolver` if you're the name owner,
             // or NameWrapper.setResolver if the name is wrapped.)
 
             // 1b) Set the addr record on the resolver

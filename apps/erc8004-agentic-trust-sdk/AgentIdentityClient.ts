@@ -2,22 +2,49 @@
  * Agentic Trust SDK - Identity Client
  * Extends the base ERC-8004 IdentityClient with AA-centric helpers.
  */
+import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexToString, type Chain, type PublicClient } from 'viem';
+import { ethers } from 'ethers';
+import { sepolia } from 'viem/chains';
+
+import BaseRegistrarABI from  'abis/BaseRegistrarImplementation.json'
+import ETHRegistrarControllerABI from 'abis/ETHRegistrarController.json';
+import NameWrapperABI from 'abis/NameWrapper.json';
+import PublicResolverABI from 'abis/PublicResolver.json';
 
 import { IdentityClient as BaseIdentityClient } from '../erc8004-src/IdentityClient';
 import IdentityRegistryABI from '../erc8004-src/abis/IdentityRegistry.json';
 import type { MetadataEntry } from '../erc8004-src/types';
 
 export class AgentIdentityClient extends BaseIdentityClient {
+  private chain: Chain;
+  private rpcUrl: string;
+  private orgAdapter: any;
+  private agentAdapter: any;
   private ensRegistryAddress: `0x${string}`;
+  private identityRegistryAddress: `0x${string}`;
+  private publicClient: PublicClient | null = null;
 
   constructor(
-    adapter: any,
-    contractAddress: string,
-    options?: { ensRegistry?: `0x${string}` }
+    rpcUrl: string,
+    orgAdapter: any,
+    agentAdapter: any,
+    ensRegistryAddress: `0x${string}`,
+    identityRegistryAddress: `0x${string}`
   ) {
-    super(adapter, contractAddress);
-    this.ensRegistryAddress = (options?.ensRegistry || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e') as `0x${string}`;
+    super(agentAdapter, identityRegistryAddress);
+
+    this.chain = sepolia;
+    this.rpcUrl = rpcUrl;
+    this.publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+
+    this.orgAdapter = orgAdapter;
+    this.agentAdapter = agentAdapter;
+    this.ensRegistryAddress = ensRegistryAddress;
+    this.identityRegistryAddress = identityRegistryAddress;
+
   }
+
+
   /**
    * Encode register calldata without sending (for bundler/AA - like EAS SDK pattern)
    * This override exists in the Agentic Trust SDK to keep AA helpers here.
@@ -140,19 +167,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
       { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
     ] as any[];
 
-    // namehash implementation (keccak-based)
-    const namehash = (name: string): `0x${string}` => {
-      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
-      let node = '0x' + '00'.repeat(32);
-      if (name) {
-        const labels = name.split('.');
-        for (let i = labels.length - 1; i >= 0; i--) {
-          const labelSha = keccak256(toUtf8Bytes(labels[i]));
-          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
-        }
-      }
-      return node as `0x${string}`;
-    };
 
     const reverseNode = namehash(`${accountLower.slice(2)}.addr.reverse`);
 
@@ -215,18 +229,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
       { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
     ] as any[];
 
-    const namehash = (n: string): `0x${string}` => {
-      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
-      let node = '0x' + '00'.repeat(32);
-      if (n) {
-        const labels = n.split('.');
-        for (let i = labels.length - 1; i >= 0; i--) {
-          const labelSha = keccak256(toUtf8Bytes(labels[i]));
-          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
-        }
-      }
-      return node as `0x${string}`;
-    };
 
     const node = namehash(ensName);
 
@@ -266,6 +268,44 @@ export class AgentIdentityClient extends BaseIdentityClient {
     return { agentId, ensName, agentAccount };
   }
 
+  async getresolver(ensName: string) : Promise<`0x${string}` | null>  {
+    //const ensName = "testc1.orgtrust.eth";
+    console.info(".................ensName: ", ensName);
+    const node = namehash(ensName);
+    if (this.publicClient) {
+      const resolver = await this.publicClient.readContract({
+        address: this.ensRegistryAddress,
+        abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+        functionName: "resolver",
+        args: [node],
+      });
+      console.info(".................resolver 1: ", resolver);
+
+      const owner = await this.publicClient.readContract({
+        address: this.ensRegistryAddress,
+        abi: [{ name: "owner", stateMutability: "view", type: "function",
+                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+        functionName: "owner",
+        args: [node],
+      });
+      console.log("........... owner 1:", owner);
+
+
+      const tokenId = BigInt(node);
+      const actualOwner = await this.publicClient.readContract({
+          address: ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
+          abi: NameWrapperABI.abi,
+          functionName: 'ownerOf',
+          args: [tokenId]
+        }) as `0x${string}`;
+      console.log("........... actual owner 1:", actualOwner);
+
+      return resolver;
+    }
+    return null;
+  }
+
   /**
    * Resolve account address for an ENS name via resolver.addr(namehash(name)).
    */
@@ -279,19 +319,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
     const RESOLVER_ABI = [
       { name: 'addr', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
     ] as any[];
-
-    const namehash = (n: string): `0x${string}` => {
-      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
-      let node = '0x' + '00'.repeat(32);
-      if (n) {
-        const labels = n.split('.');
-        for (let i = labels.length - 1; i >= 0; i--) {
-          const labelSha = keccak256(toUtf8Bytes(labels[i]));
-          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
-        }
-      }
-      return node as `0x${string}`;
-    };
 
     const node = namehash(ensName);
 
@@ -338,19 +365,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
       { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
     ] as any[];
 
-    const namehash = (n: string): `0x${string}` => {
-      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
-      let node = '0x' + '00'.repeat(32);
-      if (n) {
-        const labels = n.split('.');
-        for (let i = labels.length - 1; i >= 0; i--) {
-          const labelSha = keccak256(toUtf8Bytes(labels[i]));
-          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
-        }
-      }
-      return node as `0x${string}`;
-    };
-
     const node = namehash(ensName);
 
     // resolver
@@ -395,18 +409,7 @@ export class AgentIdentityClient extends BaseIdentityClient {
       { name: 'name', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'string' }] },
     ] as any[];
 
-    const namehash = (n: string): `0x${string}` => {
-      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
-      let node = '0x' + '00'.repeat(32);
-      if (n) {
-        const labels = n.split('.');
-        for (let i = labels.length - 1; i >= 0; i--) {
-          const labelSha = keccak256(toUtf8Bytes(labels[i]));
-          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
-        }
-      }
-      return node as `0x${string}`;
-    };
+
 
     const reverseNode = namehash(`${accountLower.slice(2)}.addr.reverse`);
 
@@ -439,6 +442,225 @@ export class AgentIdentityClient extends BaseIdentityClient {
   }
 
 
+  async encodeAddAgentNameToOrg(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;                   // e.g., 'my-agent'
+    agentAddress: `0x${string}`;     // AA address for the agent name
+    agentUrl?: string | null                   // optional TTL (defaults to 0)
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+    const ENS_REGISTRY_ABI = [
+      { name: 'setSubnodeRecord', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'label', type: 'bytes32' },
+        { name: 'owner', type: 'address' },
+        { name: 'resolver', type: 'address' },
+        { name: 'ttl', type: 'uint64' }
+      ], outputs: [] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'setAddr', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'addr', type: 'address' }
+      ], outputs: [] },
+      { name: 'setText', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'key', type: 'string' },
+        { name: 'value', type: 'string' }
+      ], outputs: [] },
+    ] as any[];
+
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(params.orgName);
+    const label = clean(params.agentName).replace(/\s+/g, '-');
+    const childDomain = `${label}.${parent}`;
+    console.info(">>>>>>>>>>>>>>>>>> childDomain: ", childDomain);
+
+    const parentNode = namehash(parent + ".eth");
+
+
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+
+    const publicResolver = new ethers.Contract(
+      (process.env.NEXT_PUBLIC_ENS_PUBLIC_RESOLVER as `0x${string}`) || '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5',
+      PublicResolverABI.abi,
+      this.agentAdapter.signer
+    );
+
+    const nameWrapper = new ethers.Contract(
+      (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+      NameWrapperABI.abi,
+      this.agentAdapter.signer
+    );
+    
+
+    const subdomainData = encodeFunctionData({
+      abi: NameWrapperABI.abi,
+      functionName: 'setSubnodeRecord',
+      args: [
+        parentNode,
+        label,
+        params.agentAddress,
+        publicResolver.target as `0x${string}`,
+        0,
+        0,
+        0
+      ]
+    });
+    const call = {
+      to: nameWrapper.target as `0x${string}`,
+      data: subdomainData,
+      value: 0n
+    }
+    calls.push(call);
+
+    return { calls };
+  }
+
+  
+  async encodeSetAgentNameInfo(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;                   // e.g., 'my-agent'
+    agentAddress: `0x${string}`;     // AA address for the agent name
+    agentUrl?: string | null                   // optional TTL (defaults to 0)
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[]   }> {
+
+    const RESOLVER_ABI = [
+      { name: 'setAddr', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'addr', type: 'address' }
+      ], outputs: [] },
+      { name: 'setText', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'key', type: 'string' },
+        { name: 'value', type: 'string' }
+      ], outputs: [] },
+    ] as any[];
+
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(params.orgName);
+    const label = clean(params.agentName).replace(/\s+/g, '-');
+    const childDomain = `${label}.${parent}`;
+    console.info(">>>>>>>>>>>>>>>>>> childDomain: ", childDomain);
+
+    const childNode = namehash(childDomain + ".eth");
+
+    // 1) Create subdomain owned by agentAddress and set resolver
+
+    
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    console.info(".................publicClient: ", this.publicClient);
+    console.info(".................ensRegistryAddress: ", this.ensRegistryAddress);
+    if (this.publicClient) {
+
+      const resolver = await this.publicClient.readContract({
+        address: this.ensRegistryAddress,
+        abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+        functionName: "resolver",
+        args: [childNode],
+      });
+      console.info(".................resolver 2x: ", resolver);
+      
+      //const resolver = process.env.NEXT_PUBLIC_ENS_PUBLIC_RESOLVER as `0x${string}` || '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5'
+      console.info(".................resolver 2: ", resolver);
+
+      // 2) Set addr record
+      const setAddrData = encodeFunctionData({
+        abi: [{ name: "setAddr", type: "function", stateMutability: "nonpayable",
+                inputs: [{ name: "node", type: "bytes32" }, { name: "a", type: "address" }]}],
+        functionName: "setAddr",
+        args: [childNode, params.agentAddress],
+      });
+        
+
+      calls.push({ to: resolver as `0x${string}`, data: setAddrData });
+    
+      // 3) Optionally set URL text
+      if (params.agentUrl && params.agentUrl.trim() !== '') {
+        const dataSetUrl = this.adapter.encodeCall(
+          RESOLVER_ABI,
+          'setText(bytes32,string,string)',
+          [childNode, 'url', params.agentUrl.trim()]
+        ) as `0x${string}`;
+        calls.push({ to: resolver as `0x${string}`, data: dataSetUrl });
+      }
+
+
+    }
+
+ 
+
+    return { calls };
+  }
+
+
+  async encodeSetAgentNameReverseLookup(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;                   // e.g., 'my-agent'
+    agentAddress: `0x${string}`;     // AA address for the agent name
+    agentUrl?: string | null                   // optional TTL (defaults to 0)
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[]   }> {
+
+
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(params.orgName);
+    const label = clean(params.agentName).replace(/\s+/g, '-');
+    const childDomain = `${label}.${parent}`;
+    console.info(">>>>>>>>>>>>>>>>>> childDomain: ", childDomain);
+
+    const childNode = namehash(childDomain + ".eth");
+
+    // 1) Create subdomain owned by agentAddress and set resolver
+
+    
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    console.info(".................publicClient: ", this.publicClient);
+    console.info(".................ensRegistryAddress: ", this.ensRegistryAddress);
+    if (this.publicClient) {
+
+      const resolver = await this.publicClient.readContract({
+        address: this.ensRegistryAddress,
+        abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+        functionName: "resolver",
+        args: [childNode],
+      });
+      console.info(".................resolver 2x: ", resolver);
+
+  
+      // 4) for reverse
+      const ensFullName = childDomain + ".eth";
+      console.info("ensFullName:", ensFullName);
+
+      const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
+      console.info(".................reverseNode: ", reverseNode);
+
+      const setNameData = encodeFunctionData({
+        abi: PublicResolverABI.abi,
+        functionName: 'setName',
+        args: [reverseNode, ensFullName]
+      });
+
+      const call = {
+        to: resolver as `0x${string}`,
+        data: setNameData,
+        value: 0n
+      }
+
+      calls.push(call);
+
+    }
+
+ 
+
+    return { calls };
+  }
+
+
   /**
    * Get the public URL for an agent from ENS text record 'url'.
    * Flow: agentId -> agentName (on-chain metadata) -> resolver.text(namehash(name), 'url')
@@ -454,18 +676,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
       { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
     ] as any[];
 
-    const namehash = (n: string): `0x${string}` => {
-      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
-      let node = '0x' + '00'.repeat(32);
-      if (n) {
-        const labels = n.split('.');
-        for (let i = labels.length - 1; i >= 0; i--) {
-          const labelSha = keccak256(toUtf8Bytes(labels[i]));
-          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
-        }
-      }
-      return node as `0x${string}`;
-    };
 
     const node = namehash(ensName.trim().toLowerCase());
 

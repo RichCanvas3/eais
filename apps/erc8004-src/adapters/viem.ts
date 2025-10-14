@@ -11,6 +11,7 @@ import {
   Hash,
   TransactionReceipt,
   decodeEventLog,
+  encodeFunctionData,
 } from 'viem';
 import { BlockchainAdapter, ContractCallResult } from './types';
 
@@ -157,5 +158,20 @@ export class ViemAdapter implements BlockchainAdapter {
     });
 
     return signature;
+  }
+
+  encodeCall(
+    abi: any[],
+    functionName: string,
+    args: any[]
+  ): string {
+    const cleanFunctionName = functionName.includes('(')
+      ? functionName.substring(0, functionName.indexOf('('))
+      : functionName;
+    return encodeFunctionData({
+      abi: abi as any,
+      functionName: cleanFunctionName as any,
+      args,
+    });
   }
 }

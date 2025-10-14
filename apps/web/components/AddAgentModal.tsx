@@ -1,8 +1,8 @@
 'use client';
 import * as React from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
-import { createAgentAdapter, ensureIdentityWithAA } from '@/lib/agentAdapter';
+import { createAgentAdapter, createAIAgentIdentity, addAgentNameToOrg } from '@/lib/agentAdapter';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 
 import { sepolia } from 'viem/chains';
@@ -150,14 +150,22 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   React.useEffect(() => {
     const label = cleanAgentLabel(name);
     const base = cleanBaseDomain(domain);
+
+
+
     if (label && base) {
       const full = `${label}.${base}.eth`;
       setEnsPreview(full);
       let cancelled = false;
       (async () => {
+        console.info(".................label: ", label);
+        console.info(".................base: ", base);
+        const resolver = await agentIdentityClient.getresolver(full);
+        console.info(".................resolver 3: ", resolver);
+
         try {
           setEnsResolving(true);
-          const addr = await agentIdentityClient.getOrgAccount(full);
+          const addr = await orgIdentityClient.getOrgAccountByName(full);
           if (!cancelled) setEnsResolvedAddress(addr);
           // Also check Registry ownership to determine if the name exists even without an addr record
           const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
@@ -287,7 +295,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         if (!cancelled) setAgentAAOwnerEoa(controller);
         if (controller) {
           try {
-            const reverse = await ensService.getEnsName(controller, sepolia);
+            const reverse = await agentIdentityClient.getAgentNameByAccount(controller as `0x${string}`);
             if (!cancelled) setAgentAAOwnerEns(reverse);
           } catch {}
         }
@@ -315,7 +323,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         // Get resolver and url text for agent ENS
         setAgentUrlLoading(true);
         const normalized = await agentIdentityClient.getAgentUrlByName(ensPreview);
-        //const normalized = await ensService.getTextRecord(ensPreview, 'url', sepolia, rpcUrl);
         if (!cancelled) {
         setAgentUrlText(normalized);
         setAgentUrlEdit(normalized ?? '');
@@ -420,7 +427,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             if (!cancelled) setDomainOwnerIsContract(null);
           }
           try {
-            const reverse = await ensService.getEnsName(owner, sepolia);
+            const reverse = await orgIdentityClient.getOrgNameByAccount(owner as `0x${string}`);
             if (!cancelled) setDomainOwnerEns(reverse);
           } catch {
             if (!cancelled) setDomainOwnerEns(null);
@@ -443,7 +450,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
               setDomainUrlLoading(true);
               setDomainUrlError(null);
               try {
-                const normalized = await ensService.getTextRecord(base, 'url', sepolia, rpcUrl);
+                const normalized = await orgIdentityClient.getOrgUrlByName(base);
                 if (!cancelled) {
                   setDomainUrlText(normalized);
                   setDomainUrlEdit(normalized ?? '');
@@ -516,7 +523,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
             if (!cancelled) setDomainOwnerEoa(controller);
             if (controller) {
               try {
-                const reverse = await ensService.getEnsName(controller, sepolia);
+                const reverse = await orgIdentityClient.getOrgNameByAccount(controller as `0x${string}`);
                 if (!cancelled) setDomainOwnerEoaEns(reverse);
               } catch {
                 if (!cancelled) setDomainOwnerEoaEns(null);
@@ -647,7 +654,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       try {
         const baseDomainUrl = agentUrlText || '';
         const cleanBase = baseDomainUrl.replace(/\/$/, '');
+        
         const label = cleanAgentLabel(name);
+
+        const agentDomainUrl = `${label}.${cleanBase}`
+
         const a2aEndpoint = cleanBase && label ? `${cleanBase}/.well-known/agent-card.json` : `${cleanBase}/.well-known/agent-card.json`;
         const endpoints: any[] = [];
         if (a2aEndpoint) endpoints.push({ name: 'A2A', endpoint: a2aEndpoint, version: '0.3.0' });
@@ -684,7 +695,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         console.warn('IPFS upload failed, proceeding without tokenUri', e);
       }
 
-      console.log('********************* ensureIdentityWithAA: tokenUri: ', tokenUri);
+      console.log('********************* createAIAgentIdentity: tokenUri: ', tokenUri);
 
 
 
@@ -714,7 +725,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
 
       console.info('********************* identityRegistryOwnerWallet: ', identityRegistryOwnerWallet);
-      const agentIdNum = await ensureIdentityWithAA({
+      const agentIdNum = await createAIAgentIdentity({
         agentIdentityClient: agentIdentityClient,
         adapter: agentAdapter,
         publicClient,
@@ -908,10 +919,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 onClick={async () => {
                   try {
                     setError(null);
-                    const base = cleanBaseDomain(domain);
-                    if (!base) throw new Error('Invalid parent domain');
-                    const label = cleanAgentLabel(name);
-                    if (!label) throw new Error('Agent name is required');
+                    const orgName = cleanBaseDomain(domain);
+                    if (!orgName) throw new Error('Invalid parent domain');
+                    const agentName = cleanAgentLabel(name);
+                    if (!agentName) throw new Error('Agent name is required');
+                    const agentUrl = agentUrlText ? agentUrlText.trim() : null;
 
                     // Build clients for ENS owner AA and agent AA
                     const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
@@ -923,7 +935,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
 
                     // ENS Owner AA: parent domain controller
-                    const ensOwnerAA = await toMetaMaskSmartAccount({
+                    const orgAccountClient = await toMetaMaskSmartAccount({
                       address: domainOwnerAddress as `0x${string}`,
                       client: publicClient,
                       implementation: Implementation.Hybrid,
@@ -932,40 +944,30 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                     // Agent AA for the agent name
                     const agentAccountClient = await getDefaultAgentAccount(ensPreview.toLowerCase(), publicClient, walletClient);
-                    const agentAAAddress = await agentAccountClient.getAddress();
+                    const agentAccount = await agentAccountClient.getAddress();
 
-                    // Ethers signer for onchain write
+                    const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
 
-                    const { ethers } = await import('ethers');
-                    const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
-                    const ensOwnerWallet = new ethers.Wallet(ensPrivateKey, ethersProvider);
-                    const signer = ensOwnerWallet.connect(ethersProvider);
-
-
-                    console.info("await ensService.createSubdomainForOrg ");
-                    const result = await ensService.createSubdomainForOrg(
-                      signer as any, // Cast to any to bypass type issues
-                      ensOwnerAA,
+                    console.info("await addAgentNameToOrg");
+                    await addAgentNameToOrg({
+                      agentIdentityClient: agentIdentityClient,
+                      bundlerUrl: BUNDLER_URL,
+                      chain: sepolia,
+                      orgAccountClient,
+                      orgName,
                       agentAccountClient,
-                      agentAAAddress,
-                      base, 
-                      label, 
-                      sepolia
-                    );
+                      agentName,
+                      agentUrl: agentUrl ?? undefined,
+                      agentAccount: agentAccount,
+                    });
 
-                    console.info("await ensService.forwardFromEnsName ");
+                    console.info("*********** done addAgentNameToOrg");
 
-                    await ensService.forwardFromEnsName(result, sepolia, ensOwnerAA, agentAccountClient, label);
-
-                    console.info("await ensService.reverseFromEnsAddress ");
-                    await ensService.reverseFromEnsAddress(result, sepolia, ensOwnerAA, agentAccountClient, label);
-
-                    console.info("***********8 done creating subdomain ");
 
                     // Update Create new Agent state after ENS creation
                     try {
                       setEnsExists(true);
-                      setEnsResolvedAddress(agentAAAddress);
+                      setEnsResolvedAddress(agentAccount);
                       const node = namehash(ensPreview) as `0x${string}`;
                       // Refresh resolver
                       const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
