@@ -1,3 +1,5 @@
+import { createPublicClient, http, type PublicClient } from 'viem';
+import { sepolia } from 'viem/chains';
 import type { BlockchainAdapter } from '../erc8004-src/adapters/types';
 
 /**
@@ -7,13 +9,17 @@ import type { BlockchainAdapter } from '../erc8004-src/adapters/types';
 export class OrgIdentityClient {
   private adapter: BlockchainAdapter;
   private ensRegistryAddress: `0x${string}`;
+  private publicClient: PublicClient | null = null;
 
   constructor(
     adapter: BlockchainAdapter,
-    options?: { ensRegistry?: `0x${string}` }
+    options?: { ensRegistry?: `0x${string}`; rpcUrl?: string }
   ) {
     this.adapter = adapter;
     this.ensRegistryAddress = (options?.ensRegistry || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e') as `0x${string}`;
+    if (options?.rpcUrl) {
+      this.publicClient = createPublicClient({ chain: sepolia, transport: http(options.rpcUrl) });
+    }
   }
 
   /** Resolve the account address for an org ENS name via resolver.addr(namehash(name)). */
@@ -41,6 +47,18 @@ export class OrgIdentityClient {
       }
     } catch {}
 
+    return null;
+  }
+
+  async getOrgEoaByAccount(orgAccount: `0x${string}`): Promise<string | null> {
+    if (this.publicClient) {
+        const eoa = await this.publicClient.readContract({
+        address: orgAccount as `0x${string}`,
+        abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+        functionName: 'owner',
+      });
+      return eoa as string;
+    } 
     return null;
   }
 

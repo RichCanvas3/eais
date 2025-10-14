@@ -86,6 +86,26 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     throw new Error('Agent name does not match that of agent account.  You must register an ENS name for this agent account first.');
   }
 
+  async isValidAgentAccount(agentAccount: `0x${string}`): Promise<boolean | null> {
+    if (this.publicClient) {
+    const code = await this.publicClient.getBytecode({ address: agentAccount as `0x${string}` });
+      return code ? true : false;
+    } 
+    return false;
+  }
+
+  async getAgentEoaByAccount(agentAccount: `0x${string}`): Promise<string | null> {
+    if (this.publicClient) {
+        const eoa = await this.publicClient.readContract({
+        address: agentAccount as `0x${string}`,
+        abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+        functionName: 'owner',
+      });
+      return eoa as string;
+    } 
+    return null;
+  }
+
   /**
    * Get agentName from on-chain metadata (string value)
    */

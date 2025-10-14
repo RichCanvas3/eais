@@ -42,9 +42,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentAccount, setAgentAccount] = React.useState<string | null>(null);
   const [agentResolving, setAgentResolving] = React.useState(false);
   const [agentExists, setAgentExists] = React.useState<boolean | null>(null);
-  const [agentAAIsContract, setAgentAAIsContract] = React.useState<boolean | null>(null);
-  const [agentAAOwnerEoa, setAgentAAOwnerEoa] = React.useState<string | null>(null);
-  const [agentAAOwnerEns, setAgentAAOwnerEns] = React.useState<string | null>(null);
   const [agentAADefaultAddress, setAgentAADefaultAddress] = React.useState<string | null>(null);
   const [agentResolver, setAgentResolver] = React.useState<`0x${string}` | null>(null);
   const [agentUrlText, setAgentUrlText] = React.useState<string | null>(null);
@@ -187,9 +184,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setAgentAccount(null);
       setAgentResolving(false);
       setAgentExists(null);
-      setAgentAAIsContract(null);
-      setAgentAAOwnerEoa(null);
-      setAgentAAOwnerEns(null);
       setAgentResolver(null);
       setAgentUrlText(null);
       setAgentUrlLoading(false);
@@ -241,67 +235,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     return () => { cancelled = true; };
   }, [agentName, provider, eoaAddress, rpcUrl]);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setAgentAAIsContract(null);
-        setAgentAAOwnerEoa(null);
-        setAgentAAOwnerEns(null);
-        if (!agentAccount) return;
-        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-        const code = await publicClient.getBytecode({ address: agentAccount as `0x${string}` });
-        if (!cancelled) setAgentAAIsContract(!!code);
-        if (!code) return;
-        let controller: string | null = null;
-        // Try Ownable.owner()
-        try {
-          const eoa = await publicClient.readContract({
-            address: agentAccount as `0x${string}`,
-            abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-            functionName: 'owner',
-          });
-          controller = eoa as string;
-        } catch {}
-        // Try getOwner()
-        if (!controller) {
-          try {
-            const eoa = await publicClient.readContract({
-              address: agentAccount as `0x${string}`,
-              abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-              functionName: 'getOwner',
-            });
-            controller = eoa as string;
-          } catch {}
-        }
-        // Try owners() -> address[] and take first
-        if (!controller) {
-          try {
-            const eoas = await publicClient.readContract({
-              address: agentAccount as `0x${string}`,
-              abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
-              functionName: 'owners',
-            });
-            if (Array.isArray(eoas) && eoas.length > 0) controller = eoas[0] as string;
-          } catch {}
-        }
-        if (!cancelled) setAgentAAOwnerEoa(controller);
-        if (controller) {
-          try {
-            const reverse = await agentIdentityClient.getAgentNameByAccount(controller as `0x${string}`);
-            if (!cancelled) setAgentAAOwnerEns(reverse);
-          } catch {}
-        }
-      } catch {
-        if (!cancelled) {
-          setAgentAAIsContract(null);
-          setAgentAAOwnerEoa(null);
-          setAgentAAOwnerEns(null);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [agentAccount, rpcUrl]);
 
   // Load agent ENS URL text record if the preview exists
   React.useEffect(() => {
