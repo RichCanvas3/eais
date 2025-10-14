@@ -580,6 +580,7 @@ export class AgentIdentityClient extends BaseIdentityClient {
     
       // 3) Optionally set URL text
       if (params.agentUrl && params.agentUrl.trim() !== '') {
+        console.info(".................params.agentUrl: ", params.agentUrl);
         const dataSetUrl = this.adapter.encodeCall(
           RESOLVER_ABI,
           'setText(bytes32,string,string)',
@@ -601,7 +602,6 @@ export class AgentIdentityClient extends BaseIdentityClient {
     orgName: string;            // e.g., 'airbnb.eth'
     agentName: string;                   // e.g., 'my-agent'
     agentAddress: `0x${string}`;     // AA address for the agent name
-    agentUrl?: string | null                   // optional TTL (defaults to 0)
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[]   }> {
 
 
@@ -609,9 +609,10 @@ export class AgentIdentityClient extends BaseIdentityClient {
     const parent = clean(params.orgName);
     const label = clean(params.agentName).replace(/\s+/g, '-');
     const childDomain = `${label}.${parent}`;
-    console.info(">>>>>>>>>>>>>>>>>> childDomain: ", childDomain);
+    const ensFullName = childDomain + ".eth";
+    console.info(">>>>>>>>>>>>>>>>>> ensFullName: ", ensFullName);
 
-    const childNode = namehash(childDomain + ".eth");
+    //const childNode = namehash(childDomain + ".eth");
 
     // 1) Create subdomain owned by agentAddress and set resolver
 
@@ -622,36 +623,60 @@ export class AgentIdentityClient extends BaseIdentityClient {
     console.info(".................ensRegistryAddress: ", this.ensRegistryAddress);
     if (this.publicClient) {
 
-      const resolver = await this.publicClient.readContract({
-        address: this.ensRegistryAddress,
-        abi: [{ name: "resolver", stateMutability: "view", type: "function",
-                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
-        functionName: "resolver",
-        args: [childNode],
-      });
-      console.info(".................resolver 2x: ", resolver);
-
-  
-      // 4) for reverse
-      const ensFullName = childDomain + ".eth";
-      console.info("ensFullName:", ensFullName);
 
       const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
-      console.info(".................reverseNode: ", reverseNode);
+
+      const BASE_REVERSE_NODE = namehash("addr.reverse");
+      const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+      const reverseRegistrar = await this.publicClient.readContract({
+          address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+          abi: [{
+            name: "owner",
+            type: "function",
+            stateMutability: "view",
+            inputs: [{ name: "node", type: "bytes32" }],
+            outputs: [{ name: "", type: "address" }],
+          }],
+          functionName: "owner",
+          args: [BASE_REVERSE_NODE],
+        });
+
+      const ourReverseRegistrar = await this.publicClient.readContract({
+        address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+        abi: [{
+          name: "owner",
+          type: "function",
+          stateMutability: "view",  
+          inputs: [{ name: "node", type: "bytes32" }],
+          outputs: [{ name: "", type: "address" }],
+        }],
+        functionName: "owner",
+        args: [reverseNode],
+      });
+
+      console.info(".................reverseRegistrar: ", reverseRegistrar);
+      console.info(".................ourReverseRegistrar: ", ourReverseRegistrar);
 
       const setNameData = encodeFunctionData({
-        abi: PublicResolverABI.abi,
-        functionName: 'setName',
-        args: [reverseNode, ensFullName]
+        abi: [{
+          name: "setName",
+          type: "function",
+          stateMutability: "nonpayable",
+          inputs: [{ name: "name", type: "string" }],
+          outputs: [{ name: "node", type: "bytes32" }],
+        }],
+        functionName: "setName",
+        args: [ensFullName], // e.g. "finder-airbnb-com.orgtrust.eth"
       });
 
       const call = {
-        to: resolver as `0x${string}`,
+        to: reverseRegistrar as `0x${string}`,
         data: setNameData,
         value: 0n
       }
-
       calls.push(call);
+
+
 
     }
 
