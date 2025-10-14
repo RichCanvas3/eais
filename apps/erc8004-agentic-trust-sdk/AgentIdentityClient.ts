@@ -325,20 +325,119 @@ export class AgentIdentityClient extends BaseIdentityClient {
   }
 
   /**
-   * Get an organization account address by ENS name.
-   * Cleans common prefixes (e.g., "ens:") and resolves via resolver.addr(namehash(name)).
+   * Get the Agent URL via ENS text record for a given ENS name.
    */
-  async getOrgAccount(orgName: string): Promise<`0x${string}` | null> {
-    const cleaned = orgName.trim().toLowerCase().replace(/^ens:\s*/i, '');
-    // Try as-is
-    const direct = await this.getAgentAccountByName(cleaned);
-    if (direct) return direct;
-    // Fallback: append .eth if missing TLD
-    if (!/\./.test(cleaned)) {
-      return await this.getAgentAccountByName(`${cleaned}.eth`);
+  async getAgentUrlByName(name: string): Promise<string | null> {
+    const ensName = name.trim().toLowerCase();
+    if (!ensName) return null;
+
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+    const namehash = (n: string): `0x${string}` => {
+      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
+      let node = '0x' + '00'.repeat(32);
+      if (n) {
+        const labels = n.split('.');
+        for (let i = labels.length - 1; i >= 0; i--) {
+          const labelSha = keccak256(toUtf8Bytes(labels[i]));
+          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
+        }
+      }
+      return node as `0x${string}`;
+    };
+
+    const node = namehash(ensName);
+
+    // resolver
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      resolverAddr = await (this as any).adapter.call(
+        this.ensRegistryAddress,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [node]
+      );
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
     }
-    return null;
+
+    try {
+      const url: string = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'text',
+        [node, 'url']
+      );
+      const trimmed = (url || '').trim();
+      return trimmed.length > 0 ? trimmed : null;
+    } catch {
+      return null;
+    }
   }
+
+  /**
+   * Reverse lookup: account address -> ENS name via resolver.name(reverseNode)
+   */
+  async getAgentNameByAccount(account: `0x${string}`): Promise<string | null> {
+    const ensRegistry = this.ensRegistryAddress;
+    const accountLower = account.toLowerCase();
+
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'name', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+    const namehash = (n: string): `0x${string}` => {
+      const { keccak256, toUtf8Bytes } = require('ethers') as typeof import('ethers');
+      let node = '0x' + '00'.repeat(32);
+      if (n) {
+        const labels = n.split('.');
+        for (let i = labels.length - 1; i >= 0; i--) {
+          const labelSha = keccak256(toUtf8Bytes(labels[i]));
+          node = keccak256(Buffer.concat([Buffer.from(node.slice(2), 'hex'), Buffer.from(labelSha.slice(2), 'hex')]));
+        }
+      }
+      return node as `0x${string}`;
+    };
+
+    const reverseNode = namehash(`${accountLower.slice(2)}.addr.reverse`);
+
+    // resolver for reverse node
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      resolverAddr = await (this as any).adapter.call(
+        ensRegistry,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [reverseNode]
+      );
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+
+    try {
+      const ensName: string = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'name',
+        [reverseNode]
+      );
+      const normalized = (ensName || '').trim().toLowerCase();
+      return normalized.length > 0 ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
 
   /**
    * Get the public URL for an agent from ENS text record 'url'.

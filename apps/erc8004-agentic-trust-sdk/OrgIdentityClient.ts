@@ -71,6 +71,43 @@ export class OrgIdentityClient {
     return null;
   }
 
+  /** Reverse lookup: account address -> ENS name via resolver.name(reverseNode) */
+  async getOrgNameByAccount(account: `0x${string}`): Promise<string | null> {
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'name', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+    const lower = account.toLowerCase();
+    const reverseNode = this.namehash(`${lower.slice(2)}.addr.reverse`);
+
+    let resolver: `0x${string}` | null = null;
+    try {
+      resolver = await (this.adapter as any).call(
+        this.ensRegistryAddress,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [reverseNode]
+      );
+    } catch {}
+    if (!resolver || this.isZeroAddress(resolver)) return null;
+
+    try {
+      const name: string = await (this.adapter as any).call(
+        resolver,
+        RESOLVER_ABI,
+        'name',
+        [reverseNode]
+      );
+      const normalized = (name || '').trim().toLowerCase();
+      return normalized.length > 0 ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
   // --- internals ---
   private async getResolver(node: `0x${string}`): Promise<`0x${string}` | null> {
     const ENS_REGISTRY_ABI = [

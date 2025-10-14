@@ -14,6 +14,7 @@ import IpfsService from '@/service/ipfsService';
 
 import { EthersAdapter } from '../../erc8004-src';
 import { useAgentIdentityClient } from './AgentIdentityClientProvider';
+import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 
 
@@ -31,6 +32,7 @@ type Props = {
 export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props) {
   const { provider, address } = useWeb3Auth();
   const agentIdentityClient = useAgentIdentityClient();
+  const orgIdentityClient = useOrgIdentityClient();
   const [domain, setDomain] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -312,7 +314,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         if (!ensPreview) return;
         // Get resolver and url text for agent ENS
         setAgentUrlLoading(true);
-        const normalized = await ensService.getTextRecord(ensPreview, 'url', sepolia, rpcUrl);
+        const normalized = await agentIdentityClient.getAgentUrlByName(ensPreview);
+        //const normalized = await ensService.getTextRecord(ensPreview, 'url', sepolia, rpcUrl);
         if (!cancelled) {
         setAgentUrlText(normalized);
         setAgentUrlEdit(normalized ?? '');
