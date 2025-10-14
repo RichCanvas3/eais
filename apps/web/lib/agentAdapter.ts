@@ -1,7 +1,7 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient, parseCompactSignature } from "viem";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
-import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 
 const registryAbi = IdentityRegistryABI as any;
@@ -248,7 +248,7 @@ export async function sendSponsoredUserOperation(params: {
 }
 
 export async function addAgentNameToOrg(params: {
-  agentIdentityClient: AgentIdentityClient,
+  agentIdentityClient: AIAgentIdentityClient,
   bundlerUrl: string,
   chain: Chain,
   orgAccountClient: any,
@@ -337,7 +337,7 @@ export async function addAgentNameToOrg(params: {
 }
 
 export async function createAIAgentIdentity(params: {
-  agentIdentityClient: AgentIdentityClient,
+  agentIdentityClient: AIAgentIdentityClient,
   adapter: any,
   publicClient: PublicClient,
   bundlerUrl: string,
@@ -358,8 +358,8 @@ export async function createAIAgentIdentity(params: {
   const agentName = params.name
   const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
-  // Use AgentIdentityClient to encode calldata (like EAS SDK pattern), then send via bundler
-  console.info('********************* encode register calldata via AgentIdentityClient');
+  // Use AIAgentIdentityClient to encode calldata (like EAS SDK pattern), then send via bundler
+  console.info('********************* encode register calldata via AIAgentIdentityClient');
 
   const dataRegister = await params.agentIdentityClient.encodeRegister(agentName, agentAddress as `0x${string}`, tokenUri ?? '');
 
@@ -374,7 +374,7 @@ export async function createAIAgentIdentity(params: {
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
   console.info("............receipt: ", aaReceipt)
   
-  // Use AgentIdentityClient to extract agentId from receipt
+  // Use AIAgentIdentityClient to extract agentId from receipt
   const tokenId = params.agentIdentityClient.extractAgentIdFromReceiptPublic(aaReceipt);
   console.info("............tokenId: ", tokenId)
 

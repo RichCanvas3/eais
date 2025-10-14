@@ -20,10 +20,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ensService from '@/service/ensService';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
-import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk/AgentIdentityClient';
+import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import { EthersAdapter } from '../../erc8004-src';
 import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
-import { useAgentIdentityClient } from './AgentIdentityClientProvider';
+import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
@@ -76,7 +76,7 @@ export function AgentTable() {
 	const [infoError, setInfoError] = React.useState<string | null>(null);
 	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
 	
-	const agentIdentityClient = useAgentIdentityClient();
+const agentIdentityClient = useAgentIdentityClient();
 
 	async function openIdentityJson(row: Agent) {
 		try {
@@ -393,7 +393,7 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
 const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
 const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
-	const identityClientRef = React.useRef<AgentIdentityClient | null>(null);
+const identityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
 
 	const [ensOpen, setEnsOpen] = React.useState(false);
 	const [ensData, setEnsData] = React.useState<{

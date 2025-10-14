@@ -1,27 +1,27 @@
 'use client';
 import * as React from 'react';
 import { EthersAdapter } from '../../erc8004-src';
-import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import { sepolia } from 'viem/chains';
 import { http } from 'viem';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { Chain } from 'viem';
 import { chainConfig } from 'viem/zksync';
 
-type Ctx = AgentIdentityClient | null;
+type Ctx = AIAgentIdentityClient | null;
 const AgentIdentityClientContext = React.createContext<Ctx>(null);
 
-export function useAgentIdentityClient(): AgentIdentityClient {
+export function useAgentIdentityClient(): AIAgentIdentityClient {
   const client = React.useContext(AgentIdentityClientContext);
-  if (!client) throw new Error('useAgentIdentityClient must be used within AgentIdentityClientProvider');
+  if (!client) throw new Error('useAgentIdentityClient must be used within AIAgentIdentityClientProvider');
   return client;
 }
 
 type Props = { children: React.ReactNode };
 
-export function AgentIdentityClientProvider({ children }: Props) {
+export function AIAgentIdentityClientProvider({ children }: Props) {
   const { provider } = useWeb3Auth();
-  const [client, setClient] = React.useState<AgentIdentityClient | null>(null);
+  const [client, setClient] = React.useState<AIAgentIdentityClient | null>(null);
 
   React.useEffect(() => {
     (async () => {
@@ -41,8 +41,8 @@ export function AgentIdentityClientProvider({ children }: Props) {
       const agentSigner = await browserProvider.getSigner();
       const agentAdapter = new EthersAdapter(browserProvider, agentSigner);
 
-      // Construct client (constructor matches current AgentIdentityClient signature in your repo)
-      const instance = new AgentIdentityClient(
+      // Construct client (constructor matches current AIAgentIdentityClient signature in your repo)
+      const instance = new AIAgentIdentityClient(
         rpcUrl,
         orgAdapter,
         agentAdapter,

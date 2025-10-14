@@ -2,7 +2,7 @@ import * as React from 'react';
 import ThemeRegistry from '@/components/ThemeRegistry';
 import { Web3AuthProvider } from '@/components/Web3AuthProvider';
 import { OrgIdentityClientProvider } from '@/components/OrgIdentityClientProvider';
-import { AgentIdentityClientProvider } from '@/components/AgentIdentityClientProvider';
+import {  AIAgentIdentityClientProvider } from '@/components/AIAgentIdentityClientProvider';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,9 +15,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             rpcUrl={(process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia'}
           >
             <OrgIdentityClientProvider>
-            <AgentIdentityClientProvider>
+            <AIAgentIdentityClientProvider>
               {children}
-              </AgentIdentityClientProvider>
+              </AIAgentIdentityClientProvider>
             </OrgIdentityClientProvider>
             </Web3AuthProvider>
         </ThemeRegistry>

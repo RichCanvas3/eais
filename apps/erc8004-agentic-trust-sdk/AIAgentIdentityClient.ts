@@ -6,16 +6,16 @@ import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexT
 import { ethers } from 'ethers';
 import { sepolia } from 'viem/chains';
 
-import BaseRegistrarABI from  'abis/BaseRegistrarImplementation.json'
-import ETHRegistrarControllerABI from 'abis/ETHRegistrarController.json';
-import NameWrapperABI from 'abis/NameWrapper.json';
-import PublicResolverABI from 'abis/PublicResolver.json';
+import BaseRegistrarABI from  './abis/BaseRegistrarImplementation.json'
+import ETHRegistrarControllerABI from './abis/ETHRegistrarController.json';
+import NameWrapperABI from './abis/NameWrapper.json';
+import PublicResolverABI from './abis/PublicResolver.json';
 
 import { IdentityClient as BaseIdentityClient } from '../erc8004-src/IdentityClient';
 import IdentityRegistryABI from '../erc8004-src/abis/IdentityRegistry.json';
 import type { MetadataEntry } from '../erc8004-src/types';
 
-export class AgentIdentityClient extends BaseIdentityClient {
+export class AIAgentIdentityClient extends BaseIdentityClient {
   private chain: Chain;
   private rpcUrl: string;
   private orgAdapter: any;
