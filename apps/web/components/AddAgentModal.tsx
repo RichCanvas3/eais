@@ -53,6 +53,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentUrlEdit, setAgentUrlEdit] = React.useState('');
   const [agentUrlIsAuto, setAgentUrlIsAuto] = React.useState(true);
   const [agentUrlSaving, setAgentUrlSaving] = React.useState(false);
+  const [creatingEns, setCreatingEns] = React.useState(false);
   const [agentIdentityExists, setAgentIdentityExists] = React.useState<boolean | null>(null);
   const [domainStatus, setDomainStatus] = React.useState<{
     exists: boolean;
@@ -911,9 +912,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
               <Button
                 size="small"
                 variant="outlined"
-                disabled={!provider || !domainStatus?.exists || !domainOwnerAddress}
+                disabled={!provider || !domainStatus?.exists || !domainOwnerAddress || creatingEns}
                 onClick={async () => {
                   try {
+                    setCreatingEns(true);
                     setError(null);
                     const orgName = cleanBaseDomain(domain);
                     if (!orgName) throw new Error('Invalid parent domain');
@@ -984,6 +986,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                   } catch (e: any) {
                     setError(e?.message ?? 'Failed to create ENS subdomain');
+                  } finally {
+                    setCreatingEns(false);
                   }
                 }}
               >Create ENS</Button>
@@ -1054,7 +1058,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         <Button onClick={handleSubmit} variant="contained" disableElevation disabled={
           isSubmitting ||
           !provider ||
-          agentIdentityExists === true
+          agentIdentityExists === true ||
+          !ensPreview.trim() ||
+          agentUrlLoading ||
+          !agentUrlText ||
+          !/^https?:\/\//i.test(agentUrlText)
         }>Create</Button>
       </DialogActions>
     </Dialog>

@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient } from "viem";
+import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient, parseCompactSignature } from "viem";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { AgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
@@ -354,24 +354,21 @@ export async function createAIAgentIdentity(params: {
 
   console.log('********************* deploySmartAccountIfNeeded');
   await deploySmartAccountIfNeeded({ bundlerUrl, chain, account: agentAccount });
+
+  const agentName = params.name
   const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
   // Use AgentIdentityClient to encode calldata (like EAS SDK pattern), then send via bundler
   console.info('********************* encode register calldata via AgentIdentityClient');
-  const dataRegister = params.agentIdentityClient.encodeRegisterWithMetadata(
-    tokenUri ?? '',
-    [
-      { key: 'agentName', value: params.name },
-      { key: 'agentAccount', value: agentAddress }
-    ]
-  ) as `0x${string}`;
+
+  const dataRegister = await params.agentIdentityClient.encodeRegister(agentName, agentAddress as `0x${string}`, tokenUri ?? '');
 
   console.info('********************* send via bundler (sponsored)');
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
     chain,
     accountClient: agentAccount,
-    calls: [{ to: registry, data: dataRegister }],
+    calls: [{ to: registry, data: dataRegister as `0x${string}` }],
   });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });

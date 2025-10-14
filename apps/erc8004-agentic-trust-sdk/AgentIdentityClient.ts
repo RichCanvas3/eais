@@ -49,10 +49,10 @@ export class AgentIdentityClient extends BaseIdentityClient {
    * Encode register calldata without sending (for bundler/AA - like EAS SDK pattern)
    * This override exists in the Agentic Trust SDK to keep AA helpers here.
    */
-  encodeRegisterWithMetadata(
+  async encodeRegisterWithMetadata(
     tokenURI: string,
     metadata: MetadataEntry[] = []
-  ): string {
+  ): Promise<string> {
     const metadataFormatted = metadata.map(m => ({
       key: m.key,
       value: (this as any).stringToBytes(m.value) as Uint8Array,
@@ -62,6 +62,28 @@ export class AgentIdentityClient extends BaseIdentityClient {
       'register(string,(string,bytes)[])',
       [tokenURI, metadataFormatted]
     );
+  }
+
+  async encodeRegister(name: string, agentAccount: `0x${string}`, tokenURI: string): Promise<string> {
+
+    // check that ENS name is associated with this agent account
+    const foundAccount = await this.getAgentAccountByName(name);
+    console.info("name: ", name);
+    console.info("foundAccount: ", foundAccount);
+    console.info("agentAccount: ", agentAccount);
+    if (foundAccount && agentAccount.endsWith(foundAccount) && foundAccount !== '0x0000000000000000000000000000000000000000') {
+      console.info("Agent name exists for this account and it matches the agent account");
+
+      // check that Agent Identity does not already exist for this ENS name
+      const foundAgentIdentity = await this.getAgentIdentityByName(name);
+      console.info("foundAgentIdentity: ", foundAgentIdentity);
+      if (foundAgentIdentity.agentId && foundAgentIdentity.agentId > 0n) {
+        throw new Error('Agent identity already exists for this ENS name');
+      }
+
+      return await this.encodeRegisterWithMetadata(tokenURI, [{ key: 'agentName', value: name }, { key: 'agentAccount', value: agentAccount }]);
+    }
+    throw new Error('Agent name does not match that of agent account.  You must register an ENS name for this agent account first.');
   }
 
   /**
