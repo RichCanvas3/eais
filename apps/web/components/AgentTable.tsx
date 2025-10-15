@@ -20,10 +20,13 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ensService from '@/service/ensService';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
-import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentIdentityClient, OrgIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import { EthersAdapter } from '../../erc8004-src';
 import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
+
+
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
+import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
@@ -76,7 +79,8 @@ export function AgentTable() {
 	const [infoError, setInfoError] = React.useState<string | null>(null);
 	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
 	
-const agentIdentityClient = useAgentIdentityClient();
+	const agentIdentityClient = useAgentIdentityClient();
+	const orgIdentityClient = useOrgIdentityClient();
 
 	async function openIdentityJson(row: Agent) {
 		try {
@@ -123,46 +127,23 @@ const agentIdentityClient = useAgentIdentityClient();
 			let account: string | null = null;
 			try {
 				console.info(".................openAgentInfo: ");
-				const identityClient = identityClientRef.current;
-				if (identityClient) {
-					name = await identityClient.getAgentName(agentIdNum);
-					account = await identityClient.getAgentAccount(agentIdNum);
-					console.info(".................name by agent id: ", name);
-					console.info(".................account by agent id: ", account);
-
-					if (name) {
-						const acc = await identityClient.getAgentAccountByName(name);
-						console.info(".................get account by name: ", acc);
-					}
-					
-					if (account) {
-						const nm = await identityClient.getAgentNameByAccount(account as `0x${string}`);
-						console.info(".................get name by account: ", nm);
-					}
-
-					
+				const agentIdentityClient = agentIdentityClientRef.current;
+				if (agentIdentityClient) {
+					name = await agentIdentityClient.getAgentName(agentIdNum);
+					account = await agentIdentityClient.getAgentAccount(agentIdNum);
 				}
 			} catch {}
 			if (!name || !account) {
-				try {
-					const nameFallback = await publicClient.readContract({
-						address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
-						abi: registryAbi as any,
-						functionName: 'getMetadata' as any,
-						args: [agentIdNum, 'agentName']
-					}) as string;
-					const accountFallback = await publicClient.readContract({
-						address: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`,
-						abi: registryAbi as any,
-						functionName: 'getMetadata' as any,
-						args: [agentIdNum, 'agentAccount']
-					}) as string;
+
+				const agentIdentityClient = agentIdentityClientRef.current;
+				if (agentIdentityClient) {
+					const nameFallback = await agentIdentityClient.getAgentName(agentIdNum);
+					const accountFallback = await agentIdentityClient.getAgentAccount(agentIdNum);
 					name = name ?? nameFallback;
 					account = account ?? accountFallback;
-				} catch {}
-			}
+				}
 
-			
+			}
 
 			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null });
 		} catch (e: any) {
@@ -233,11 +214,11 @@ const agentIdentityClient = useAgentIdentityClient();
         if (data?.rows) {
             data.rows.forEach(async (row) => {
                 try {
-                    const identityClient = identityClientRef.current;
-                    if (identityClient) {
+                    const agentIdentityClient = agentIdentityClientRef.current;
+                    if (agentIdentityClient) {
                         const agentIdNum = BigInt(row.agentId);
-                        const name = await identityClient.getAgentName(agentIdNum);
-                        const acct = await identityClient.getAgentAccount(agentIdNum);
+                        const name = await agentIdentityClient.getAgentName(agentIdNum);
+                        const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
                         setMetadataNames(prev => ({ ...prev, [row.agentId]: name ?? null }));
                         setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
                         if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
@@ -255,8 +236,8 @@ const agentIdentityClient = useAgentIdentityClient();
 
 	// Check if parent ENS domain is already wrapped
 	const checkParentWrapStatus = async () => {
-		const parentEnsName = process.env.NEXT_PUBLIC_ENS_NAME;
-		if (!parentEnsName) {
+		const orgName = process.env.NEXT_PUBLIC_ENS_NAME;
+		if (!orgName) {
 			console.log('❌ NEXT_PUBLIC_ENS_NAME not configured');
 			setEnsError('Parent ENS name not configured');
 			return;
@@ -264,7 +245,7 @@ const agentIdentityClient = useAgentIdentityClient();
 
 		console.log('🔍 Starting wrap status check...');
 		console.log('📋 Configuration:', {
-			parentEnsName,
+			orgName,
 			chainName: sepolia.name,
 			chainId: sepolia.id,
 			ENS_PRIVATE_KEY: process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY ? `${process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY.slice(0, 10)}...` : 'NOT_SET'
@@ -274,7 +255,7 @@ const agentIdentityClient = useAgentIdentityClient();
 		setEnsError(null);
 
 		try {
-			const cleanName = cleanEnsName(parentEnsName);
+			const cleanName = cleanEnsName(orgName);
 			console.log('🧹 Cleaned ENS name:', cleanName);
 			
 			// Create public client for reading contract data
@@ -282,82 +263,27 @@ const agentIdentityClient = useAgentIdentityClient();
 				chain: sepolia,
 				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
 			});
+
+			const agentIdentityClient = agentIdentityClientRef.current;
+			if (agentIdentityClient) {
+
+			}
+
+			let orgAccount = '0x0000000000000000000000000000000000000000'
+			const orgIdentityClient = orgIdentityClientRef.current;
+			if (orgIdentityClient) {
+				orgAccount = await orgIdentityClient.getOrgAccountByName(orgName) as `0x${string}`;
+			}
 			
-			// Check if the parent domain is wrapped by checking if ENS Registry owner is NameWrapper
-			const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-			const NAME_WRAPPER_ADDRESS = (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8';
-			const parentNode = namehash(cleanName + '.eth');
 			
-			console.log('🔍 Checking ENS Registry for parent domain owner...');
-			const parentOwner = await publicClient.readContract({
-				address: ENS_REGISTRY_ADDRESS as `0x${string}`,
-				abi: [{ name: 'owner', type: 'function', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }], stateMutability: 'view' }],
-				functionName: 'owner',
-				args: [parentNode]
-			}) as `0x${string}`;
-			
-			console.log(`🔗 Parent domain: ${cleanName}.eth`);
-			console.log(`🔗 Parent node: ${parentNode}`);
-			console.log(`👤 Parent owner - from ENS Registry which for wrapped points to NameWrapper: ${parentOwner}`);
-			
-			if (parentOwner === '0x0000000000000000000000000000000000000000') {
+			if (orgAccount === '0x0000000000000000000000000000000000000000') {
 				console.log('❌ Parent domain does not exist or has no owner');
 				setEnsError(`Parent domain "${cleanName}.eth" does not exist or has no owner`);
-				setIsParentWrapped(false);
 				return;
 			}
 			
-			// For wrapped ENS records, we need to get the actual owner from NameWrapper
-			let actualOwner: string;
-			let isWrapped = false;
-			
-			if (parentOwner.toLowerCase() === NAME_WRAPPER_ADDRESS.toLowerCase()) {
-				console.log('✅ Parent domain is wrapped, getting NameWrapper owner...');
-				isWrapped = true;
-				
-				try {
-					const tokenId = BigInt(parentNode);
-					actualOwner = await publicClient.readContract({
-						address: NAME_WRAPPER_ADDRESS as `0x${string}`,
-						abi: [{ name: 'ownerOf', type: 'function', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: '', type: 'address' }], stateMutability: 'view' }],
-						functionName: 'ownerOf',
-						args: [tokenId]
-					}) as `0x${string}`;
-					
-					console.log(`🎯 NameWrapper owner: ${actualOwner}`);
-				} catch (error) {
-					console.error('❌ Error getting NameWrapper owner:', error);
-					setEnsError(`Failed to get NameWrapper owner: ${error instanceof Error ? error.message : String(error)}`);
-					setIsParentWrapped(false);
-					return;
-				}
-			} else {
-				actualOwner = parentOwner;
-				console.log(`🎯 Direct owner (not wrapped): ${actualOwner}`);
-			}
-			
-			setIsParentWrapped(isWrapped);
-			setParentEnsOwner(actualOwner);
-			
-			if (isWrapped) {
-				console.log('✅ Parent domain is wrapped successfully');
-				console.log('👑 Current wrapped domain owner:', actualOwner);
-				
-				// Calculate what the expected AA address should be
-				const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
-				if (ensPrivateKey) {
-					const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
-					console.log('🔍 Expected AA owner details:', {
-						eoaAddress: ensOwnerEOA.address,
-						expectedAASalt: 200,
-						expectedAASaltHex: `0x${(200).toString(16)}`,
-						note: 'This AA should own the wrapped parent domain'
-					});
-				}
-			} else {
-				console.log('⚠️  Parent domain is NOT wrapped');
-				setEnsError(`Parent domain "${cleanName}.eth" is not wrapped.`);
-			}
+			setOrgOwner(orgAccount);
+
 		} catch (error) {
 			console.error('❌ Error checking wrap status:', error);
 			setEnsError(`Failed to check wrap status: ${error instanceof Error ? error.message : String(error)}`);
@@ -393,7 +319,8 @@ const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | nul
 const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
 const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
 const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
-const identityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
+const agentIdentityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
+const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
 	const [ensOpen, setEnsOpen] = React.useState(false);
 	const [ensData, setEnsData] = React.useState<{
@@ -410,10 +337,8 @@ const identityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
 	const [ensCurrentAgent, setEnsCurrentAgent] = React.useState<Agent | null>(null);
 	const [ensSubdomainName, setEnsSubdomainName] = React.useState('');
 	const [ensParentName, setEnsParentName] = React.useState('');
-	const [ensCreating, setEnsCreating] = React.useState(false);
-	const [isParentWrapped, setIsParentWrapped] = React.useState<boolean | null>(null);
 	const [isCheckingWrapStatus, setIsCheckingWrapStatus] = React.useState(false);
-	const [parentEnsOwner, setParentEnsOwner] = React.useState<string | null>(null);
+	const [orgOwner, setOrgOwner] = React.useState<string | null>(null);
 	
 	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
 	const [didWebOpen, setDidWebOpen] = React.useState(false);
@@ -631,7 +556,8 @@ const identityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
                 const { ethers } = await import('ethers');
                 const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL as string);
                 const adapter = new EthersAdapter(provider);
-                identityClientRef.current = agentIdentityClient;
+                agentIdentityClientRef.current = agentIdentityClient;
+                orgIdentityClientRef.current = orgIdentityClient;
             } catch {}
         })();
         async function computeOwnership() {
@@ -2228,21 +2154,13 @@ const identityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
 												error={ensSubdomainName.includes('.')}
 											/>
 
-											{!isParentWrapped && (
-												<Typography variant="body2" color="error" sx={{ mt: 1 }}>
-													⚠️ Cannot create subdomain: Parent domain is not wrapped
-												</Typography>
-											)}
+
 											{ensSubdomainName.includes('.') && (
 												<Typography variant="body2" color="error" sx={{ mt: 1 }}>
 													❌ Invalid subdomain name: Cannot contain dots. Use a single label like "finder" instead of "finder.airbnb.org"
 												</Typography>
 											)}
-											{isParentWrapped && !ensSubdomainName.includes('.') && (
-												<Typography variant="body2" color="success.dark" sx={{ mt: 1 }}>
-													✅ Parent domain is wrapped. The ENS owner's account abstraction will create the subdomain for the agent.
-												</Typography>
-											)}
+
 											</Stack>
 										</Stack>
 									</Paper>
@@ -2257,99 +2175,50 @@ const identityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
 							<Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
 								Parent Domain
 							</Typography>
-							{isParentWrapped === true && (
-								<Paper sx={{ p: 3, border: '1px solid', borderColor: 'success.main', borderRadius: 2 }}>
 
-												<Box>
-													<Typography variant="body2" color="text.secondary">
-														Domain
-													</Typography>
-													<Typography 
-														variant="body1" 
-														sx={{ 
-															fontFamily: 'ui-monospace, monospace',
-															color: 'primary.main',
-															cursor: 'pointer',
-															'&:hover': {
-																textDecoration: 'underline'
-															}
-														}}
-														onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
-													>
-														{ensParentName}
-													</Typography>
-												</Box>
-												<Box>
-													<Typography variant="body2" color="text.secondary">
-														Owner
-													</Typography>
-													<Typography 
-														variant="body1" 
-														sx={{ 
-															fontFamily: 'ui-monospace, monospace',
-															color: 'primary.main',
-															cursor: 'pointer',
-															'&:hover': {
-																textDecoration: 'underline'
-															}
-														}}
-														onClick={() => window.open(`https://sepolia.etherscan.io/address/${parentEnsOwner}`, '_blank')}
-													>
-														{parentEnsOwner}
-													</Typography>
-												</Box>
-	
-								</Paper>
-							)}
-							{isParentWrapped === false && (
-								<Paper sx={{ p: 3, border: '1px solid', borderColor: 'warning.main', borderRadius: 2 }}>
-									<Stack spacing={2}>
-										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-											<Box sx={{ 
-												width: 8, 
-												height: 8, 
-												borderRadius: '50%', 
-												bgcolor: 'warning.main' 
-											}} />
-											<Typography variant="h6" color="warning.dark" sx={{ fontWeight: 600 }}>
-												Parent Domain Not Wrapped
-											</Typography>
-										</Box>
-										<Box sx={{ 
-											p: 2, 
-											bgcolor: 'warning.light', 
-											borderRadius: 1,
-											border: '1px solid',
-											borderColor: 'warning.main'
-										}}>
-											<Stack spacing={1}>
-												<Box>
-													<Typography variant="body2" color="text.secondary">
-														Domain
-													</Typography>
-													<Typography 
-														variant="body1" 
-														sx={{ 
-															fontFamily: 'ui-monospace, monospace',
-															color: 'primary.main',
-															cursor: 'pointer',
-															'&:hover': {
-																textDecoration: 'underline'
-															}
-														}}
-														onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
-													>
-														{ensParentName}
-													</Typography>
-												</Box>
-												<Typography variant="body2" color="warning.dark">
-													Please wrap the parent domain before creating subdomains.
+							<Paper sx={{ p: 3, border: '1px solid', borderColor: 'success.main', borderRadius: 2 }}>
+
+											<Box>
+												<Typography variant="body2" color="text.secondary">
+													Domain
 												</Typography>
-											</Stack>
-										</Box>
-									</Stack>
-								</Paper>
-							)}
+												<Typography 
+													variant="body1" 
+													sx={{ 
+														fontFamily: 'ui-monospace, monospace',
+														color: 'primary.main',
+														cursor: 'pointer',
+														'&:hover': {
+															textDecoration: 'underline'
+														}
+													}}
+													onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
+												>
+													{ensParentName}
+												</Typography>
+											</Box>
+											<Box>
+												<Typography variant="body2" color="text.secondary">
+													Owner
+												</Typography>
+												<Typography 
+													variant="body1" 
+													sx={{ 
+														fontFamily: 'ui-monospace, monospace',
+														color: 'primary.main',
+														cursor: 'pointer',
+														'&:hover': {
+															textDecoration: 'underline'
+														}
+													}}
+													onClick={() => window.open(`https://sepolia.etherscan.io/address/${parentEnsOwner}`, '_blank')}
+												>
+													{orgOwner}
+												</Typography>
+											</Box>
+
+							</Paper>
+
 						</Box>
 					)}
 

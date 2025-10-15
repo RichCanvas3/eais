@@ -12,7 +12,6 @@ import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-too
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 
-import { EthersAdapter } from '../../erc8004-src';
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
@@ -344,41 +343,24 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
           // Read resolver & URL text record (via service for normalization)
           try {
-            const baseName = base + '.eth';
-            const node = namehash(baseName);
-            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-            const resolverAddr = await publicClient.readContract({
-              address: ENS_REGISTRY_ADDRESS,
-              abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
-              functionName: 'resolver',
-              args: [node],
-            }) as `0x${string}`;
-            if (!cancelled) setDomainResolver(resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000' ? resolverAddr : null);
-            if (resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000') {
-              setDomainUrlLoading(true);
-              setDomainUrlError(null);
-              try {
-                const normalized = await orgIdentityClient.getOrgUrlByName(base);
-                if (!cancelled) {
-                  setDomainUrlText(normalized);
-                  setDomainUrlEdit(normalized ?? '');
-                }
-              } catch (e: any) {
-                if (!cancelled) {
-                  setDomainUrlText(null);
-                  setDomainUrlEdit('');
-                  setDomainUrlError(e?.message ?? 'Failed to read url');
-                }
-              } finally {
-                if (!cancelled) setDomainUrlLoading(false);
+            setDomainUrlLoading(true);
+            setDomainUrlError(null);
+            try {
+              const normalized = await orgIdentityClient.getOrgUrlByName(base);
+              if (!cancelled) {
+                setDomainUrlText(normalized);
+                setDomainUrlEdit(normalized ?? '');
               }
-            } else {
+            } catch (e: any) {
               if (!cancelled) {
                 setDomainUrlText(null);
                 setDomainUrlEdit('');
+                setDomainUrlError(e?.message ?? 'Failed to read url');
               }
+            } finally {
+              if (!cancelled) setDomainUrlLoading(false);
             }
+            
           } catch (e: any) {
             if (!cancelled) {
               setDomainResolver(null);
@@ -515,13 +497,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       try { (walletClient as any).account = eoaAddress as Address; } catch {}
       const agentAccountClient = await getDefaultAgentAccountClient(agentNameLower, publicClient, walletClient);
         
-      
-
       const agentAddress = await agentAccountClient.getAddress();
-      console.log('********************* agentAddress', agentAddress);
 
       // Ensure Agent AA is deployed (sponsored via Pimlico)
-      console.info("ensure agent account client is deployed");
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
         const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
@@ -541,13 +519,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         });
         await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOperationHash });
       }
-      console.log('********************* deployed', deployed);
 
       // Check if an agent already exists for this AA address via backend DB
       try {
-        const { ethers } = await import('ethers');
-        const provider2 = new ethers.JsonRpcProvider(rpcUrl);
-        const readOnlyAdapter = new EthersAdapter(provider2);
         const { agentId } = await agentIdentityClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
         if (agentId && agentId > 0n) {
           setIsSubmitting(false);
@@ -719,24 +693,16 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 )}
                 onClick={async () => {
                   try {
-                    console.log('********************* setDomainUrlSaving: ', domainUrlEdit);
+
                     setDomainUrlSaving(true);
                     setDomainUrlError(null);
 
-                    console.log('********************* cleanBaseDomain');
-                    const baseName = cleanBaseDomain(domain) + '.eth';
-                    const node = namehash(baseName) as `0x${string}`;
                     if (domainOwnerIsContract) {
-
-                      console.log('********************* createPublicClient');
 
                       // Build AA client using connected EOA (controller) like other parts of the app
                       const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
                       const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
-                      
-                      console.log('********************* check address: ', eoaAddress);
                       try { (walletClient as any).account = eoaAddress as Address; } catch {}
-                      console.info("to metamask smart account");
 
                       const smartAccountClient = await toMetaMaskSmartAccount({
                         address: domainOwnerAddress as `0x${string}`,
@@ -755,9 +721,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                         agentUri: agentUrlEdit.trim(),
                       });
 
-                      console.log('await ensService.setTextWithAA: ', smartAccountClient);
-                      await ensService.setTextWithAA(smartAccountClient as any, domainResolver as `0x${string}`, node, 'url', domainUrlEdit.trim(), sepolia);
-                    } 
+                     } 
                     setDomainUrlText(domainUrlEdit.trim());
                   } catch (e: any) {
                     setDomainUrlError(e?.message ?? 'Failed to set URL');
@@ -848,12 +812,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     try {
                       setAgentExists(true);
                       setAgentAccount(agentAccount);
-                      const node = namehash(agentName) as `0x${string}`;
-                      // Refresh resolver
-                      const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-                      
+
                       try {
-                        const normalized = await ensService.getTextRecord(agentName, 'url', sepolia, rpcUrl);
+                        const normalized = await agentIdentityClient.getAgentUrlByName(agentName)
                         setAgentUrlText(normalized);
                         setAgentUrlEdit(normalized ?? '');
                       } catch {}
