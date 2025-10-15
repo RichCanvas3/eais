@@ -86,6 +86,48 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     throw new Error('Agent name does not match that of agent account.  You must register an ENS name for this agent account first.');
   }
 
+  async prepareRegisterCalls(name: string, agentAccount: `0x${string}`, tokenURI: string): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+    const data = await this.encodeRegisterWithMetadata(tokenURI, [{ key: 'agentName', value: name }, { key: 'agentAccount', value: agentAccount }]);
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+    calls.push({ 
+        to: this.identityRegistryAddress, 
+        data: data as `0x${string}`
+    });
+    return { calls };
+  }
+
+  async encodeSetUri(
+    name: string,
+    uri: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const node = namehash(name) as `0x${string}`;
+    const data = encodeFunctionData({
+        abi: PublicResolverABI.abi,
+        functionName: 'setText',
+        args: [node, "url", uri]
+    });
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    if (this.publicClient) {
+        const resolver = await this.publicClient.readContract({
+            address: this.ensRegistryAddress,
+            abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                    inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+            functionName: "resolver",
+            args: [node],
+        });
+
+        const call = { to: resolver, data, value: 0n }
+        calls.push(call);
+    }
+
+    return { calls };
+
+  } 
+                     
+
   async isValidAgentAccount(agentAccount: `0x${string}`): Promise<boolean | null> {
     if (this.publicClient) {
     const code = await this.publicClient.getBytecode({ address: agentAccount as `0x${string}` });

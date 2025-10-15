@@ -958,6 +958,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                           try { (walletClient as any).account = eoaAddress as Address; } catch {}
                           // Use the agent AA derived from the name to authorize setText via AA
                           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
+
+                          const { calls } = await agentIdentityClient.encodeSetUri(agentName, agentUrlEdit.trim());
+
+
+                          
                           console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
                           await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
                           setAgentUrlText(agentUrlEdit.trim());

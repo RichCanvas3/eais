@@ -59,7 +59,6 @@ export class IdentityClient {
     };
   }
 
-  // encodeRegisterWithMetadata moved to agentic-trust SDK
 
   /**
    * Extract agentId from transaction receipt (for bundler/custom tx flows)
