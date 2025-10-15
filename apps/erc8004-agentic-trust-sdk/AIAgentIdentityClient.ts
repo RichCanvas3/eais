@@ -96,21 +96,27 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     return { calls };
   }
 
-  async encodeSetUri(
-    name: string,
-    uri: string
-  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
 
+  async encodeSetUri(name: string, uri: string): Promise<`0x${string}`>  {
     const node = namehash(name) as `0x${string}`;
     const data = encodeFunctionData({
         abi: PublicResolverABI.abi,
         functionName: 'setText',
         args: [node, "url", uri]
     });
+    return data as `0x${string}`;
+  }
 
+  async prepareSetUriCalls(
+    name: string,
+    uri: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const data = await this.encodeSetUri(name, uri);
     const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
 
     if (this.publicClient) {
+        const node = namehash(name) as `0x${string}`;
         const resolver = await this.publicClient.readContract({
             address: this.ensRegistryAddress,
             abi: [{ name: "resolver", stateMutability: "view", type: "function",
@@ -119,14 +125,55 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
             args: [node],
         });
 
-        const call = { to: resolver, data, value: 0n }
-        calls.push(call);
+        calls.push({ to: resolver, data: data as `0x${string}`});
     }
 
     return { calls };
 
   } 
-                     
+
+  async encodeSetAgentIdentity(name: string, agentIdentity: BigInt): Promise<`0x${string}`>  {
+
+    // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]
+    const chainHex = (this.chain.id >>> 0).toString(16).padStart(8, '0');
+    const addrHex = (this.identityRegistryAddress).slice(2).toLowerCase().padStart(40, '0');
+    const idHex = agentIdentity.toString(16);
+    const idLen = Math.ceil(idHex.length / 2);
+    const idLenHex = idLen.toString(16).padStart(2, '0');
+    const valueHex = `0x01` + `01` + chainHex + addrHex + idLenHex + idHex.padStart(idLen * 2, '0');
+
+    const node = namehash(name) as `0x${string}`;
+    const data = encodeFunctionData({
+        abi: PublicResolverABI.abi,
+        functionName: 'setText',
+        args: [node, "agent-identity", valueHex]
+    });
+    return data as `0x${string}`;
+  }
+  async prepareSetAgentIdentityCalls(
+    name: string,
+    agentIdentity: BigInt
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const data = await this.encodeSetAgentIdentity(name, agentIdentity);
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    if (this.publicClient) {
+        const node = namehash(name) as `0x${string}`;
+        const resolver = await this.publicClient.readContract({
+            address: this.ensRegistryAddress,
+            abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                    inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+            functionName: "resolver",
+            args: [node],
+        });
+
+        calls.push({ to: resolver, data: data as `0x${string}`});
+    }
+
+    return { calls };
+
+  } 
 
   async isValidAgentAccount(agentAccount: `0x${string}`): Promise<boolean | null> {
     if (this.publicClient) {
@@ -136,7 +183,46 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     return false;
   }
 
-  async getAgentEoaByAccount(agentAccount: `0x${string}`): Promise<string | null> {
+      /**
+   * Extract agentId from a user operation/transaction receipt
+   * Public in this SDK to support AA flows explicitly.
+   */
+    extractAgentIdFromReceiptPublic(receipt: any): bigint {
+    // Look for parsed events first
+    if (receipt?.events) {
+        const registeredEvent = receipt.events.find((e: any) => e.name === 'Registered');
+        if (registeredEvent?.args) {
+        const val = registeredEvent.args.agentId ?? registeredEvent.args[0];
+        if (val !== undefined) return BigInt(val);
+        }
+
+        const transferEvent = receipt.events.find(
+        (e: any) => e.name === 'Transfer' && (e.args.from === '0x0000000000000000000000000000000000000000' || e.args.from === 0 || e.args.from === 0n)
+        );
+        if (transferEvent?.args) {
+        const val = transferEvent.args.tokenId ?? transferEvent.args[2];
+        if (val !== undefined) return BigInt(val);
+        }
+    }
+
+    // Fallback: raw logs array
+    if (receipt?.logs && Array.isArray(receipt.logs)) {
+        for (const log of receipt.logs) {
+        // Transfer(address,address,uint256)
+        if (log.topics && log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef') {
+            const from = log.topics[1];
+            if (from === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+            const tokenId = BigInt(log.topics[3] || log.data);
+            return tokenId;
+            }
+        }
+        }
+    }
+
+    throw new Error('Could not extract agentId from transaction receipt - Registered or Transfer event not found');
+    }
+
+  async getAgentEoaByAgentAccount(agentAccount: `0x${string}`): Promise<string | null> {
     if (this.publicClient) {
         const eoa = await this.publicClient.readContract({
         address: agentAccount as `0x${string}`,
@@ -164,6 +250,8 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     }
   }
 
+
+
   /**
    * Get agentAccount address from on-chain metadata.
    * Supports CAIP-10 format like "eip155:11155111:0x..." or raw 0x address.
@@ -187,44 +275,6 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     }
   }
 
-  /**
-   * Extract agentId from a user operation/transaction receipt
-   * Public in this SDK to support AA flows explicitly.
-   */
-  extractAgentIdFromReceiptPublic(receipt: any): bigint {
-    // Look for parsed events first
-    if (receipt?.events) {
-      const registeredEvent = receipt.events.find((e: any) => e.name === 'Registered');
-      if (registeredEvent?.args) {
-        const val = registeredEvent.args.agentId ?? registeredEvent.args[0];
-        if (val !== undefined) return BigInt(val);
-      }
-
-      const transferEvent = receipt.events.find(
-        (e: any) => e.name === 'Transfer' && (e.args.from === '0x0000000000000000000000000000000000000000' || e.args.from === 0 || e.args.from === 0n)
-      );
-      if (transferEvent?.args) {
-        const val = transferEvent.args.tokenId ?? transferEvent.args[2];
-        if (val !== undefined) return BigInt(val);
-      }
-    }
-
-    // Fallback: raw logs array
-    if (receipt?.logs && Array.isArray(receipt.logs)) {
-      for (const log of receipt.logs) {
-        // Transfer(address,address,uint256)
-        if (log.topics && log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef') {
-          const from = log.topics[1];
-          if (from === '0x0000000000000000000000000000000000000000000000000000000000000000') {
-            const tokenId = BigInt(log.topics[3] || log.data);
-            return tokenId;
-          }
-        }
-      }
-    }
-
-    throw new Error('Could not extract agentId from transaction receipt - Registered or Transfer event not found');
-  }
 
   /**
    * Keep compatibility: delegate to receipt extractor.
@@ -489,38 +539,19 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
   }
 
 
-  async encodeAddAgentNameToOrg(params: {
+  // ENS wrapper
+  async prepareAddAgentNameToOrgCalls(params: {
     orgName: string;            // e.g., 'airbnb.eth'
     agentName: string;                   // e.g., 'my-agent'
     agentAddress: `0x${string}`;     // AA address for the agent name
     agentUrl?: string | null                   // optional TTL (defaults to 0)
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
-    const ENS_REGISTRY_ABI = [
-      { name: 'setSubnodeRecord', type: 'function', stateMutability: 'nonpayable', inputs: [
-        { name: 'node', type: 'bytes32' },
-        { name: 'label', type: 'bytes32' },
-        { name: 'owner', type: 'address' },
-        { name: 'resolver', type: 'address' },
-        { name: 'ttl', type: 'uint64' }
-      ], outputs: [] },
-    ] as any[];
-    const RESOLVER_ABI = [
-      { name: 'setAddr', type: 'function', stateMutability: 'nonpayable', inputs: [
-        { name: 'node', type: 'bytes32' },
-        { name: 'addr', type: 'address' }
-      ], outputs: [] },
-      { name: 'setText', type: 'function', stateMutability: 'nonpayable', inputs: [
-        { name: 'node', type: 'bytes32' },
-        { name: 'key', type: 'string' },
-        { name: 'value', type: 'string' }
-      ], outputs: [] },
-    ] as any[];
+
 
     const clean = (s: string) => (s || '').trim().toLowerCase();
     const parent = clean(params.orgName);
     const label = clean(params.agentName).replace(/\s+/g, '-');
-    const childDomain = `${label}.${parent}`;
-    console.info(">>>>>>>>>>>>>>>>>> childDomain: ", childDomain);
+
 
     const parentNode = namehash(parent + ".eth");
 
@@ -566,7 +597,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
   }
 
   
-  async encodeSetAgentNameInfo(params: {
+  async prepareSetAgentNameInfoCalls(params: {
     orgName: string;            // e.g., 'airbnb.eth'
     agentName: string;                   // e.g., 'my-agent'
     agentAddress: `0x${string}`;     // AA address for the agent name
@@ -593,13 +624,8 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     const ensFullName = childDomain + ".eth";
     const childNode = namehash(ensFullName);
 
-    // 1) Create subdomain owned by agentAddress and set resolver
 
-    
     const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
-
-    console.info(".................publicClient: ", this.publicClient);
-    console.info(".................ensRegistryAddress: ", this.ensRegistryAddress);
     if (this.publicClient) {
 
       const resolver = await this.publicClient.readContract({
@@ -609,12 +635,8 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
         functionName: "resolver",
         args: [childNode],
       });
-      console.info(".................resolver 2x: ", resolver);
-      
-      //const resolver = process.env.NEXT_PUBLIC_ENS_PUBLIC_RESOLVER as `0x${string}` || '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5'
-      console.info(".................resolver 2: ", resolver);
 
-      // 2) Set addr record
+      // 1) Set addr record
       const setAddrData = encodeFunctionData({
         abi: [{ name: "setAddr", type: "function", stateMutability: "nonpayable",
                 inputs: [{ name: "node", type: "bytes32" }, { name: "a", type: "address" }]}],
@@ -625,9 +647,8 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
       calls.push({ to: resolver as `0x${string}`, data: setAddrData });
     
-      // 3) Optionally set URL text
+      // 2) Optionally set URL text
       if (params.agentUrl && params.agentUrl.trim() !== '') {
-        console.info(".................params.agentUrl: ", params.agentUrl);
         const dataSetUrl = this.adapter.encodeCall(
           RESOLVER_ABI,
           'setText(bytes32,string,string)',
@@ -637,9 +658,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
       }
 
 
-
-
-
+      // 3) Set reverse record
       const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
 
       const BASE_REVERSE_NODE = namehash("addr.reverse");
@@ -670,8 +689,6 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
         args: [reverseNode],
       });
 
-      console.info(".................reverseRegistrar: ", reverseRegistrar);
-      console.info(".................ourReverseRegistrar: ", ourReverseRegistrar);
 
       const setNameData = encodeFunctionData({
         abi: [{

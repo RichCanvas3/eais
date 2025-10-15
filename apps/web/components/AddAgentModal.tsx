@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
-import { createAgentAdapter, createAIAgentIdentity, addAgentNameToOrg } from '@/lib/agentAdapter';
+import { createAgentAdapter, createAIAgentIdentity as adapterCreateAIAgentIdentity, addAgentNameToOrg as adapterAddAgentNameToOrg, setAgentUri as adapterSetAgentUri, setAgentIdentity as adapterSetAgentIdentity } from '@/lib/agentAdapter';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 
 import { sepolia } from 'viem/chains';
@@ -604,14 +604,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         console.warn('IPFS upload failed, proceeding without tokenUri', e);
       }
 
-      console.log('********************* createAIAgentIdentity: tokenUri: ', tokenUri);
-
-
-
-      // wallet for Identity Registry Contract Owner
-      //const { ethers } = await import('ethers');
-      //const ethersProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
-      //const identityRegistryOwnerWallet = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
 
       const ownerAccount = privateKeyToAccount(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as `0x${string}`);
       const identityRegistryOwnerWallet = createWalletClient({
@@ -623,25 +615,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       const { ethers } = await import('ethers');
       const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
       const agentOwner = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
-      const agentAdapter = new EthersAdapter(ethersProvider, agentOwner);
-
-      //const IDENTITY_REGISTRY = '0x7177a6867296406881E20d6647232314736Dd09A';
-      //const REPUTATION_REGISTRY = '0xB5048e3ef1DA4E04deB6f7d0423D06F63869e322';
-      //const VALIDATION_REGISTRY = '0x662b40A526cb4017d947e71eAF6753BF3eeE66d8';
-
-      console.info("********************* Identity registryAddress: ", registryAddress);
 
 
-
-      console.info('********************* identityRegistryOwnerWallet: ', identityRegistryOwnerWallet);
-      const agentIdNum = await createAIAgentIdentity({
+      const agentIdNum = await adapterCreateAIAgentIdentity({
         agentIdentityClient: agentIdentityClient,
-        adapter: agentAdapter,
-        publicClient,
         bundlerUrl: BUNDLER_URL,
         chain: sepolia,
-        identityRegistryOwnerWallet: identityRegistryOwnerWallet,
-        registry: registryAddress,
         agentAccount: agentAccountClient,
         name: agentNameLower,
         tokenUri: tokenUri,
@@ -655,29 +634,25 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         // After on-chain metadata is set, also set ENS text: agent-identity per ENSIP
         console.info("set ensip agent registry")
         if (agentIdNum > 0n) {
-          // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]
-          const chainHex = (sepolia.id >>> 0).toString(16).padStart(8, '0');
-          const addrHex = (registryAddress).slice(2).toLowerCase().padStart(40, '0');
-          const idHex = BigInt(agentIdNum).toString(16);
-          const idLen = Math.ceil(idHex.length / 2);
-          const idLenHex = idLen.toString(16).padStart(2, '0');
-          const valueHex = `0x01` + `01` + chainHex + addrHex + idLenHex + idHex.padStart(idLen * 2, '0');
-
-          const node = namehash(agentNameLower) as `0x${string}`;
-          // Ensure resolver is present
-
-          const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-          const resolverToUse = await publicClient.readContract({
-            address: ENS_REGISTRY_ADDRESS,
-            abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
-            functionName: 'resolver',
-            args: [node]
-          }) as `0x${string}`;
           
-          if (resolverToUse && resolverToUse !== '0x0000000000000000000000000000000000000000') {
-            console.info("set ensip agent identity", 'agent-identity', valueHex);
-            await ensService.setTextWithAA(agentAccountClient as any, resolverToUse, node, 'agent-identity', valueHex, sepolia);
-          }
+          // Build agent metamask AA client
+          const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+          const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
+          try { (walletClient as any).account = eoaAddress as Address; } catch {}
+
+          // Use the agent AA derived from the name to authorize setText via AA
+          const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
+
+          const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+          await adapterSetAgentIdentity({
+            agentIdentityClient,
+            bundlerUrl: BUNDLER_URL,
+            chain: sepolia,
+            agentAccountClient,
+            agentName,
+            agentIdentity: agentIdNum,
+          });
+
         }
       } catch (e) {
         console.info('failed to set agent-identity text', e);
@@ -762,14 +737,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       console.log('********************* check address: ', eoaAddress);
                       try { (walletClient as any).account = eoaAddress as Address; } catch {}
                       console.info("to metamask smart account");
-                      /*
-                      const smartAccountClient = await toMetaMaskSmartAccount({
-                        client: publicClient,
-                        implementation: Implementation.Hybrid,
-                        deployParams: [address as `0x${string}`, [], [], []],
-                        signatory: { walletClient },
-                      } as any);
-                       */
 
                       const smartAccountClient = await toMetaMaskSmartAccount({
                         address: domainOwnerAddress as `0x${string}`,
@@ -778,12 +745,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                         signatory: { walletClient },
                       });
 
+                      const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+                      await adapterSetAgentUri({
+                        agentIdentityClient,
+                        bundlerUrl: BUNDLER_URL,
+                        chain: sepolia,
+                        agentAccountClient: smartAccountClient,
+                        agentName,
+                        agentUri: agentUrlEdit.trim(),
+                      });
+
                       console.log('await ensService.setTextWithAA: ', smartAccountClient);
                       await ensService.setTextWithAA(smartAccountClient as any, domainResolver as `0x${string}`, node, 'url', domainUrlEdit.trim(), sepolia);
-                    } else {
-                      // EOA path
-                      await ensService.setTextWithEOA(domainResolver as `0x${string}`, node, 'url', domainUrlEdit.trim(), sepolia);
-                    }
+                    } 
                     setDomainUrlText(domainUrlEdit.trim());
                   } catch (e: any) {
                     setDomainUrlError(e?.message ?? 'Failed to set URL');
@@ -857,8 +831,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                     const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
 
-                    console.info("await addAgentNameToOrg");
-                    await addAgentNameToOrg({
+                    await adapterAddAgentNameToOrg({
                       agentIdentityClient: agentIdentityClient,
                       bundlerUrl: BUNDLER_URL,
                       chain: sepolia,
@@ -869,8 +842,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       agentUrl: agentUrl ?? undefined,
                       agentAccount: agentAccount,
                     });
-
-                    console.info("*********** done addAgentNameToOrg");
 
 
                     // Update Create new Agent state after ENS creation
@@ -925,29 +896,26 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                         try {
                           setAgentUrlSaving(true);
                           setAgentUrlError(null);
-                          const node = namehash(agentName) as `0x${string}`;
-                          // Build AA client for the agent AA (ensResolvedAddress)
+
+                          // Build agent metamask AA client
                           const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
                           const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
                           try { (walletClient as any).account = eoaAddress as Address; } catch {}
+
+
                           // Use the agent AA derived from the name to authorize setText via AA
                           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
-                          const { calls } = await agentIdentityClient.encodeSetUri(agentName, agentUrlEdit.trim());
+                          const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+                          await adapterSetAgentUri({
+                            agentIdentityClient,
+                            bundlerUrl: BUNDLER_URL,
+                            chain: sepolia,
+                            agentAccountClient,
+                            agentName,
+                            agentUri: agentUrlEdit.trim(),
+                          });
 
-
-                          
-                          console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
-                          const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-            
-                          const agentResolver = await publicClient.readContract({
-                            address: ENS_REGISTRY_ADDRESS,
-                            abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
-                            functionName: 'resolver',
-                            args: [node]
-                          }) as `0x${string}`;
-
-                          await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
                           setAgentUrlText(agentUrlEdit.trim());
                         } catch (e: any) {
                           setAgentUrlError(e?.message ?? 'Failed to set agent url');

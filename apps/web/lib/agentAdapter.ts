@@ -260,7 +260,8 @@ export async function addAgentNameToOrg(params: {
 }): Promise<`0x${string}`> {
   const { agentIdentityClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
 
-  const { calls : orgCalls } = await agentIdentityClient.encodeAddAgentNameToOrg({
+  // 1. Add agent name to org within ENS
+  const { calls : orgCalls } = await agentIdentityClient.prepareAddAgentNameToOrgCalls({
     orgName,
     agentName,
     agentAddress: agentAccount
@@ -275,7 +276,8 @@ export async function addAgentNameToOrg(params: {
   });
   const { receipt: orgReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash1 });
 
-  const { calls: agentCalls } = await agentIdentityClient.encodeSetAgentNameInfo({
+  // 2. Set agent name info within ENS
+  const { calls: agentCalls } = await agentIdentityClient.prepareSetAgentNameInfoCalls({
     orgName,
     agentName,
     agentAddress: agentAccount,
@@ -331,19 +333,44 @@ export async function setAgentUri(params: {
   agentIdentityClient: AIAgentIdentityClient,
   bundlerUrl: string,
   chain: Chain,
-  agentAccount: any,
+  agentAccountClient: any,
   agentName: string,
   agentUri: string,
 }): Promise<string> {
-  const { agentIdentityClient, bundlerUrl, chain, agentAccount, agentName, agentUri } = params;
+  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentName, agentUri } = params;
 
-  const { calls: setUriCalls }  = await agentIdentityClient.encodeSetUri(agentName, agentUri);
+  const { calls: setUriCalls }  = await agentIdentityClient.prepareSetUriCalls(agentName, agentUri);
 
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
     chain,
-    accountClient: agentAccount,
+    accountClient: agentAccountClient,
     calls: setUriCalls,
+  });
+  const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
+  const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
+
+  return "success";
+}
+
+
+export async function setAgentIdentity(params: {
+  agentIdentityClient: AIAgentIdentityClient,
+  bundlerUrl: string,
+  chain: Chain,
+  agentAccountClient: any,
+  agentName: string,
+  agentIdentity: BigInt,
+}): Promise<string> {
+  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentName, agentIdentity } = params;
+
+  const { calls: setAgentIdentityCalls }  = await agentIdentityClient.prepareSetAgentIdentityCalls(agentName, agentIdentity);
+
+  const userOpHash = await sendSponsoredUserOperation({
+    bundlerUrl,
+    chain,
+    accountClient: agentAccountClient,
+    calls: setAgentIdentityCalls,
   });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
