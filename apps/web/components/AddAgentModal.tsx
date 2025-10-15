@@ -43,7 +43,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentResolving, setAgentResolving] = React.useState(false);
   const [agentExists, setAgentExists] = React.useState<boolean | null>(null);
   const [agentAADefaultAddress, setAgentAADefaultAddress] = React.useState<string | null>(null);
-  const [agentResolver, setAgentResolver] = React.useState<`0x${string}` | null>(null);
   const [agentUrlText, setAgentUrlText] = React.useState<string | null>(null);
   const [agentUrlLoading, setAgentUrlLoading] = React.useState(false);
   const [agentUrlError, setAgentUrlError] = React.useState<string | null>(null);
@@ -184,7 +183,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setAgentAccount(null);
       setAgentResolving(false);
       setAgentExists(null);
-      setAgentResolver(null);
       setAgentUrlText(null);
       setAgentUrlLoading(false);
       setAgentUrlError(null);
@@ -242,7 +240,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     (async () => {
       try {
         setAgentUrlError(null);
-        setAgentResolver(null);
         setAgentUrlText(null);
         setAgentUrlEdit('');
         if (!agentName) return;
@@ -265,21 +262,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         } catch (e) {
           console.info('failed to read/parse agent-identity text', e);
         }
-        // Also cache resolver for save path
-        try {
-          const node = namehash(agentName) as `0x${string}`;
-          const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-          const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-          const resolverAddr = await publicClient.readContract({
-            address: ENS_REGISTRY_ADDRESS,
-            abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
-            functionName: 'resolver',
-            args: [node]
-          }) as `0x${string}`;
-          if (!cancelled) setAgentResolver(resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000' ? resolverAddr : null);
-        } catch (e: any) {
-          if (!cancelled) setAgentResolver(null);
-        }
+        
       } catch (e: any) {
         if (!cancelled) setAgentUrlError(e?.message ?? 'Failed to read agent url');
       } finally {
@@ -682,16 +665,15 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
           const node = namehash(agentNameLower) as `0x${string}`;
           // Ensure resolver is present
-          let resolverToUse = agentResolver as `0x${string}` | null;
-          if (!resolverToUse) {
-            const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-            resolverToUse = await publicClient.readContract({
-              address: ENS_REGISTRY_ADDRESS,
-              abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
-              functionName: 'resolver',
-              args: [node]
-            }) as `0x${string}`;
-          }
+
+          const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+          const resolverToUse = await publicClient.readContract({
+            address: ENS_REGISTRY_ADDRESS,
+            abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+            functionName: 'resolver',
+            args: [node]
+          }) as `0x${string}`;
+          
           if (resolverToUse && resolverToUse !== '0x0000000000000000000000000000000000000000') {
             console.info("set ensip agent identity", 'agent-identity', valueHex);
             await ensService.setTextWithAA(agentAccountClient as any, resolverToUse, node, 'agent-identity', valueHex, sepolia);
@@ -898,14 +880,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       const node = namehash(agentName) as `0x${string}`;
                       // Refresh resolver
                       const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-                      const resolverAddr = await publicClient.readContract({
-                        address: ENS_REGISTRY_ADDRESS,
-                        abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
-                        functionName: 'resolver',
-                        args: [node]
-                      }) as `0x${string}`;
-                      setAgentResolver(resolverAddr && resolverAddr !== '0x0000000000000000000000000000000000000000' ? resolverAddr : null);
-                      // Refresh URL text
+                      
                       try {
                         const normalized = await ensService.getTextRecord(agentName, 'url', sepolia, rpcUrl);
                         setAgentUrlText(normalized);
@@ -944,8 +919,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       disabled={Boolean(
                         agentUrlSaving ||
                         !provider ||
-                        !/^https?:\/\//i.test(agentUrlEdit.trim()) ||
-                        !agentResolver
+                        !/^https?:\/\//i.test(agentUrlEdit.trim())
                       )}
                       onClick={async () => {
                         try {
@@ -964,6 +938,15 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
 
                           
                           console.info("setTextWithAA via agentAccountClient", await agentAccountClient.getAddress());
+                          const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+            
+                          const agentResolver = await publicClient.readContract({
+                            address: ENS_REGISTRY_ADDRESS,
+                            abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] }],
+                            functionName: 'resolver',
+                            args: [node]
+                          }) as `0x${string}`;
+
                           await ensService.setTextWithAA(agentAccountClient as any, agentResolver as `0x${string}`, node, 'url', agentUrlEdit.trim(), sepolia);
                           setAgentUrlText(agentUrlEdit.trim());
                         } catch (e: any) {
