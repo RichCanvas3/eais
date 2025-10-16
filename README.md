@@ -1,4 +1,4 @@
-# Agentic Trust Layer, for Ministry - Agent Explorer
+# Agentic Trust Layer - Agent Explorer
 
 ![ERC-8004 Identity Overview](docs/images/ERC8004overview.png)
 ![ERC-8004 Reputation Overview](docs/images/FeedbackFlow.png)
@@ -9,7 +9,7 @@ ERC-8004 provides a standardized way to create, manage, and authenticate autonom
 
 ERC-8004 v1 is almost a complete re-write from v0.8 released early september.  Identity Registry went to an ERC-271 NFT, and Reputation Registry changed to storing Feedback online and changing to a signed FeedbackAuth Delegation with NFT Operator Scope.
 
-Extended ERC-8004 v1 Reputation Feedback with Trust Graph - Ministry Capabilities
+Extended ERC-8004 v1 Reputation Feedback with Trust Graph
 
 Each agent identity maintains a TrustGraph capturing agent atom relationships.  OpenAI builds a relationship driven trust between client agent and server agent based on client intent.
 
