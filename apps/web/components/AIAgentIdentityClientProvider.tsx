@@ -36,10 +36,17 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
       const orgSigner = new ethers.Wallet(process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY! as `0x${string}`, orgProvider);
       const orgAdapter = new EthersAdapter(orgProvider, orgSigner);
 
-      // Agent signer from Web3Auth (browser EIP-1193)
-      const browserProvider = new ethers.BrowserProvider(provider as any);
-      const agentSigner = await browserProvider.getSigner();
-      const agentAdapter = new EthersAdapter(browserProvider, agentSigner);
+      // Agent signer from Web3Auth (browser EIP-1193); fall back to read-only if it fails
+      let agentAdapter: EthersAdapter;
+      try {
+        const browserProvider = new ethers.BrowserProvider(provider as any);
+        const agentSigner = await browserProvider.getSigner();
+        agentAdapter = new EthersAdapter(browserProvider, agentSigner);
+      } catch (err) {
+        console.warn('Web3Auth signer unavailable, falling back to read-only provider', err);
+        const roProvider = new ethers.JsonRpcProvider(rpcUrl);
+        agentAdapter = new EthersAdapter(roProvider);
+      }
 
       // Construct client (constructor matches current AIAgentIdentityClient signature in your repo)
       const instance = new AIAgentIdentityClient(
