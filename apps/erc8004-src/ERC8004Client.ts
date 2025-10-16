@@ -8,7 +8,7 @@
  *
  * Usage example:
  * ```typescript
- * import { ERC8004Client, EthersAdapter } from 'erc8004-sdk';
+ * import { ERC8004Client, EthersAdapter } from 'erc-8004-js';
  * import { ethers } from 'ethers';
  *
  * const provider = new ethers.JsonRpcProvider('http://localhost:8545');

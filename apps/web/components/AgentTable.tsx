@@ -1356,6 +1356,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 															</Button>
 														</>
 													)}
+										{/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
 						</TableCell>
 
 									<TableCell>
@@ -1436,64 +1437,59 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 												</span>
 												</Tooltip>
 											)}
-											{owned[row.agentId] && (
-												<>
-												<Button 
-																size="small" 
-																onClick={() => openAgentInfo(row)}
-																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
-															>
-																INFO
-															</Button>
-															<Button 
-														size="small" 
-														onClick={() => openIdentityJson(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														Reg
-													</Button>
-															
-													<Button 
-														size="small" 
-														onClick={() => viewOrCreateCard(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														Card
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => {
-															setCurrentAgentForGraph(row);
-															setTrustGraphOpen(true);
-														}}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														Graph
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openDidWebModal(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														DID:Web
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openDidAgentModal(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														DID:Agent
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openSessionFor(row)} 
-														disabled={sessionLoading}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														{sessionLoading ? 'Loading...' : 'Session'}
-													</Button>
-												</>
-											)}
+											{/* Always-visible actions (read-only) */}
+											<Button 
+												size="small" 
+												onClick={() => openAgentInfo(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+											>
+												INFO
+											</Button>
+											<Button 
+												size="small" 
+												onClick={() => openIdentityJson(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+											>
+												Reg
+											</Button>
+											<Button 
+												size="small" 
+												onClick={() => viewOrCreateCard(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+											>
+												Card
+											</Button>
+											<Button 
+												size="small" 
+												onClick={() => { setCurrentAgentForGraph(row); setTrustGraphOpen(true); }}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+											>
+												Graph
+											</Button>
+											<Button 
+												size="small" 
+												onClick={() => openDidWebModal(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+											>
+												DID:Web
+											</Button>
+											<Button 
+												size="small" 
+												onClick={() => openDidAgentModal(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+											>
+												DID:Agent
+											</Button>
+										{owned[row.agentId] && (
+											<Button 
+												size="small" 
+												onClick={() => openSessionFor(row)} 
+												disabled={sessionLoading}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+											>
+												{sessionLoading ? 'Loading...' : 'Session'}
+											</Button>
+										)}
 									
 											
 												
@@ -2211,7 +2207,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 															textDecoration: 'underline'
 														}
 													}}
-													onClick={() => window.open(`https://sepolia.etherscan.io/address/${parentEnsOwner}`, '_blank')}
+												onClick={() => window.open(`https://sepolia.etherscan.io/address/${orgOwner}`, '_blank')}
 												>
 													{orgOwner}
 												</Typography>

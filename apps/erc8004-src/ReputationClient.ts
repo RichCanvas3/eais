@@ -13,8 +13,8 @@ export interface GiveFeedbackParams {
   score: number; // MUST be 0-100
   tag1?: string; // OPTIONAL (bytes32)
   tag2?: string; // OPTIONAL (bytes32)
-  fileuri?: string; // OPTIONAL
-  filehash?: string; // OPTIONAL (bytes32, KECCAK-256 of fileuri content)
+  feedbackUri?: string; // OPTIONAL
+  feedbackHash?: string; // OPTIONAL (bytes32, KECCAK-256 of feedbackUri content)
   feedbackAuth: string; // Signed feedbackAuth
 }
 
@@ -100,7 +100,7 @@ export class ReputationClient {
 
   /**
    * Submit feedback for an agent
-   * Spec: function giveFeedback(uint256 agentId, uint8 score, bytes32 tag1, bytes32 tag2, string calldata fileuri, bytes32 calldata filehash, bytes memory feedbackAuth)
+   * Spec: function giveFeedback(uint256 agentId, uint8 score, bytes32 tag1, bytes32 tag2, string calldata feedbackUri, bytes32 calldata feedbackHash, bytes memory feedbackAuth)
    *
    * @param params - Feedback parameters (score is MUST, others are OPTIONAL)
    * @returns Transaction result
@@ -114,8 +114,8 @@ export class ReputationClient {
     // Convert optional string parameters to bytes32 (or empty bytes32 if not provided)
     const tag1 = params.tag1 ? ethers.id(params.tag1).slice(0, 66) : ethers.ZeroHash;
     const tag2 = params.tag2 ? ethers.id(params.tag2).slice(0, 66) : ethers.ZeroHash;
-    const filehash = params.filehash || ethers.ZeroHash;
-    const fileuri = params.fileuri || '';
+    const feedbackHash = params.feedbackHash || ethers.ZeroHash;
+    const feedbackUri = params.feedbackUri || '';
 
     const result = await this.adapter.send(
       this.contractAddress,
@@ -126,8 +126,8 @@ export class ReputationClient {
         params.score,
         tag1,
         tag2,
-        fileuri,
-        filehash,
+        feedbackUri,
+        feedbackHash,
         params.feedbackAuth,
       ]
     );

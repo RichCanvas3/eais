@@ -44,6 +44,15 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
   }
 
+  encodeCall(
+    abi: any[],
+    functionName: string,
+    args: any[]
+  ): string {
+    const iface = new ethers.Interface(abi);
+    return iface.encodeFunctionData(functionName, args);
+  }
+
 
   /**
    * Encode register calldata without sending (for bundler/AA - like EAS SDK pattern)
@@ -57,7 +66,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
       key: m.key,
       value: (this as any).stringToBytes(m.value) as Uint8Array,
     }));
-    return this.adapter.encodeCall(
+    return this.encodeCall(
       IdentityRegistryABI as any,
       'register(string,(string,bytes)[])',
       [tokenURI, metadataFormatted]
@@ -183,11 +192,11 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     return false;
   }
 
-      /**
+    /**
    * Extract agentId from a user operation/transaction receipt
    * Public in this SDK to support AA flows explicitly.
    */
-    extractAgentIdFromReceiptPublic(receipt: any): bigint {
+   extractAgentIdFromReceiptPublic(receipt: any): bigint {
     // Look for parsed events first
     if (receipt?.events) {
         const registeredEvent = receipt.events.find((e: any) => e.name === 'Registered');
@@ -279,7 +288,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
   /**
    * Keep compatibility: delegate to receipt extractor.
    */
-  override extractAgentIdFromLogs(receipt: any): bigint {
+  extractAgentIdFromLogs(receipt: any): bigint {
     return this.extractAgentIdFromReceiptPublic(receipt);
   }
 
@@ -649,7 +658,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     
       // 2) Optionally set URL text
       if (params.agentUrl && params.agentUrl.trim() !== '') {
-        const dataSetUrl = this.adapter.encodeCall(
+        const dataSetUrl = this.encodeCall(
           RESOLVER_ABI,
           'setText(bytes32,string,string)',
           [childNode, 'url', params.agentUrl.trim()]

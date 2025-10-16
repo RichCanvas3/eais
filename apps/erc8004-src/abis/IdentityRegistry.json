@@ -312,6 +312,31 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "newUri",
+        "type": "string"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "updatedBy",
+        "type": "address"
+      }
+    ],
+    "name": "UriUpdated",
+    "type": "event"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -477,7 +502,7 @@
     "inputs": [
       {
         "internalType": "string",
-        "name": "tokenURI",
+        "name": "tokenUri",
         "type": "string"
       },
       {
@@ -513,7 +538,7 @@
     "inputs": [
       {
         "internalType": "string",
-        "name": "tokenURI",
+        "name": "tokenUri",
         "type": "string"
       }
     ],
@@ -589,6 +614,24 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "newUri",
+        "type": "string"
+      }
+    ],
+    "name": "setAgentUri",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "operator",
         "type": "address"
@@ -623,24 +666,6 @@
       }
     ],
     "name": "setMetadata",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "agentId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "string",
-        "name": "newURI",
-        "type": "string"
-      }
-    ],
-    "name": "setTokenURI",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

@@ -54,14 +54,4 @@ export interface BlockchainAdapter {
    * Sign typed data (EIP-712)
    */
   signTypedData(domain: any, types: any, value: any): Promise<string>;
-
-  /**
-   * Encode contract function call data without sending
-   * For use with bundlers or custom transaction flows (like EAS SDK pattern)
-   */
-  encodeCall(
-    abi: any[],
-    functionName: string,
-    args: any[]
-  ): string;
 }

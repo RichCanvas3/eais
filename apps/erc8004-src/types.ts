@@ -98,12 +98,14 @@ export interface Summary {
 
 /**
  * Validation status
+ * Note: responseHash is optional for backward compatibility with older contract versions
  */
 export interface ValidationStatus {
   validatorAddress: string;
   agentId: bigint;
   response: number; // 0-100
-  tag?: string; // OPTIONAL (bytes32)
+  responseHash?: string; // bytes32 (optional for backward compatibility)
+  tag: string; // bytes32
   lastUpdate: bigint;
 }
 

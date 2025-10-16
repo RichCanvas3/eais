@@ -98,13 +98,13 @@
       {
         "indexed": false,
         "internalType": "string",
-        "name": "fileuri",
+        "name": "feedbackUri",
         "type": "string"
       },
       {
         "indexed": false,
         "internalType": "bytes32",
-        "name": "filehash",
+        "name": "feedbackHash",
         "type": "bytes32"
       }
     ],
@@ -143,6 +143,12 @@
         "internalType": "string",
         "name": "responseUri",
         "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "responseHash",
+        "type": "bytes32"
       }
     ],
     "name": "ResponseAppended",
@@ -264,7 +270,7 @@
     "outputs": [
       {
         "internalType": "uint64",
-        "name": "",
+        "name": "count",
         "type": "uint64"
       }
     ],
@@ -334,12 +340,12 @@
       },
       {
         "internalType": "string",
-        "name": "fileuri",
+        "name": "feedbackUri",
         "type": "string"
       },
       {
         "internalType": "bytes32",
-        "name": "filehash",
+        "name": "feedbackHash",
         "type": "bytes32"
       },
       {
@@ -351,19 +357,6 @@
     "name": "giveFeedback",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "identityRegistry",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {

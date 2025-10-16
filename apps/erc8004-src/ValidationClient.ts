@@ -100,26 +100,71 @@ export class ValidationClient {
 
   /**
    * Get validation status for a request
-   * Spec: function getValidationStatus(bytes32 requestHash) returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 tag, uint256 lastUpdate)
+   * Spec (new): function getValidationStatus(bytes32 requestHash) returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 responseHash, bytes32 tag, uint256 lastUpdate)
+   * Spec (old): function getValidationStatus(bytes32 requestHash) returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 tag, uint256 lastUpdate)
+   * Note: Backward compatible with both old and new contract versions
    *
    * @param requestHash - The request hash (bytes32)
    * @returns Validation status
    */
   async getValidationStatus(requestHash: string): Promise<ValidationStatus> {
-    const result = await this.adapter.call(
-      this.contractAddress,
-      ValidationRegistryABI,
-      'getValidationStatus',
-      [requestHash]
-    );
+    try {
+      // Try with new ABI first (6 return values)
+      const result = await this.adapter.call(
+        this.contractAddress,
+        ValidationRegistryABI,
+        'getValidationStatus',
+        [requestHash]
+      );
 
-    return {
-      validatorAddress: result.validatorAddress || result[0],
-      agentId: BigInt(result.agentId || result[1]),
-      response: Number(result.response || result[2]),
-      tag: result.tag || result[3],
-      lastUpdate: BigInt(result.lastUpdate || result[4]),
-    };
+      return {
+        validatorAddress: result.validatorAddress || result[0],
+        agentId: BigInt(result.agentId || result[1]),
+        response: Number(result.response || result[2]),
+        responseHash: result.responseHash || result[3],
+        tag: result.tag || result[4],
+        lastUpdate: BigInt(result.lastUpdate || result[5]),
+      };
+    } catch (error: any) {
+      // If decoding fails, try with old ABI (5 return values, no responseHash)
+      if (error.code === 'BAD_DATA' || error.message?.includes('could not decode result data')) {
+        // Create old ABI for getValidationStatus without responseHash
+        const oldABI = [
+          {
+            inputs: [{ internalType: 'bytes32', name: 'requestHash', type: 'bytes32' }],
+            name: 'getValidationStatus',
+            outputs: [
+              { internalType: 'address', name: 'validatorAddress', type: 'address' },
+              { internalType: 'uint256', name: 'agentId', type: 'uint256' },
+              { internalType: 'uint8', name: 'response', type: 'uint8' },
+              { internalType: 'bytes32', name: 'tag', type: 'bytes32' },
+              { internalType: 'uint256', name: 'lastUpdate', type: 'uint256' }
+            ],
+            stateMutability: 'view',
+            type: 'function'
+          }
+        ];
+
+        const result = await this.adapter.call(
+          this.contractAddress,
+          oldABI,
+          'getValidationStatus',
+          [requestHash]
+        );
+
+        return {
+          validatorAddress: result.validatorAddress || result[0],
+          agentId: BigInt(result.agentId || result[1]),
+          response: Number(result.response || result[2]),
+          responseHash: ethers.ZeroHash, // Default for old contracts
+          tag: result.tag || result[3],
+          lastUpdate: BigInt(result.lastUpdate || result[4]),
+        };
+      }
+
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   /**

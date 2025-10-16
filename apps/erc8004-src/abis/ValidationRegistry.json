@@ -77,6 +77,12 @@
       {
         "indexed": false,
         "internalType": "bytes32",
+        "name": "responseHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
         "name": "tag",
         "type": "bytes32"
       }
@@ -177,6 +183,11 @@
       },
       {
         "internalType": "bytes32",
+        "name": "responseHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
         "name": "tag",
         "type": "bytes32"
       },
@@ -203,68 +214,6 @@
         "internalType": "bytes32[]",
         "name": "",
         "type": "bytes32[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "identityRegistry",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "name": "status",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "validatorAddress",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "agentId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "response",
-        "type": "uint8"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "responseHash",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "tag",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bool",
-        "name": "exists",
-        "type": "bool"
-      },
-      {
-        "internalType": "uint256",
-        "name": "lastUpdate",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -329,6 +278,50 @@
     "name": "validationResponse",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "validations",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "validatorAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "response",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "responseHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "tag",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lastUpdate",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   }
 ]

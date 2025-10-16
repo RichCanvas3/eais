@@ -6,6 +6,8 @@ import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 
+import { IDENTITY_REGISTRY } from "./env";
+
 const identityRegistryAbi = IdentityRegistryABI as any;
 
 // ---- clients ----
@@ -16,7 +18,7 @@ const client = createPublicClient({ transport });
 //const address = IDENTITY_REGISTRY as Address;
 //console.info("............IDENTITY_REGISTRY: ", address)
 
-const IDENTITY_REGISTRY = '0xf8fFC3E3F5F1A614EEA52566f3aa3d41d369D0bB'
+//const IDENTITY_REGISTRY = '0xf8fFC3E3F5F1A614EEA52566f3aa3d41d369D0bB'
 
 // ERC8004Client for standardized interactions (read-only for indexer)
 const ethersProvider = new ethers.JsonRpcProvider(RPC_HTTP_URL);

@@ -40,17 +40,23 @@ export class EthersAdapter implements BlockchainAdapter {
 
     // Parse events from the receipt
     const events: any[] = [];
-    for (const log of receipt.logs) {
-      try {
-        const parsed = contract.interface.parseLog(log);
-        if (parsed) {
-          events.push({
-            name: parsed.name,
-            args: parsed.args,
+    if (receipt && receipt.logs) {
+      for (const log of receipt.logs) {
+        try {
+          const parsed = contract.interface.parseLog({
+            topics: [...log.topics],
+            data: log.data,
           });
+          if (parsed) {
+            events.push({
+              name: parsed.name,
+              args: parsed.args,
+            });
+          }
+        } catch (error) {
+          // Skip logs that don't match this contract's ABI
+          // This is normal for logs from other contracts
         }
-      } catch {
-        // Skip logs that don't match this contract's ABI
       }
     }
 
@@ -92,14 +98,5 @@ export class EthersAdapter implements BlockchainAdapter {
     }
 
     throw new Error('Signer does not support EIP-712 typed data signing');
-  }
-
-  encodeCall(
-    abi: any[],
-    functionName: string,
-    args: any[]
-  ): string {
-    const iface = new ethers.Interface(abi);
-    return iface.encodeFunctionData(functionName, args);
   }
 }
