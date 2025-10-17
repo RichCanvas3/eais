@@ -1,0 +1,17 @@
+type Greeting @entity(immutable:true) {
+  id: ID!
+  sender: Sender!
+  greeting: String!
+  premium: Boolean
+  value: BigInt
+  createdAt: BigInt!
+  transactionHash: String!
+}
+
+type Sender @entity(immutable:true) {
+  id: ID!
+  address: Bytes!
+  greetings: [Greeting!] @derivedFrom(field: "sender")
+  createdAt: BigInt!
+  greetingCount: BigInt!
+}

@@ -1,6 +1,11 @@
 # ERC-8004 Indexer
 
-## Setup
+## Overview
+
+This folder currently includes a subgraph based indexing stack for local and remote development. Please refer to the /subgraph/README.md doc for more info.
+
+
+## Setup (Legacy)
 - Copy env:
   cp .env.example .env
 - Install deps from repo root:
