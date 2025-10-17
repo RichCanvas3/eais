@@ -1,136 +1,75 @@
-// SPDX-License-Identifier: CC0-1.0
-pragma solidity ^0.8.23;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
-import {IIdentityRegistry} from "./interfaces/IIdentityRegistryV2.sol"; // reference the interface
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract IdentityRegistry is ERC721, ERC721URIStorage, Ownable, IIdentityRegistry {
-    uint256 private _nextId;
+contract IdentityRegistry is ERC721URIStorage, Ownable {
+    uint256 private _lastId = 0;
 
-    mapping(uint256 => mapping(bytes32 => bytes)) private _metadata;
+    // agentId => key => value
+    mapping(uint256 => mapping(string => bytes)) private _metadata;
 
-    constructor(
-        string memory name_,
-        string memory symbol_
-    ) ERC721(name_, symbol_) Ownable() {}
-
-    // ----------
-    // View helpers
-    // ----------
-
-    function registryChainId() external view override returns (uint64) {
-        return uint64(block.chainid);
+    struct MetadataEntry {
+        string key;
+        bytes value;
     }
 
-    function identityRegistryAddress() external view override returns (address) {
-        return address(this);
-    }
+    event Registered(uint256 indexed agentId, string tokenURI, address indexed owner);
+    event MetadataSet(uint256 indexed agentId, string indexed indexedKey, string key, bytes value);
+    event UriUpdated(uint256 indexed agentId, string newUri, address indexed updatedBy);
 
-    function exists(uint256 agentId) public view override returns (bool) {
-        return _ownerOf(agentId) != address(0);
-    }
+    constructor() ERC721("AgentIdentity", "AID") Ownable(msg.sender) {}
 
-    // ----------
-    // Registration
-    // ----------
-
-    function register(string calldata tokenURI_, MetadataEntry[] calldata metadata)
-        external
-        override
-        returns (uint256 agentId)
-    {
-        agentId = ++_nextId;
+    function register() external returns (uint256 agentId) {
+        agentId = _lastId++;
         _safeMint(msg.sender, agentId);
-        _setTokenURI(agentId, tokenURI_);
+        emit Registered(agentId, "", msg.sender);
+    }
 
-        // Optional metadata entries
+    function register(string memory tokenUri) external returns (uint256 agentId) {
+        agentId = _lastId++;
+        _safeMint(msg.sender, agentId);
+        _setTokenURI(agentId, tokenUri);
+        emit Registered(agentId, tokenUri, msg.sender);
+    }
+
+    function register(string memory tokenUri, MetadataEntry[] memory metadata) external returns (uint256 agentId) {
+        agentId = _lastId++;
+        _safeMint(msg.sender, agentId);
+        _setTokenURI(agentId, tokenUri);
+        emit Registered(agentId, tokenUri, msg.sender);
+
         for (uint256 i = 0; i < metadata.length; i++) {
-            bytes32 k = keccak256(bytes(metadata[i].key));
-            _metadata[agentId][k] = bytes(metadata[i].value);
-            emit MetadataSet(agentId, metadata[i].key, metadata[i].value);
+            _metadata[agentId][metadata[i].key] = metadata[i].value;
+            emit MetadataSet(agentId, metadata[i].key, metadata[i].key, metadata[i].value);
         }
-
-        emit Registered(agentId, tokenURI_, msg.sender);
     }
 
-    // ----------
-    // Token URI management (controller or operator)
-    // ----------
-
-    function setTokenURI(uint256 agentId, string calldata uri) external override {
-        _requireControllerOrOperator(agentId);
-        _setTokenURI(agentId, uri);
+    function getMetadata(uint256 agentId, string memory key) external view returns (bytes memory) {
+        return _metadata[agentId][key];
     }
 
-    // ----------
-    // On-chain metadata (string)
-    // ----------
-
-    function setMetadata(
-        uint256 agentId,
-        string calldata key,
-        string calldata value
-    ) external override {
-        _requireControllerOrOperator(agentId);
-        bytes32 k = keccak256(bytes(key));
-        _metadata[agentId][k] = bytes(value);
-        emit MetadataSet(agentId, key, value);
+    function setMetadata(uint256 agentId, string memory key, bytes memory value) external {
+        require(
+            msg.sender == _ownerOf(agentId) ||
+            isApprovedForAll(_ownerOf(agentId), msg.sender) ||
+            msg.sender == getApproved(agentId),
+            "Not authorized"
+        );
+        _metadata[agentId][key] = value;
+        emit MetadataSet(agentId, key, key, value);
     }
 
-    function getMetadata(uint256 agentId, string calldata key)
-        external
-        view
-        override
-        returns (string memory)
-    {
-        bytes32 k = keccak256(bytes(key));
-        bytes memory v = _metadata[agentId][k];
-        return string(v);
-    }
-
-    // ----------
-    // Internal
-    // ----------
-
-    function _requireControllerOrOperator(uint256 agentId) internal view {
+    function setAgentUri(uint256 agentId, string calldata newUri) external {
         address owner = ownerOf(agentId);
         require(
             msg.sender == owner ||
-                getApproved(agentId) == msg.sender ||
-                isApprovedForAll(owner, msg.sender),
-            "not controller or operator"
+            isApprovedForAll(owner, msg.sender) ||
+            msg.sender == getApproved(agentId),
+            "Not authorized"
         );
-    }
-
-    // ----------
-    // Overrides (ERC721 + URIStorage)
-    // ----------
-
-    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
-        super._burn(tokenId);
-    }
-
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override(ERC721, ERC721URIStorage, IERC721Metadata)
-        returns (string memory)
-    {
-        return ERC721URIStorage.tokenURI(tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, IERC165)
-        returns (bool)
-    {
-        return
-            interfaceId == type(IIdentityRegistry).interfaceId ||
-            super.supportsInterface(interfaceId);
+        _setTokenURI(agentId, newUri);
+        emit UriUpdated(agentId, newUri, msg.sender);
     }
 }

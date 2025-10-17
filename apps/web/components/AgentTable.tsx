@@ -66,6 +66,9 @@ export function AgentTable() {
 	const [identityJsonLoading, setIdentityJsonLoading] = React.useState(false);
 	const [identityJsonError, setIdentityJsonError] = React.useState<string | null>(null);
 	const [identityJsonData, setIdentityJsonData] = React.useState<any | null>(null);
+	const [identityJsonText, setIdentityJsonText] = React.useState<string>("");
+	const [identityJsonParseError, setIdentityJsonParseError] = React.useState<string | null>(null);
+	const [identityEndpoints, setIdentityEndpoints] = React.useState<Array<{ name: string; endpoint: string; version?: string }>>([]);
 
 	// ENS details modal state
 	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
@@ -106,11 +109,49 @@ export function AgentTable() {
 			});
 			const data = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId));
 			setIdentityJsonData(data);
+			try {
+				setIdentityJsonText(JSON.stringify(data, null, 2));
+				setIdentityJsonParseError(null);
+			} catch {
+				setIdentityJsonText("");
+			}
+			try {
+				const eps = Array.isArray((data as any)?.endpoints) ? (data as any).endpoints : [];
+				setIdentityEndpoints(
+					eps.map((e: any) => ({
+						name: String(e?.name ?? ''),
+						endpoint: String(e?.endpoint ?? ''),
+						version: e?.version ? String(e.version) : ''
+					}))
+				);
+			} catch {
+				setIdentityEndpoints([]);
+			}
 		} catch (e: any) {
 			setIdentityJsonError(e?.message || 'Failed to load Identity JSON');
 		} finally {
 			setIdentityJsonLoading(false);
 		}
+	}
+
+	function handleEndpointFieldChange(index: number, field: 'name' | 'endpoint' | 'version', value: string) {
+		setIdentityEndpoints((prev) => {
+			const next = [...prev];
+			next[index] = { ...next[index], [field]: value };
+			return next;
+		});
+	}
+
+	function addEndpointRow() {
+		setIdentityEndpoints((prev) => [...prev, { name: '', endpoint: '', version: '' }]);
+	}
+
+	function removeEndpointRow(index: number) {
+		setIdentityEndpoints((prev) => {
+			const next = [...prev];
+			next.splice(index, 1);
+			return next;
+		});
 	}
 
 	async function openAgentInfo(row: Agent) {
@@ -1582,12 +1623,56 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 				) : identityJsonError ? (
 					<Typography variant="body2" color="error">{identityJsonError}</Typography>
 				) : identityJsonData ? (
-					<pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(identityJsonData, null, 2)}</pre>
+					<Grid container spacing={2}>
+						{/* Left: endpoints editor */}
+						<Grid item xs={12} md={6}>
+							<Stack spacing={1}>
+								<Stack direction="row" alignItems="center" justifyContent="space-between">
+									<Typography variant="subtitle2">Endpoints</Typography>
+									<IconButton size="small" onClick={addEndpointRow}><AddIcon fontSize="inherit" /></IconButton>
+								</Stack>
+								<Stack spacing={1}>
+									{identityEndpoints.map((ep, idx) => (
+										<Box key={idx} sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}>
+											<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+												<Typography variant="caption">Endpoint #{idx + 1}</Typography>
+												<IconButton size="small" onClick={() => removeEndpointRow(idx)}><DeleteIcon fontSize="inherit" /></IconButton>
+											</Stack>
+											<Grid container spacing={1}>
+												<Grid item xs={12} sm={6}><TextField fullWidth size="small" label="name" value={ep.name} onChange={(e) => handleEndpointFieldChange(idx, 'name', e.target.value)} /></Grid>
+												<Grid item xs={12} sm={6}><TextField fullWidth size="small" label="version" value={ep.version || ''} onChange={(e) => handleEndpointFieldChange(idx, 'version', e.target.value)} /></Grid>
+												<Grid item xs={12}><TextField fullWidth size="small" label="endpoint" value={ep.endpoint} onChange={(e) => handleEndpointFieldChange(idx, 'endpoint', e.target.value)} /></Grid>
+											</Grid>
+										</Box>
+									))}
+								</Stack>
+							</Stack>
+						</Grid>
+						{/* Right: merged JSON preview */}
+						<Grid item xs={12} md={6}>
+							<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+								<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints }; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => {}); } catch {} }} sx={{ position: 'absolute', top: 4, right: 4 }}>
+									<ContentCopyIcon fontSize="inherit" />
+								</IconButton>
+								<Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>
+									{(() => {
+										try {
+											const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints };
+											return JSON.stringify(merged, null, 2);
+										} catch {
+											return identityJsonText;
+										}
+									})()}
+								</Box>
+							</Box>
+						</Grid>
+					</Grid>
 				) : (
 					<Typography variant="body2" color="text.secondary">No data</Typography>
 				)}
 			</DialogContent>
 			<DialogActions>
+				<Button onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}>Reset</Button>
 				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
 			</DialogActions>
 		</Dialog>

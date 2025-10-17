@@ -1,422 +1,416 @@
-// SPDX-License-Identifier: CC0-1.0
-pragma solidity ^0.8.23;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-import {IReputationRegistry} from "./interfaces/IReputationRegistryV2.sol";
-import {IIdentityRegistry} from "./interfaces/IIdentityRegistryV2.sol";
-import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 
-/// @title ReputationRegistry (ERC-8004 reference)
-/// @notice Stores simple feedback signals (score/tags/uri) authorized by agents
-/// @dev Bound to a single Identity Registry (chainId + address).
-contract ReputationRegistry is IReputationRegistry {
+interface IIdentityRegistry {
+    function ownerOf(uint256 tokenId) external view returns (address);
+    function isApprovedForAll(address owner, address operator) external view returns (bool);
+    function getApproved(uint256 tokenId) external view returns (address);
+}
+
+/// @notice Minimal, compilable scaffold of ERC-8004 Reputation Registry.
+/// - Stores identityRegistry address
+/// - Emits NewFeedback / FeedbackRevoked / ResponseAppended
+/// - Stores small amount of data so we can deploy & test now
+contract ReputationRegistry {
     using ECDSA for bytes32;
-    using EnumerableSet for EnumerableSet.AddressSet;
+    using MessageHashUtils for bytes32;
 
-    // ---------- Config: bound Identity Registry ----------
+    address private immutable identityRegistry;
 
-    IIdentityRegistry private immutable _idRegistry;
-    uint64 private immutable _chainId;
+    event NewFeedback(
+        uint256 indexed agentId,
+        address indexed clientAddress,
+        uint8 score,
+        bytes32 indexed tag1,
+        bytes32 tag2,
+        string feedbackUri,
+        bytes32 feedbackHash
+    );
 
-    constructor(address identityRegistry) {
-        require(identityRegistry != address(0), "idRegistry=0");
-        _idRegistry = IIdentityRegistry(identityRegistry);
-        _chainId = _idRegistry.registryChainId();
-        // Defensive: ensure on this chain
-        require(_chainId == uint64(block.chainid), "chainId mismatch");
-        require(_idRegistry.identityRegistryAddress() == identityRegistry, "reg addr mismatch");
-    }
+    event FeedbackRevoked(
+        uint256 indexed agentId,
+        address indexed clientAddress,
+        uint64 indexed feedbackIndex
+    );
 
-    // ---------- Storage ----------
+    event ResponseAppended(
+        uint256 indexed agentId,
+        address indexed clientAddress,
+        uint64 feedbackIndex,
+        address indexed responder,
+        string responseUri,
+        bytes32 responseHash
+    );
 
     struct Feedback {
-        uint8 score;       // 0..100
-        bytes32 tag1;      // optional filter tag
-        bytes32 tag2;      // optional filter tag
-        bool revoked;      // true if revoked by client
+        uint8 score;
+        bytes32 tag1;
+        bytes32 tag2;
+        bool isRevoked;
     }
 
-    // agentId => client => list of feedback
-    mapping(uint256 => mapping(address => Feedback[])) private _feedback;
+    struct FeedbackAuth {
+        uint256 agentId;
+        address clientAddress;
+        uint64 indexLimit;
+        uint256 expiry;
+        uint256 chainId;
+        address identityRegistry;
+        address signerAddress;
+    }
 
-    // agentId => set of clients who have ever left feedback
-    mapping(uint256 => EnumerableSet.AddressSet) private _clients;
+    // agentId => clientAddress => feedbackIndex => Feedback (1-indexed)
+    mapping(uint256 => mapping(address => mapping(uint64 => Feedback))) private _feedback;
 
-    // agentId => client => responder => responseCount
+    // agentId => clientAddress => last feedback index
+    mapping(uint256 => mapping(address => uint64)) private _lastIndex;
+
+    // agentId => clientAddress => feedbackIndex => responder => response count
     mapping(uint256 => mapping(address => mapping(uint64 => mapping(address => uint64)))) private _responseCount;
 
-    // ---------- EIP-191 domain/tag ----------
+    // Track all unique responders for each feedback
+    mapping(uint256 => mapping(address => mapping(uint64 => address[]))) private _responders;
+    mapping(uint256 => mapping(address => mapping(uint64 => mapping(address => bool)))) private _responderExists;
 
-    // keccak256("ERC8004-FeedbackAuth")
-    bytes32 private constant FEEDBACK_DOMAIN = 0x7f8a2c3b4d9f3e0c1b0d1a29e5a2f6ac2a9f2a0c4c3a2b195e4c2aee2a9f7f60;
+    // Track all unique clients that have given feedback for each agent
+    mapping(uint256 => address[]) private _clients;
+    mapping(uint256 => mapping(address => bool)) private _clientExists;
 
-    // ---------- External: write ----------
+    constructor(address _identityRegistry) {
+        require(_identityRegistry != address(0), "bad identity");
+        identityRegistry = _identityRegistry;
+    }
 
-    /// @inheritdoc IReputationRegistry
+    function getIdentityRegistry() external view returns (address) {
+        return identityRegistry;
+    }
+
     function giveFeedback(
         uint256 agentId,
         uint8 score,
         bytes32 tag1,
         bytes32 tag2,
-        string calldata fileuri,
-        bytes32 filehash,
+        string calldata feedbackUri,
+        bytes32 feedbackHash,
         bytes calldata feedbackAuth
-    ) external override {
+    ) external {
         require(score <= 100, "score>100");
-        require(_exists(agentId), "agent !exists");
 
-        // Decode feedbackAuth:
-        // abi.encode(
-        //   uint256 agentId,
-        //   address clientAddress,
-        //   uint64 indexLimit,
-        //   uint64 expiry,
-        //   uint64 chainId,
-        //   address identityRegistry,
-        //   address signer,          // owner or operator
-        //   bytes   signature        // EOA or ERC-1271 signature over authHash
-        // )
-        (
-            uint256 authAgentId,
-            address clientAddress,
-            uint64 indexLimit,
-            uint64 expiry,
-            uint64 authChainId,
-            address authIdentityRegistry,
-            address signer,
-            bytes memory signature
-        ) = _decodeAuth(feedbackAuth);
+        // Verify agent exists
+        require(_agentExists(agentId), "Agent does not exist");
 
-        require(authAgentId == agentId, "auth agentId mismatch");
-        require(clientAddress == msg.sender, "client != msg.sender");
-        require(block.timestamp < expiry, "auth expired");
-        require(authChainId == _chainId, "chainId mismatch");
-        require(authIdentityRegistry == address(_idRegistry), "idRegistry mismatch");
+        // Get agent owner
+        IIdentityRegistry registry = IIdentityRegistry(identityRegistry);
+        address agentOwner = registry.ownerOf(agentId);
 
-        // Ensure indexLimit authorizes this new index (indexLimit ≥ nextIndex)
-        uint64 nextIndex = uint64(_feedback[agentId][clientAddress].length);
-        require(indexLimit >= nextIndex, "indexLimit too low");
+        // SECURITY: Prevent self-feedback from owner and operators
+        require(
+            msg.sender != agentOwner &&
+            !registry.isApprovedForAll(agentOwner, msg.sender) &&
+            registry.getApproved(agentId) != msg.sender,
+            "Self-feedback not allowed"
+        );
 
-        // Verify signer is owner/operator of agentId
-        _requireOwnerOrOperator(agentId, signer);
+        // Verify feedbackAuth signature
+        _verifyFeedbackAuth(agentId, msg.sender, feedbackAuth);
 
-        // Verify signature (EOA or 1271) over domain-separated hash
-        bytes32 authHash = _feedbackAuthHash(agentId, clientAddress, indexLimit, expiry, authChainId, authIdentityRegistry, signer);
-        _verifySignatureFlexible(signer, authHash, signature);
+        // Get current index for this client-agent pair (1-indexed)
+        uint64 currentIndex = _lastIndex[agentId][msg.sender] + 1;
 
-        // Store feedback
-        _feedback[agentId][clientAddress].push(Feedback({
+        // Store feedback at 1-indexed position
+        _feedback[agentId][msg.sender][currentIndex] = Feedback({
             score: score,
             tag1: tag1,
             tag2: tag2,
-            revoked: false
-        }));
+            isRevoked: false
+        });
 
-        // Track client set
-        _clients[agentId].add(clientAddress);
+        // Update last index
+        _lastIndex[agentId][msg.sender] = currentIndex;
 
-        emit NewFeedback(agentId, clientAddress, score, tag1, tag2, fileuri, filehash);
+        // track new client
+        if (!_clientExists[agentId][msg.sender]) {
+            _clients[agentId].push(msg.sender);
+            _clientExists[agentId][msg.sender] = true;
+        }
+
+        emit NewFeedback(agentId, msg.sender, score, tag1, tag2, feedbackUri, feedbackHash);
     }
 
-    /// @inheritdoc IReputationRegistry
-    function revokeFeedback(uint256 agentId, uint64 feedbackIndex) external override {
-        require(_exists(agentId), "agent !exists");
-        require(feedbackIndex < _feedback[agentId][msg.sender].length, "index OOB");
-        Feedback storage fb = _feedback[agentId][msg.sender][feedbackIndex];
-        require(!fb.revoked, "already revoked");
-        fb.revoked = true;
+    function _verifyFeedbackAuth(
+        uint256 agentId,
+        address clientAddress,
+        bytes calldata feedbackAuth
+    ) internal view {
+        require(
+            IIdentityRegistry(identityRegistry).ownerOf(agentId) != address(0),
+            "Unregistered agent"
+        );
+        require(feedbackAuth.length >= 289, "Invalid auth length");
+
+        // Decode the first 224 bytes into struct
+        FeedbackAuth memory auth;
+        (
+            auth.agentId,
+            auth.clientAddress,
+            auth.indexLimit,
+            auth.expiry,
+            auth.chainId,
+            auth.identityRegistry,
+            auth.signerAddress
+        ) = abi.decode(feedbackAuth[:224], (uint256, address, uint64, uint256, uint256, address, address));
+
+        // Verify parameters
+        require(auth.agentId == agentId, "AgentId mismatch");
+        require(auth.clientAddress == clientAddress, "Client mismatch");
+        require(block.timestamp < auth.expiry, "Auth expired");
+        require(auth.chainId == block.chainid, "ChainId mismatch");
+        require(auth.identityRegistry == identityRegistry, "Registry mismatch");
+        require(auth.indexLimit >= _lastIndex[agentId][clientAddress] + 1, "IndexLimit exceeded");
+
+        // Verify signature
+        _verifySignature(auth, feedbackAuth[224:]);
+    }
+
+    function _verifySignature(
+        FeedbackAuth memory auth,
+        bytes calldata signature
+    ) internal view {
+        // Construct message hash
+        bytes32 messageHash = keccak256(
+            abi.encode(
+                auth.agentId,
+                auth.clientAddress,
+                auth.indexLimit,
+                auth.expiry,
+                auth.chainId,
+                auth.identityRegistry,
+                auth.signerAddress
+            )
+        ).toEthSignedMessageHash();
+
+        // verify signature: EOA or ERC-1271 contract
+        address recoveredSigner = messageHash.recover(signature);
+        if (recoveredSigner != auth.signerAddress) {
+            if (auth.signerAddress.code.length == 0) {
+                revert("Invalid signature");
+            }
+            require(
+                IERC1271(auth.signerAddress).isValidSignature(messageHash, signature) == IERC1271.isValidSignature.selector,
+                "Bad 1271 signature"
+            );
+        }
+
+        // Verify signerAddress is owner or operator
+        IIdentityRegistry registry = IIdentityRegistry(identityRegistry);
+        address owner = registry.ownerOf(auth.agentId);
+        require(
+            auth.signerAddress == owner ||
+            registry.isApprovedForAll(owner, auth.signerAddress) ||
+            registry.getApproved(auth.agentId) == auth.signerAddress,
+            "Signer not authorized"
+        );
+    }
+
+    function revokeFeedback(uint256 agentId, uint64 feedbackIndex) external {
+        require(feedbackIndex > 0, "index must be > 0");
+        require(feedbackIndex <= _lastIndex[agentId][msg.sender], "index out of bounds");
+        require(!_feedback[agentId][msg.sender][feedbackIndex].isRevoked, "Already revoked");
+
+        _feedback[agentId][msg.sender][feedbackIndex].isRevoked = true;
         emit FeedbackRevoked(agentId, msg.sender, feedbackIndex);
     }
 
-    /// @inheritdoc IReputationRegistry
     function appendResponse(
         uint256 agentId,
         address clientAddress,
         uint64 feedbackIndex,
         string calldata responseUri,
         bytes32 responseHash
-    ) external override {
-        require(_exists(agentId), "agent !exists");
-        require(feedbackIndex < _feedback[agentId][clientAddress].length, "index OOB");
-        // Bump responder count
-        _responseCount[agentId][clientAddress][feedbackIndex][msg.sender] += 1;
-        emit ResponseAppended(agentId, clientAddress, feedbackIndex, msg.sender, responseUri);
+    ) external {
+        require(feedbackIndex > 0, "index must be > 0");
+        require(feedbackIndex <= _lastIndex[agentId][clientAddress], "index out of bounds");
+        require(bytes(responseUri).length > 0, "Empty URI");
+
+        // Track new responder
+        if (!_responderExists[agentId][clientAddress][feedbackIndex][msg.sender]) {
+            _responders[agentId][clientAddress][feedbackIndex].push(msg.sender);
+            _responderExists[agentId][clientAddress][feedbackIndex][msg.sender] = true;
+        }
+
+        // Increment response count for this responder
+        _responseCount[agentId][clientAddress][feedbackIndex][msg.sender]++;
+
+        emit ResponseAppended(agentId, clientAddress, feedbackIndex, msg.sender, responseUri, responseHash);
     }
 
-    // ---------- External: read ----------
+    function getLastIndex(uint256 agentId, address clientAddress) external view returns (uint64) {
+        return _lastIndex[agentId][clientAddress];
+    }
 
-    /// @inheritdoc IReputationRegistry
+    function readFeedback(uint256 agentId, address clientAddress, uint64 index)
+        external
+        view
+        returns (uint8 score, bytes32 tag1, bytes32 tag2, bool isRevoked)
+    {
+        require(index > 0, "index must be > 0");
+        require(index <= _lastIndex[agentId][clientAddress], "index out of bounds");
+        Feedback storage f = _feedback[agentId][clientAddress][index];
+        return (f.score, f.tag1, f.tag2, f.isRevoked);
+    }
+
     function getSummary(
         uint256 agentId,
         address[] calldata clientAddresses,
         bytes32 tag1,
         bytes32 tag2
-    ) external view override returns (uint64 count, uint8 averageScore) {
-        require(_exists(agentId), "agent !exists");
-        uint256 sum = 0;
-        if (clientAddresses.length == 0) {
-            // iterate all clients
-            uint256 n = _clients[agentId].length();
-            for (uint256 i = 0; i < n; i++) {
-                address c = _clients[agentId].at(i);
-                (uint64 cCount, uint256 cSum) = _sumForClient(agentId, c, tag1, tag2);
-                count += cCount;
-                sum += cSum;
-            }
+    ) external view returns (uint64 count, uint8 averageScore) {
+        address[] memory clientList;
+        if (clientAddresses.length > 0) {
+            clientList = clientAddresses;
         } else {
-            for (uint256 i = 0; i < clientAddresses.length; i++) {
-                (uint64 cCount, uint256 cSum) = _sumForClient(agentId, clientAddresses[i], tag1, tag2);
-                count += cCount;
-                sum += cSum;
+            clientList = _clients[agentId];
+        }
+
+        uint256 totalScore = 0;
+        count = 0;
+
+        for (uint256 i = 0; i < clientList.length; i++) {
+            uint64 lastIdx = _lastIndex[agentId][clientList[i]];
+            for (uint64 j = 1; j <= lastIdx; j++) {
+                Feedback storage fb = _feedback[agentId][clientList[i]][j];
+                if (fb.isRevoked) continue;
+                if (tag1 != bytes32(0) && fb.tag1 != tag1) continue;
+                if (tag2 != bytes32(0) && fb.tag2 != tag2) continue;
+
+                totalScore += fb.score;
+                count++;
             }
         }
-        averageScore = count == 0 ? 0 : uint8(sum / count);
+
+        averageScore = count > 0 ? uint8(totalScore / count) : 0;
     }
 
-    /// @inheritdoc IReputationRegistry
-    function readFeedback(
-        uint256 agentId,
-        address clientAddress,
-        uint64 index
-    ) external view override returns (uint8 score, bytes32 tag1, bytes32 tag2, bool isRevoked) {
-        require(_exists(agentId), "agent !exists");
-        require(index < _feedback[agentId][clientAddress].length, "index OOB");
-        Feedback storage fb = _feedback[agentId][clientAddress][index];
-        return (fb.score, fb.tag1, fb.tag2, fb.revoked);
-    }
-
-    /// @inheritdoc IReputationRegistry
     function readAllFeedback(
         uint256 agentId,
         address[] calldata clientAddresses,
         bytes32 tag1,
         bytes32 tag2,
         bool includeRevoked
-    ) external view override returns (
-        address[] memory outClients,
-        uint8[]    memory scores,
-        bytes32[]  memory tag1s,
-        bytes32[]  memory tag2s,
-        bool[]     memory revokedStatuses
+    ) external view returns (
+        address[] memory clients,
+        uint8[] memory scores,
+        bytes32[] memory tag1s,
+        bytes32[] memory tag2s,
+        bool[] memory revokedStatuses
     ) {
-        require(_exists(agentId), "agent !exists");
-
-        // First pass: count
-        uint256 total = 0;
-        if (clientAddresses.length == 0) {
-            uint256 n = _clients[agentId].length();
-            for (uint256 i = 0; i < n; i++) {
-                total += _countForClient(agentId, _clients[agentId].at(i), tag1, tag2, includeRevoked);
-            }
+        address[] memory clientList;
+        if (clientAddresses.length > 0) {
+            clientList = clientAddresses;
         } else {
-            for (uint256 i = 0; i < clientAddresses.length; i++) {
-                total += _countForClient(agentId, clientAddresses[i], tag1, tag2, includeRevoked);
+            clientList = _clients[agentId];
+        }
+
+        // First pass: count matching feedback
+        uint256 totalCount = 0;
+        for (uint256 i = 0; i < clientList.length; i++) {
+            uint64 lastIdx = _lastIndex[agentId][clientList[i]];
+            for (uint64 j = 1; j <= lastIdx; j++) {
+                Feedback storage fb = _feedback[agentId][clientList[i]][j];
+                if (!includeRevoked && fb.isRevoked) continue;
+                if (tag1 != bytes32(0) && fb.tag1 != tag1) continue;
+                if (tag2 != bytes32(0) && fb.tag2 != tag2) continue;
+                totalCount++;
             }
         }
 
-        outClients = new address[](total);
-        scores     = new uint8[](total);
-        tag1s      = new bytes32[](total);
-        tag2s      = new bytes32[](total);
-        revokedStatuses = new bool[](total);
+        // Initialize arrays
+        clients = new address[](totalCount);
+        scores = new uint8[](totalCount);
+        tag1s = new bytes32[](totalCount);
+        tag2s = new bytes32[](totalCount);
+        revokedStatuses = new bool[](totalCount);
 
-        // Second pass: fill
-        uint256 k = 0;
-        if (clientAddresses.length == 0) {
-            uint256 n = _clients[agentId].length();
-            for (uint256 i = 0; i < n; i++) {
-                k = _fillForClient(agentId, _clients[agentId].at(i), tag1, tag2, includeRevoked, outClients, scores, tag1s, tag2s, revokedStatuses, k);
-            }
-        } else {
-            for (uint256 i = 0; i < clientAddresses.length; i++) {
-                k = _fillForClient(agentId, clientAddresses[i], tag1, tag2, includeRevoked, outClients, scores, tag1s, tag2s, revokedStatuses, k);
+        // Second pass: populate arrays
+        uint256 idx = 0;
+        for (uint256 i = 0; i < clientList.length; i++) {
+            uint64 lastIdx = _lastIndex[agentId][clientList[i]];
+            for (uint64 j = 1; j <= lastIdx; j++) {
+                Feedback storage fb = _feedback[agentId][clientList[i]][j];
+                if (!includeRevoked && fb.isRevoked) continue;
+                if (tag1 != bytes32(0) && fb.tag1 != tag1) continue;
+                if (tag2 != bytes32(0) && fb.tag2 != tag2) continue;
+
+                clients[idx] = clientList[i];
+                scores[idx] = fb.score;
+                tag1s[idx] = fb.tag1;
+                tag2s[idx] = fb.tag2;
+                revokedStatuses[idx] = fb.isRevoked;
+                idx++;
             }
         }
     }
 
-    /// @inheritdoc IReputationRegistry
     function getResponseCount(
         uint256 agentId,
         address clientAddress,
         uint64 feedbackIndex,
         address[] calldata responders
-    ) external view override returns (uint64) {
-        require(_exists(agentId), "agent !exists");
-        require(feedbackIndex < _feedback[agentId][clientAddress].length, "index OOB");
+    ) external view returns (uint64 count) {
+        if (clientAddress == address(0)) {
+            // Count all responses for all clients
+            address[] memory clients = _clients[agentId];
+            for (uint256 i = 0; i < clients.length; i++) {
+                uint64 lastIdx = _lastIndex[agentId][clients[i]];
+                for (uint64 j = 1; j <= lastIdx; j++) {
+                    count += _countResponses(agentId, clients[i], j, responders);
+                }
+            }
+        } else if (feedbackIndex == 0) {
+            // Count all responses for specific clientAddress
+            uint64 lastIdx = _lastIndex[agentId][clientAddress];
+            for (uint64 j = 1; j <= lastIdx; j++) {
+                count += _countResponses(agentId, clientAddress, j, responders);
+            }
+        } else {
+            // Count responses for specific clientAddress and feedbackIndex
+            count = _countResponses(agentId, clientAddress, feedbackIndex, responders);
+        }
+    }
+
+    function _countResponses(
+        uint256 agentId,
+        address clientAddress,
+        uint64 feedbackIndex,
+        address[] calldata responders
+    ) internal view returns (uint64 count) {
         if (responders.length == 0) {
-            // Sum all known responders isn’t tracked; return 0 if not specified.
-            // (Design: callers pass responders they care about.)
-            return 0;
+            // Count from all responders
+            address[] memory allResponders = _responders[agentId][clientAddress][feedbackIndex];
+            for (uint256 k = 0; k < allResponders.length; k++) {
+                count += _responseCount[agentId][clientAddress][feedbackIndex][allResponders[k]];
+            }
+        } else {
+            // Count from specified responders
+            for (uint256 k = 0; k < responders.length; k++) {
+                count += _responseCount[agentId][clientAddress][feedbackIndex][responders[k]];
+            }
         }
-        uint64 total = 0;
-        for (uint256 i = 0; i < responders.length; i++) {
-            total += _responseCount[agentId][clientAddress][feedbackIndex][responders[i]];
-        }
-        return total;
     }
 
-    /// @inheritdoc IReputationRegistry
-    function getClients(uint256 agentId) external view override returns (address[] memory) {
-        require(_exists(agentId), "agent !exists");
-        uint256 n = _clients[agentId].length();
-        address[] memory arr = new address[](n);
-        for (uint256 i = 0; i < n; i++) arr[i] = _clients[agentId].at(i);
-        return arr;
+    function getClients(uint256 agentId) external view returns (address[] memory) {
+        return _clients[agentId];
     }
 
-    /// @inheritdoc IReputationRegistry
-    function getLastIndex(uint256 agentId, address clientAddress) external view override returns (uint64) {
-        require(_exists(agentId), "agent !exists");
-        uint256 len = _feedback[agentId][clientAddress].length;
-        return len == 0 ? type(uint64).max : uint64(len - 1);
-    }
-
-    /// @inheritdoc IReputationRegistry
-    function getIdentityRegistry() external view override returns (address) {
-        return address(_idRegistry);
-    }
-
-    // ---------- Internal helpers ----------
-
-    function _exists(uint256 agentId) internal view returns (bool) {
-        // IERC721.ownerOf MUST revert if !exists, so we check with try/catch
-        try _idRegistry.ownerOf(agentId) returns (address o) {
-            return o != address(0);
+    function _agentExists(uint256 agentId) internal view returns (bool) {
+        try IIdentityRegistry(identityRegistry).ownerOf(agentId) returns (address owner) {
+            return owner != address(0);
         } catch {
             return false;
         }
-    }
-
-    function _requireOwnerOrOperator(uint256 agentId, address signer) internal view {
-        address owner = _idRegistry.ownerOf(agentId);
-        if (signer == owner) return;
-        if (_idRegistry.getApproved(agentId) == signer) return;
-        if (_idRegistry.isApprovedForAll(owner, signer)) return;
-        revert("signer !owner/operator");
-    }
-
-    function _feedbackAuthHash(
-        uint256 agentId,
-        address clientAddress,
-        uint64 indexLimit,
-        uint64 expiry,
-        uint64 chainId,
-        address identityRegistry,
-        address signer
-    ) internal view returns (bytes32) {
-        // Domain-separated EIP-191 hash: keccak256(
-        //   "\x19Ethereum Signed Message:\n32" || keccak256(FEEDBACK_DOMAIN, chainId, address(this), idRegistry, agentId, client, indexLimit, expiry, signer)
-        // )
-        bytes32 inner = keccak256(
-            abi.encode(
-                FEEDBACK_DOMAIN,
-                chainId,
-                address(this),
-                identityRegistry,
-                agentId,
-                clientAddress,
-                indexLimit,
-                expiry,
-                signer
-            )
-        );
-        return inner.toEthSignedMessageHash();
-    }
-
-    function _verifySignatureFlexible(address signer, bytes32 msgHash, bytes memory signature) internal view {
-        if (signer.code.length == 0) {
-            // EOA path
-            address recovered = ECDSA.recover(msgHash, signature);
-            require(recovered == signer, "bad EOA sig");
-        } else {
-            // ERC-1271 path
-            bytes4 magic = IERC1271(signer).isValidSignature(msgHash, signature);
-            require(magic == IERC1271.isValidSignature.selector, "bad 1271 sig");
-        }
-    }
-
-    function _sumForClient(
-        uint256 agentId,
-        address client,
-        bytes32 tag1,
-        bytes32 tag2
-    ) internal view returns (uint64 count, uint256 sum) {
-        Feedback[] storage arr = _feedback[agentId][client];
-        for (uint256 j = 0; j < arr.length; j++) {
-            Feedback storage fb = arr[j];
-            if (fb.revoked) continue;
-            if (tag1 != bytes32(0) && fb.tag1 != tag1) continue;
-            if (tag2 != bytes32(0) && fb.tag2 != tag2) continue;
-            sum += fb.score;
-            count += 1;
-        }
-    }
-
-    function _countForClient(
-        uint256 agentId,
-        address client,
-        bytes32 tag1,
-        bytes32 tag2,
-        bool includeRevoked
-    ) internal view returns (uint256 n) {
-        Feedback[] storage arr = _feedback[agentId][client];
-        for (uint256 j = 0; j < arr.length; j++) {
-            Feedback storage fb = arr[j];
-            if (!includeRevoked && fb.revoked) continue;
-            if (tag1 != bytes32(0) && fb.tag1 != tag1) continue;
-            if (tag2 != bytes32(0) && fb.tag2 != tag2) continue;
-            n++;
-        }
-    }
-
-    function _fillForClient(
-        uint256 agentId,
-        address client,
-        bytes32 tag1,
-        bytes32 tag2,
-        bool includeRevoked,
-        address[] memory outClients,
-        uint8[] memory scores,
-        bytes32[] memory tag1s,
-        bytes32[] memory tag2s,
-        bool[] memory revokedStatuses,
-        uint256 k
-    ) internal view returns (uint256) {
-        Feedback[] storage arr = _feedback[agentId][client];
-        for (uint256 j = 0; j < arr.length; j++) {
-            Feedback storage fb = arr[j];
-            if (!includeRevoked && fb.revoked) continue;
-            if (tag1 != bytes32(0) && fb.tag1 != tag1) continue;
-            if (tag2 != bytes32(0) && fb.tag2 != tag2) continue;
-            outClients[k] = client;
-            scores[k] = fb.score;
-            tag1s[k] = fb.tag1;
-            tag2s[k] = fb.tag2;
-            revokedStatuses[k] = fb.revoked;
-            k++;
-        }
-        return k;
-    }
-
-    // ---------- Auth encoding/decoding ----------
-
-    function _decodeAuth(bytes calldata blob)
-        internal
-        pure
-        returns (
-            uint256 agentId,
-            address clientAddress,
-            uint64 indexLimit,
-            uint64 expiry,
-            uint64 chainId,
-            address identityRegistry,
-            address signer,
-            bytes memory signature
-        )
-    {
-        // Tight ABI decoding as documented in giveFeedback()
-        (agentId, clientAddress, indexLimit, expiry, chainId, identityRegistry, signer, signature) =
-            abi.decode(blob, (uint256, address, uint64, uint64, uint64, address, address, bytes));
     }
 }

@@ -1,195 +1,163 @@
-// SPDX-License-Identifier: CC0-1.0
-pragma solidity ^0.8.23;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-import {IValidationRegistry} from "./interfaces/IValidationRegistryV2.sol";
-import {IIdentityRegistry} from "./interfaces/IIdentityRegistryV2.sol";
+interface IIdentityRegistry {
+    function ownerOf(uint256 tokenId) external view returns (address);
+    function isApprovedForAll(address owner, address operator) external view returns (bool);
+}
 
-/// @title ValidationRegistry (ERC-8004 reference)
-/// @notice Agents request validation; designated validators post responses.
-/// @dev Bound to a single Identity Registry (chainId + address).
-contract ValidationRegistry is IValidationRegistry {
-    // ---------- Config: bound Identity Registry ----------
-    IIdentityRegistry private immutable _idRegistry;
-    uint64 private immutable _chainId;
+/// @notice Minimal, compilable scaffold of ERC-8004 Validation Registry.
+/// - Stores identityRegistry address
+/// - Allows requests & responses, emits events
+contract ValidationRegistry {
+    address private immutable identityRegistry;
 
-    constructor(address identityRegistry) {
-        require(identityRegistry != address(0), "idRegistry=0");
-        _idRegistry = IIdentityRegistry(identityRegistry);
-        _chainId = _idRegistry.registryChainId();
-        require(_chainId == uint64(block.chainid), "chainId mismatch");
-        require(_idRegistry.identityRegistryAddress() == identityRegistry, "reg addr mismatch");
+    event ValidationRequest(
+        address indexed validatorAddress,
+        uint256 indexed agentId,
+        string requestUri,
+        bytes32 indexed requestHash
+    );
+
+    event ValidationResponse(
+        address indexed validatorAddress,
+        uint256 indexed agentId,
+        bytes32 indexed requestHash,
+        uint8 response,
+        string responseUri,
+        bytes32 responseHash,
+        bytes32 tag
+    );
+
+    struct ValidationStatus {
+        address validatorAddress;
+        uint256 agentId;
+        uint8 response;       // 0..100
+        bytes32 responseHash;
+        bytes32 tag;
+        uint256 lastUpdate;
     }
 
-    // ---------- Storage ----------
-
-    struct RequestMeta {
-        address validator;      // who is allowed to respond
-        uint256 agentId;        // which agent requested this
-        bool    exists;         // request created
-    }
-
-    struct Status {
-        uint8   response;       // 0..100 (latest)
-        bytes32 tag;            // optional latest tag
-        uint256 lastUpdate;     // timestamp of last response
-        string  responseUri;    // latest evidence (optional)
-        bytes32 responseHash;   // commitment to latest evidence (optional)
-    }
-
-    // requestHash => request meta
-    mapping(bytes32 => RequestMeta) private _requests;
-
-    // requestHash => latest status
-    mapping(bytes32 => Status) private _status;
+    // requestHash => validation status
+    mapping(bytes32 => ValidationStatus) public validations;
 
     // agentId => list of requestHashes
-    mapping(uint256 => bytes32[]) private _agentRequests;
+    mapping(uint256 => bytes32[]) private _agentValidations;
 
-    // validator => list of requestHashes
+    // validatorAddress => list of requestHashes
     mapping(address => bytes32[]) private _validatorRequests;
 
-    // -------- Write API --------
+    constructor(address _identityRegistry) {
+        require(_identityRegistry != address(0), "bad identity");
+        identityRegistry = _identityRegistry;
+    }
 
-    /// @inheritdoc IValidationRegistry
+    function getIdentityRegistry() external view returns (address) {
+        return identityRegistry;
+    }
+
     function validationRequest(
         address validatorAddress,
         uint256 agentId,
         string calldata requestUri,
         bytes32 requestHash
-    ) external override {
-        require(validatorAddress != address(0), "validator=0");
-        require(_exists(agentId), "agent !exists");
-        require(!_requests[requestHash].exists, "request exists");
+    ) external {
+        require(validatorAddress != address(0), "bad validator");
+        require(validations[requestHash].validatorAddress == address(0), "exists");
 
-        // Only the agent controller or its operator can open a request
-        _requireOwnerOrOperator(agentId, msg.sender);
+        // Check permission: caller must be owner or approved operator
+        IIdentityRegistry registry = IIdentityRegistry(identityRegistry);
+        address owner = registry.ownerOf(agentId);
+        require(
+            msg.sender == owner || registry.isApprovedForAll(owner, msg.sender),
+            "Not authorized"
+        );
 
-        // Record request meta
-        _requests[requestHash] = RequestMeta({
-            validator: validatorAddress,
+        validations[requestHash] = ValidationStatus({
+            validatorAddress: validatorAddress,
             agentId: agentId,
-            exists: true
+            response: 0,
+            responseHash: bytes32(0),
+            tag: bytes32(0),
+            lastUpdate: block.timestamp
         });
 
-        // Indexes
-        _agentRequests[agentId].push(requestHash);
+        // Track for lookups
+        _agentValidations[agentId].push(requestHash);
         _validatorRequests[validatorAddress].push(requestHash);
 
         emit ValidationRequest(validatorAddress, agentId, requestUri, requestHash);
     }
 
-    /// @inheritdoc IValidationRegistry
     function validationResponse(
         bytes32 requestHash,
         uint8 response,
         string calldata responseUri,
         bytes32 responseHash,
         bytes32 tag
-    ) external override {
-        require(response <= 100, "response>100");
-        RequestMeta memory req = _requests[requestHash];
-        require(req.exists, "unknown request");
-        require(msg.sender == req.validator, "only validator");
-
-        // Update latest status (idempotent; allows progressive states)
-        _status[requestHash] = Status({
-            response: response,
-            tag: tag,
-            lastUpdate: block.timestamp,
-            responseUri: responseUri,
-            responseHash: responseHash
-        });
-
-        emit ValidationResponse(req.validator, req.agentId, requestHash, response, responseUri, tag);
+    ) external {
+        ValidationStatus storage s = validations[requestHash];
+        require(s.validatorAddress != address(0), "unknown");
+        require(msg.sender == s.validatorAddress, "not validator");
+        require(response <= 100, "resp>100");
+        s.response = response;
+        s.responseHash = responseHash;
+        s.tag = tag;
+        s.lastUpdate = block.timestamp;
+        emit ValidationResponse(s.validatorAddress, s.agentId, requestHash, response, responseUri, responseHash, tag);
     }
 
-    // -------- Read API --------
-
-    /// @inheritdoc IValidationRegistry
     function getValidationStatus(bytes32 requestHash)
         external
         view
-        override
-        returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 tag, uint256 lastUpdate)
+        returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 responseHash, bytes32 tag, uint256 lastUpdate)
     {
-        RequestMeta memory req = _requests[requestHash];
-        require(req.exists, "unknown request");
-        Status memory st = _status[requestHash];
-        return (req.validator, req.agentId, st.response, st.tag, st.lastUpdate);
+        ValidationStatus memory s = validations[requestHash];
+        require(s.validatorAddress != address(0), "unknown");
+        return (s.validatorAddress, s.agentId, s.response, s.responseHash, s.tag, s.lastUpdate);
     }
 
-    /// @inheritdoc IValidationRegistry
     function getSummary(
         uint256 agentId,
         address[] calldata validatorAddresses,
         bytes32 tag
-    ) external view override returns (uint64 count, uint8 avgResponse) {
-        require(_exists(agentId), "agent !exists");
-        bytes32[] storage hashes = _agentRequests[agentId];
-        uint256 sum = 0;
+    ) external view returns (uint64 count, uint8 avgResponse) {
+        uint256 totalResponse = 0;
+        count = 0;
 
-        if (validatorAddresses.length == 0) {
-            for (uint256 i = 0; i < hashes.length; i++) {
-                Status storage st = _status[hashes[i]];
-                if (st.lastUpdate == 0) continue; // no response yet
-                if (tag != bytes32(0) && st.tag != tag) continue;
-                sum += st.response;
-                count += 1;
-            }
-        } else {
-            // Build quick allowlist
-            for (uint256 i = 0; i < hashes.length; i++) {
-                RequestMeta storage req = _requests[hashes[i]];
-                Status storage st = _status[hashes[i]];
-                if (st.lastUpdate == 0) continue; // no response yet
-                if (tag != bytes32(0) && st.tag != tag) continue;
+        bytes32[] storage requestHashes = _agentValidations[agentId];
 
-                bool ok = false;
+        for (uint256 i = 0; i < requestHashes.length; i++) {
+            ValidationStatus storage s = validations[requestHashes[i]];
+
+            // Filter by validator if specified
+            bool matchValidator = (validatorAddresses.length == 0);
+            if (!matchValidator) {
                 for (uint256 j = 0; j < validatorAddresses.length; j++) {
-                    if (req.validator == validatorAddresses[j]) { ok = true; break; }
+                    if (s.validatorAddress == validatorAddresses[j]) {
+                        matchValidator = true;
+                        break;
+                    }
                 }
-                if (!ok) continue;
+            }
 
-                sum += st.response;
-                count += 1;
+            // Filter by tag (0x0 means no filter)
+            bool matchTag = (tag == bytes32(0)) || (s.tag == tag);
+
+            if (matchValidator && matchTag && s.response >= 0) {
+                totalResponse += s.response;
+                count++;
             }
         }
 
-        avgResponse = count == 0 ? 0 : uint8(sum / count);
+        avgResponse = count > 0 ? uint8(totalResponse / count) : 0;
     }
 
-    /// @inheritdoc IValidationRegistry
-    function getAgentValidations(uint256 agentId) external view override returns (bytes32[] memory) {
-        require(_exists(agentId), "agent !exists");
-        return _agentRequests[agentId];
+    function getAgentValidations(uint256 agentId) external view returns (bytes32[] memory) {
+        return _agentValidations[agentId];
     }
 
-    /// @inheritdoc IValidationRegistry
-    function getValidatorRequests(address validatorAddress) external view override returns (bytes32[] memory) {
+    function getValidatorRequests(address validatorAddress) external view returns (bytes32[] memory) {
         return _validatorRequests[validatorAddress];
-    }
-
-    /// @inheritdoc IValidationRegistry
-    function getIdentityRegistry() external view override returns (uint64, address) {
-        return (_chainId, address(_idRegistry));
-    }
-
-    // -------- Internal helpers --------
-
-    function _exists(uint256 agentId) internal view returns (bool) {
-        // IERC721.ownerOf MUST revert if !exists, so we check with try/catch
-        try _idRegistry.ownerOf(agentId) returns (address o) {
-            return o != address(0);
-        } catch {
-            return false;
-        }
-    }
-
-    function _requireOwnerOrOperator(uint256 agentId, address caller) internal view {
-        address owner = _idRegistry.ownerOf(agentId);
-        if (caller == owner) return;
-        if (_idRegistry.getApproved(agentId) == caller) return;
-        if (_idRegistry.isApprovedForAll(owner, caller)) return;
-        revert("not owner/operator");
     }
 }
