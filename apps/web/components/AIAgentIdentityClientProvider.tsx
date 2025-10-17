@@ -50,11 +50,10 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
 
       // Construct client (constructor matches current AIAgentIdentityClient signature in your repo)
       const instance = new AIAgentIdentityClient(
-        rpcUrl,
         orgAdapter,
         agentAdapter,
-        ensRegistryAddress,
         identityRegistryAddress,
+        ensRegistryAddress,
       );
       setClient(instance);
     })();

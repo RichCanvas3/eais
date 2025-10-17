@@ -17,25 +17,22 @@ import type { MetadataEntry } from '../erc8004-src/types';
 
 export class AIAgentIdentityClient extends BaseIdentityClient {
   private chain: Chain;
-  private rpcUrl: string;
-  private orgAdapter: any;
   private agentAdapter: any;
+  private orgAdapter: any;
   private ensRegistryAddress: `0x${string}`;
   private identityRegistryAddress: `0x${string}`;
   private publicClient: PublicClient | null = null;
 
   constructor(
-    rpcUrl: string,
-    orgAdapter: any,
     agentAdapter: any,
-    ensRegistryAddress: `0x${string}`,
-    identityRegistryAddress: `0x${string}`
+    orgAdapter: any, 
+    identityRegistryAddress: `0x${string}`,
+    ensRegistryAddress: `0x${string}`
   ) {
     super(agentAdapter, identityRegistryAddress);
 
     this.chain = sepolia;
-    this.rpcUrl = rpcUrl;
-    this.publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+    this.publicClient = agentAdapter.publicClient;
 
     this.orgAdapter = orgAdapter;
     this.agentAdapter = agentAdapter;
