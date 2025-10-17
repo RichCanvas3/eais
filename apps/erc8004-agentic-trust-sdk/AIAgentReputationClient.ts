@@ -8,9 +8,9 @@ import { sepolia } from 'viem/chains';
 
 
 
-import { ReputationClient as BaseReputationClient, type GiveFeedbackParams } from '../erc8004-src/ReputationClient';
+import { ReputationClient as BaseReputationClient, giveFeedbackParams } from '../erc8004-src/ReputationClient.js';
 import ReputationRegistryABI from '../erc8004-src/abis/ReputationRegistry.json';
-import type { MetadataEntry } from '../erc8004-src/types';
+import type { MetadataEntry } from '../erc8004-src/types.js';
 
 export class AIAgentReputationClient extends BaseReputationClient {
   private chain: Chain;
@@ -52,7 +52,7 @@ export class AIAgentReputationClient extends BaseReputationClient {
    * @param params - Feedback parameters (score is MUST, others are OPTIONAL)
    * @returns Transaction result
    */
-  async giveClientFeedback(params: GiveFeedbackParams): Promise<{ txHash: string }> {
+  async giveClientFeedback(params: giveFeedbackParams): Promise<{ txHash: string }> {
     // Validate score is 0-100 (MUST per spec)
     if (params.score < 0 || params.score > 100) {
       throw new Error('Score MUST be between 0 and 100');

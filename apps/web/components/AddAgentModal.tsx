@@ -54,6 +54,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
   const [agentUrlEdit, setAgentUrlEdit] = React.useState('');
   const [agentUrlIsAuto, setAgentUrlIsAuto] = React.useState(true);
   const [agentUrlSaving, setAgentUrlSaving] = React.useState(false);
+  // ENS agent name ownership check
+  const [ensAgentAddress, setEnsAgentAddress] = React.useState<string | null>(null);
+  const [ensAgentOwnerEoa, setEnsAgentOwnerEoa] = React.useState<string | null>(null);
   const [creatingAgentName, setCreatingAgentName] = React.useState(false);
   const [agentIdentityExists, setAgentIdentityExists] = React.useState<boolean | null>(null);
   const [domainStatus, setDomainStatus] = React.useState<{
@@ -114,7 +117,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     }
 
     // first look for ENS match to get address
-    /*
+    // had an ownership issue.  someone else owns the ENS name
     const ensAgentAddress = await agentIdentityClient.getAgentAccountByName(agentName);
     if (ensAgentAddress) {
       const agentAccountClient = await toMetaMaskSmartAccount({
@@ -127,7 +130,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       console.info("++++++++++++++ ens found with name", agentName, agentAccountClient.address);
       return agentAccountClient
     }
-    */
+
 
     // use agentName to get salt
     const salt: `0x${string}` = keccak256(stringToHex(agentName)) as `0x${string}`;
@@ -168,6 +171,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           if (!cancelled) setAgentAccount(orgAccount);
 
           const agentAccount = await agentIdentityClient.getAgentAccountByName(full);
+          // Track ENS agent addr and its owner EOA (if any)
+          try {
+            setEnsAgentAddress(agentAccount ?? null);
+            if (agentAccount) {
+              const ownerEoa = await agentIdentityClient.getAgentEoaByAgentAccount(agentAccount as `0x${string}`);
+              setEnsAgentOwnerEoa(ownerEoa);
+            } else {
+              setEnsAgentOwnerEoa(null);
+            }
+          } catch {
+            setEnsAgentOwnerEoa(null);
+          }
 
 
           // Also check Registry ownership to determine if the name exists even without an addr record
@@ -195,6 +210,8 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       setAgentUrlError(null);
       setAgentUrlEdit('');
       setAgentUrlIsAuto(true);
+      setEnsAgentAddress(null);
+      setEnsAgentOwnerEoa(null);
     }
   }, [name, domain]);
 
@@ -765,6 +782,14 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                 </>
               )}
             </Typography>
+
+            {agentName && ensAgentAddress && ensAgentOwnerEoa && eoaAddress && (
+              ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase() ? (
+                <Typography variant="caption" color="error" sx={{ ml: 2 }}>
+                  ENS name is owned by a different account ({ensAgentOwnerEoa}). Connect that wallet or use a name you control.
+                </Typography>
+              ) : null
+            )}
 
             {agentName && agentExists === false && (
               <Button

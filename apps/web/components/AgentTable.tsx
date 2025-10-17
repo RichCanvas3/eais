@@ -1190,6 +1190,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 		
 
 			const session = {
+				agentId: row.agentId,
 				chainId,
 				aa,
 				sessionAA,
