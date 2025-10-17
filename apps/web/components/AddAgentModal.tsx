@@ -2,7 +2,13 @@
 import * as React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
-import { createAgentAdapter, createAIAgentIdentity as adapterCreateAIAgentIdentity, addAgentNameToOrg as adapterAddAgentNameToOrg, setAgentUri as adapterSetAgentUri, setAgentIdentity as adapterSetAgentIdentity } from '@/lib/agentAdapter';
+import { createAgentAdapter, 
+  createAIAgentIdentity as adapterCreateAIAgentIdentity, 
+  addAgentNameToOrg as adapterAddAgentNameToOrg, 
+  setAgentNameUri as adapterSetAgentNameUri, 
+  setAgentIdentityRegistrationUri as adapterSetAgentRegistrationUri, 
+  setAgentIdentity as adapterSetAgentIdentity } 
+  from '@/lib/agentAdapter';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 
 import { sepolia } from 'viem/chains';
@@ -99,7 +105,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           });
           
           
-          console.info("get agent info from SDK via ENS agent-identity", { agentId: agentId?.toString(), foundAddr });
+          console.info("++++++++++++++ get agent info from SDK via ENS agent-identity", { agentId: agentId?.toString(), foundAddr });
           return agentAccountClient;
         }
       }
@@ -108,7 +114,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     }
 
     // first look for ENS match to get address
-    
+    /*
     const ensAgentAddress = await agentIdentityClient.getAgentAccountByName(agentName);
     if (ensAgentAddress) {
       const agentAccountClient = await toMetaMaskSmartAccount({
@@ -118,9 +124,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         signatory: { walletClient },
       });
 
-      console.info("ens found with name", agentName, agentAccountClient.address);
+      console.info("++++++++++++++ ens found with name", agentName, agentAccountClient.address);
       return agentAccountClient
     }
+    */
 
     // use agentName to get salt
     const salt: `0x${string}` = keccak256(stringToHex(agentName)) as `0x${string}`;
@@ -131,8 +138,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       signatory: { walletClient },
       deploySalt: salt,
     } as any);
-    console.info("salt found with name", agentName, agentAccountClient.address);
+    console.info("++++++++++++++ salt found with name", agentName, agentAccountClient.address);
     //try { await logAgent(await agentAccountClient.getAddress()); } catch {}
+    
     return agentAccountClient
 
 
@@ -579,18 +587,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       }
 
 
-      const ownerAccount = privateKeyToAccount(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as `0x${string}`);
-      const identityRegistryOwnerWallet = createWalletClient({
-        chain: sepolia,
-        transport: http(process.env.NEXT_PUBLIC_RPC_URL),
-        account: ownerAccount,
-      });
+      //const ownerAccount = privateKeyToAccount(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as `0x${string}`);
+      //const identityRegistryOwnerWallet = createWalletClient({
+      //  chain: sepolia,
+      //  transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+      //  account: ownerAccount,
+      //});
 
-      const { ethers } = await import('ethers');
-      const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
-      const agentOwner = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
+      //const { ethers } = await import('ethers');
+      //const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
+      //const agentOwner = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
 
 
+      console.log('********************* adapterCreateAIAgentIdentity: tokenUri', tokenUri);
       const agentIdNum = await adapterCreateAIAgentIdentity({
         agentIdentityClient: agentIdentityClient,
         bundlerUrl: BUNDLER_URL,
@@ -712,7 +721,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                       });
 
                       const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
-                      await adapterSetAgentUri({
+                      await adapterSetAgentNameUri({
                         agentIdentityClient,
                         bundlerUrl: BUNDLER_URL,
                         chain: sepolia,
@@ -868,7 +877,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
                           const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
-                          await adapterSetAgentUri({
+                          await adapterSetAgentNameUri({
                             agentIdentityClient,
                             bundlerUrl: BUNDLER_URL,
                             chain: sepolia,

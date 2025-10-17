@@ -312,14 +312,20 @@ export async function createAIAgentIdentity(params: {
   const agentAddress = 'eip155:11155111:' + await agentAccount.getAddress()
 
   // Use AIAgentIdentityClient to encode calldata (like EAS SDK pattern), then send via bundler
+  console.log('********************* createAIAgentIdentity: agentName', agentName);
+  console.log('********************* createAIAgentIdentity: agentAddress', agentAddress);
+  console.log('********************* createAIAgentIdentity: tokenUri', tokenUri);
   const { calls: registerCalls } = await params.agentIdentityClient.prepareRegisterCalls(agentName, agentAddress as `0x${string}`, tokenUri ?? '');
 
+  console.log('********************* createAIAgentIdentity: registerCalls', registerCalls);
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
     chain,
     accountClient: agentAccount,
     calls: registerCalls,
   });
+
+  console.log('********************* createAIAgentIdentity: userOpHash', userOpHash);
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
  
@@ -329,17 +335,19 @@ export async function createAIAgentIdentity(params: {
   return tokenId;
 }
 
-export async function setAgentUri(params: {
+
+
+export async function setAgentIdentityRegistrationUri(params: {
   agentIdentityClient: AIAgentIdentityClient,
   bundlerUrl: string,
   chain: Chain,
   agentAccountClient: any,
-  agentName: string,
-  agentUri: string,
+  agentId: bigint,
+  registrationUri: string,
 }): Promise<string> {
-  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentName, agentUri } = params;
+  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentId, registrationUri } = params;
 
-  const { calls: setUriCalls }  = await agentIdentityClient.prepareSetUriCalls(agentName, agentUri);
+  const { calls: setUriCalls }  = await agentIdentityClient.prepareSetRegistrationUriCalls(agentId, registrationUri);
 
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
@@ -349,6 +357,34 @@ export async function setAgentUri(params: {
   });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
+  console.log('********************* setAgentUri: aaReceipt', aaReceipt);
+
+  return "success";
+}
+
+export async function setAgentNameUri(params: {
+  agentIdentityClient: AIAgentIdentityClient,
+  bundlerUrl: string,
+  chain: Chain,
+  agentAccountClient: any,
+  agentName: string,
+  agentUri: string,
+}): Promise<string> {
+  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentName, agentUri } = params;
+
+  console.log('-------------------------> setAgentUri: agentName', agentName);
+  console.log('-------------------------> setAgentUri: agentUri', agentUri);
+  const { calls: setUriCalls }  = await agentIdentityClient.prepareSetNameUriCalls(agentName, agentUri);
+
+  const userOpHash = await sendSponsoredUserOperation({
+    bundlerUrl,
+    chain,
+    accountClient: agentAccountClient,
+    calls: setUriCalls,
+  });
+  const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
+  const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
+  console.log('********************* setAgentUri: aaReceipt', aaReceipt);
 
   return "success";
 }

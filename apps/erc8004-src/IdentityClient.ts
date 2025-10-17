@@ -180,6 +180,7 @@ export class IdentityClient {
    */
   async getRegistrationFile(agentId: bigint): Promise<AgentRegistrationFile> {
     const uri = await this.getTokenURI(agentId);
+    console.log('********************* getRegistrationFile: uri', uri);
 
     // Handle different URI schemes
     if (uri.startsWith('ipfs://')) {

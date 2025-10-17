@@ -19,9 +19,14 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ensService from '@/service/ensService';
+import IpfsService from '@/service/ipfsService';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 import { AIAgentIdentityClient, OrgIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import { EthersAdapter } from '../../erc8004-src';
+import { 
+	setAgentNameUri as adapterSetAgentNameUri, 
+	setAgentIdentityRegistrationUri as adapterSetAgentIdentityRegistrationUri 
+} from '@/lib/agentAdapter';
 import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
 
 
@@ -69,6 +74,9 @@ export function AgentTable() {
 	const [identityJsonText, setIdentityJsonText] = React.useState<string>("");
 	const [identityJsonParseError, setIdentityJsonParseError] = React.useState<string | null>(null);
 	const [identityEndpoints, setIdentityEndpoints] = React.useState<Array<{ name: string; endpoint: string; version?: string }>>([]);
+	const [identityCurrentAgent, setIdentityCurrentAgent] = React.useState<Agent | null>(null);
+	const [identityUpdateLoading, setIdentityUpdateLoading] = React.useState(false);
+	const [identityUpdateError, setIdentityUpdateError] = React.useState<string | null>(null);
 
 	// ENS details modal state
 	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
@@ -87,6 +95,7 @@ export function AgentTable() {
 
 	async function openIdentityJson(row: Agent) {
 		try {
+			setIdentityCurrentAgent(row);
 			setIdentityJsonOpen(true);
 			setIdentityJsonLoading(true);
 			setIdentityJsonError(null);
@@ -131,6 +140,66 @@ export function AgentTable() {
 			setIdentityJsonError(e?.message || 'Failed to load Identity JSON');
 		} finally {
 			setIdentityJsonLoading(false);
+		}
+	}
+
+	async function updateIdentityRegistration() {
+		try {
+			if (!identityJsonData || !identityCurrentAgent) return;
+			// Allow updates only for owned agents to avoid signature/authorization errors
+			if (!owned[identityCurrentAgent.agentId]) {
+				throw new Error('You can only update identities for agents you own');
+			}
+			setIdentityUpdateLoading(true);
+			setIdentityUpdateError(null);
+			// Merge endpoints into JSON
+			const merged: any = { ...(identityJsonData || {}) , endpoints: identityEndpoints };
+			// Upload to IPFS
+			console.log('********************* updateIdentityRegistration: merged', merged);
+			const { url } = await IpfsService.uploadJson({ data: merged, filename: `agent-${identityCurrentAgent.agentId}-registration.json` });
+			console.log('********************* updateIdentityRegistration: url', url);
+			
+			// Resolve agent ENS name
+			const agentIdentityClient = agentIdentityClientRef.current || null;
+			if (!agentIdentityClient) throw new Error('Identity client unavailable');
+
+			console.log('********************* updateIdentityRegistration: agentId', identityCurrentAgent.agentId);
+			const agentName = await agentIdentityClient.getAgentName(BigInt(identityCurrentAgent.agentId));
+			console.log('********************* updateIdentityRegistration: agentName', agentName);
+			if (!agentName) throw new Error('Agent ENS name not found');
+			// Validate current EOA is the owner/signatory of the agent account
+			console.log('********************* updateIdentityRegistration: identityCurrentAgent.agentAddress', identityCurrentAgent.agentAddress);
+			const accountOwner = await agentIdentityClient.getAgentEoaByAgentAccount(identityCurrentAgent.agentAddress as `0x${string}`);
+			if (!eoa || !accountOwner || accountOwner.toLowerCase() !== eoa.toLowerCase()) {
+				console.log('********************* updateIdentityRegistration: accountOwner', accountOwner, eoa);
+				throw new Error('Connected wallet is not the owner of this agent account');
+			}
+			// Build agent account client for AA
+			if (!provider || !eoa) throw new Error('Not connected');
+			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+			const agentAccountClient = await toMetaMaskSmartAccount({
+				address: identityCurrentAgent.agentAddress as `0x${string}`,
+				client: publicClient,
+				implementation: Implementation.Hybrid,
+				signatory: { walletClient },
+			} as any);
+			// Send setUri via bundler
+			const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+
+			await adapterSetAgentIdentityRegistrationUri({
+				agentIdentityClient: agentIdentityClient as any,
+				bundlerUrl,
+				chain: sepolia as any,
+				agentAccountClient,
+				agentId: BigInt(identityCurrentAgent.agentId),
+				registrationUri: url,
+			});
+		} catch (e: any) {
+			setIdentityUpdateError(e?.message || 'Failed to update');
+		} finally {
+			setIdentityUpdateLoading(false);
 		}
 	}
 
@@ -1626,7 +1695,12 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 					<Grid container spacing={2}>
 						{/* Left: endpoints editor */}
 						<Grid item xs={12} md={6}>
-							<Stack spacing={1}>
+						<Stack spacing={1}>
+								{identityUpdateError && (
+									<Box sx={{ p: 1, bgcolor: 'error.light', borderRadius: 1 }}>
+										<Typography variant="caption" color="error">{identityUpdateError}</Typography>
+									</Box>
+								)}
 								<Stack direction="row" alignItems="center" justifyContent="space-between">
 									<Typography variant="subtitle2">Endpoints</Typography>
 									<IconButton size="small" onClick={addEndpointRow}><AddIcon fontSize="inherit" /></IconButton>
@@ -1672,6 +1746,14 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 				)}
 			</DialogContent>
 			<DialogActions>
+				<Button 
+					variant="contained" 
+					size="small" 
+					disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
+					onClick={updateIdentityRegistration}
+				>
+					{identityUpdateLoading ? 'Updating…' : 'Update'}
+				</Button>
 				<Button onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}>Reset</Button>
 				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
 			</DialogActions>
@@ -1939,6 +2021,12 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 									</Stack>
 								</Paper>
 							))}
+							<Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+								<Button variant="contained" size="small" disabled={identityUpdateLoading} onClick={updateIdentityRegistration}>
+									{identityUpdateLoading ? 'Updating…' : 'Update'}
+								</Button>
+								<Button size="small" onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}>Reset</Button>
+							</Stack>
 						</Stack>
 					)}
 				</DialogContent>

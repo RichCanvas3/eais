@@ -20,12 +20,12 @@ export function useAgentIdentityClient(): AIAgentIdentityClient {
 type Props = { children: React.ReactNode };
 
 export function AIAgentIdentityClientProvider({ children }: Props) {
-  const { provider } = useWeb3Auth();
+  const { provider: web3AuthProvider } = useWeb3Auth();
   const [client, setClient] = React.useState<AIAgentIdentityClient | null>(null);
 
   React.useEffect(() => {
     (async () => {
-      if (!provider || client) return;
+      if (!web3AuthProvider || client) return;
       const identityRegistryAddress = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
       const ensRegistryAddress = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
       const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL!;
@@ -36,28 +36,28 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
       const orgSigner = new ethers.Wallet(process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY! as `0x${string}`, orgProvider);
       const orgAdapter = new EthersAdapter(orgProvider, orgSigner);
 
-      // Agent signer from Web3Auth (browser EIP-1193); fall back to read-only if it fails
-      let agentAdapter: EthersAdapter;
-      try {
-        const browserProvider = new ethers.BrowserProvider(provider as any);
-        const agentSigner = await browserProvider.getSigner();
-        agentAdapter = new EthersAdapter(browserProvider, agentSigner);
-      } catch (err) {
-        console.warn('Web3Auth signer unavailable, falling back to read-only provider', err);
-        const roProvider = new ethers.JsonRpcProvider(rpcUrl);
-        agentAdapter = new EthersAdapter(roProvider);
-      }
+      // Agent signer from Web3Auth (browser EIP-1193)
+      const browserProvider = new ethers.BrowserProvider(web3AuthProvider as any);
+      const agentSigner = await browserProvider.getSigner();
+      const agentAdapter = new EthersAdapter(browserProvider, agentSigner);
+
+      console.log('********************* AIAgentIdentityClientProvider: agentAdapter', agentAdapter);
+      console.log('********************* AIAgentIdentityClientProvider: orgAdapter', orgAdapter);
+      console.log('********************* AIAgentIdentityClientProvider: ensRegistryAddress', ensRegistryAddress);
+      console.log('********************* AIAgentIdentityClientProvider: identityRegistryAddress', identityRegistryAddress);
+      console.log('********************* AIAgentIdentityClientProvider: rpcUrl', rpcUrl);
 
       // Construct client (constructor matches current AIAgentIdentityClient signature in your repo)
       const instance = new AIAgentIdentityClient(
-        orgAdapter,
+        rpcUrl,
         agentAdapter,
+        orgAdapter,
         identityRegistryAddress,
         ensRegistryAddress,
       );
       setClient(instance);
     })();
-  }, [provider, client]);
+  }, [web3AuthProvider, client]);
 
   return (
     client ? (
@@ -67,5 +67,4 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
     ) : null
   );
 }
-
 

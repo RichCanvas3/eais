@@ -17,22 +17,25 @@ import type { MetadataEntry } from '../erc8004-src/types';
 
 export class AIAgentIdentityClient extends BaseIdentityClient {
   private chain: Chain;
-  private agentAdapter: any;
+  private rpcUrl: string;
   private orgAdapter: any;
+  private agentAdapter: any;
   private ensRegistryAddress: `0x${string}`;
   private identityRegistryAddress: `0x${string}`;
   private publicClient: PublicClient | null = null;
 
   constructor(
+    rpcUrl: string,
     agentAdapter: any,
-    orgAdapter: any, 
+    orgAdapter: any,
     identityRegistryAddress: `0x${string}`,
     ensRegistryAddress: `0x${string}`
   ) {
     super(agentAdapter, identityRegistryAddress);
 
     this.chain = sepolia;
-    this.publicClient = agentAdapter.publicClient;
+    this.rpcUrl = rpcUrl;
+    this.publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
 
     this.orgAdapter = orgAdapter;
     this.agentAdapter = agentAdapter;
@@ -103,7 +106,36 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
   }
 
 
-  async encodeSetUri(name: string, uri: string): Promise<`0x${string}`>  {
+
+  async encodeSetRegistrationUri(agentId: bigint, uri: string): Promise<`0x${string}`>  {
+    const data = encodeFunctionData({
+        abi: IdentityRegistryABI as any,
+        functionName: 'setAgentUri',
+        args: [agentId, uri]
+    });
+    return data as `0x${string}`;
+  }
+
+  async prepareSetRegistrationUriCalls(
+    agentId: bigint, 
+    uri: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    const data = await this.encodeSetRegistrationUri(agentId, uri);
+    calls.push({ 
+      to: this.identityRegistryAddress, 
+      data: data as `0x${string}`
+    });
+
+    return { calls };
+
+  } 
+
+
+
+  async encodeSetNameUri(name: string, uri: string): Promise<`0x${string}`>  {
     const node = namehash(name) as `0x${string}`;
     const data = encodeFunctionData({
         abi: PublicResolverABI.abi,
@@ -113,13 +145,15 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     return data as `0x${string}`;
   }
 
-  async prepareSetUriCalls(
+  async prepareSetNameUriCalls(
     name: string,
     uri: string
   ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
 
-    const data = await this.encodeSetUri(name, uri);
     const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    const data = await this.encodeSetNameUri(name, uri);
+    
 
     if (this.publicClient) {
         const node = namehash(name) as `0x${string}`;
@@ -793,5 +827,4 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
     }
   }
 }
-
 
