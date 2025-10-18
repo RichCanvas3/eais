@@ -1,6 +1,6 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL } from "./env";
+import { RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
@@ -202,60 +202,56 @@ function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: string)
 }
 
 async function backfill() {
-  // For ERC-721, only logs-based backfill is supported
-  const tip = await client.getBlockNumber();
-  const to = tip - BigInt(CONFIRMATIONS);
-  let from = getCheckpoint();
-  if (from === 0n) from = START_BLOCK;
-  if (from > to) return;
-
-  const CHUNK = LOGS_CHUNK_SIZE > 0n ? LOGS_CHUNK_SIZE : 10n;
-
-  for (let start = from; start <= to; start += CHUNK) {
-    const end = start + (CHUNK - 1n) > to ? to : start + (CHUNK - 1n);
-
-    const logs = await client.getLogs({
-      address: IDENTITY_REGISTRY as `0x${string}`,
-      fromBlock: start,
-      toBlock: end,
-    });
-
-    for (const log of logs) {
-      try {
-        const decoded = decodeEventLog({ abi: identityRegistryAbi, data: log.data, topics: log.topics }) as any;
-        switch (decoded.eventName) {
-          case 'Transfer': {
-            const { from, to, tokenId } = decoded.args as any;
-            const uri = await tryReadTokenURI(tokenId as bigint);
-            await upsertFromTransfer(to as string, tokenId as bigint, log.blockNumber!, uri);
-            recordEvent(log, 'Transfer', { from, to, tokenId: toDecString(tokenId) });
-            break;
-          }
-          case 'Approval': {
-            recordEvent(log, 'Approval', { ...(decoded.args as any), tokenId: toDecString((decoded.args as any).tokenId) });
-            break;
-          }
-          case 'ApprovalForAll': {
-            recordEvent(log, 'ApprovalForAll', decoded.args);
-            break;
-          }
-          case 'MetadataSet': {
-            recordEvent(log, 'MetadataSet', { ...(decoded.args as any), agentId: toDecString((decoded.args as any).agentId) });
-            break;
-          }
-          // MetadataDeleted was removed in new ABI; ignore if present in older logs
-          // case 'MetadataDeleted': { break; }
-          default:
-            // ignore other events
-            break;
-        }
-      } catch {
-        // skip non-registry logs
-      }
+  // GraphQL-driven indexing: fetch latest transfers and upsert
+  if (!GRAPHQL_URL) {
+    console.warn('GRAPHQL_URL not configured; skipping GraphQL backfill');
+    return;
+  }
+  const last = getCheckpoint();
+  const query = `query Transfers($first: Int!) {
+    transfers(first: $first, orderBy: timestamp, orderDirection: desc) {
+      id
+      token { id }
+      from { id }
+      to { id }
+      blockNumber
+      timestamp
     }
+  }`;
 
-    setCheckpoint(end);
-    console.log(`Backfilled ${start} → ${end}`);
+  console.info("............backfill: query: ", GRAPHQL_URL)
+
+  const fetchJson = async (body: any) => {
+    // Normalize URL: some gateways expect <key>/<subgraph> without trailing /graphql
+    const endpoint = (GRAPHQL_URL || '').replace(/\/graphql\/?$/i, '');
+    const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', 'accept': 'application/json' }, body: JSON.stringify(body) } as any);
+    if (!res.ok) {
+      let text = '';
+      try { text = await res.text(); } catch {}
+      throw new Error(`GraphQL ${res.status}: ${text || res.statusText}`);
+    }
+    return await res.json();
+  };
+
+  console.info("............backfill: GRAPHQL_URL: ", fetchJson)
+
+  const pageSize = 100;
+  // Pull once per invocation; scheduler below will poll
+  const resp = await fetchJson({ query, variables: { first: pageSize } });
+  const items = (resp?.data?.transfers as any[]) || [];
+  // Returned order is desc; process oldest first to keep checkpoint monotonic
+  const ordered = items
+    .filter((t) => Number(t?.blockNumber || 0) > Number(last))
+    .slice()
+    .sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+  for (const tr of ordered) {
+    const tokenId = BigInt(tr?.token?.id || '0');
+    const toAddr = String(tr?.to?.id || '').toLowerCase();
+    const blockNum = BigInt(tr?.blockNumber || 0);
+    if (tokenId <= 0n || !toAddr) continue;
+    const uri = await tryReadTokenURI(tokenId);
+    await upsertFromTransfer(toAddr, tokenId, blockNum, uri);
+    setCheckpoint(blockNum);
   }
 }
 
@@ -342,12 +338,16 @@ function watch() {
 }
 
 (async () => {
-  if ((BACKFILL_MODE ?? '').toLowerCase() === 'ids') {
-    await backfillByIds();
-  } else {
+  // Initial run (don’t crash on failure)
+  try {
     await backfill();
+  } catch (e) {
+    console.error('Initial GraphQL backfill failed:', e);
   }
+  // Subscribe to on-chain events as a safety net (optional)
   const unwatch = watch();
-  console.log("Indexer running. Press Ctrl+C to exit.");
-  process.on('SIGINT', () => { unwatch(); process.exit(0); });
+  // Poll GraphQL for new transfers beyond checkpoint
+  const interval = setInterval(() => { backfill().catch((e) => console.error('GraphQL backfill error', e)); }, Math.max(5000, GRAPHQL_POLL_MS));
+  console.log("Indexer running (GraphQL + watch). Press Ctrl+C to exit.");
+  process.on('SIGINT', () => { clearInterval(interval); unwatch(); process.exit(0); });
 })();
