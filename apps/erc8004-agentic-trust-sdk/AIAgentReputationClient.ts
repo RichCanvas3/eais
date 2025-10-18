@@ -8,9 +8,9 @@ import { sepolia } from 'viem/chains';
 
 
 
-import { ReputationClient as BaseReputationClient, giveFeedbackParams } from '../erc8004-src/ReputationClient.js';
+import { ReputationClient as BaseReputationClient, type GiveFeedbackParams } from '../erc8004-src/ReputationClient';
 import ReputationRegistryABI from '../erc8004-src/abis/ReputationRegistry.json';
-import type { MetadataEntry } from '../erc8004-src/types.js';
+import type { MetadataEntry } from '../erc8004-src/types';
 
 export class AIAgentReputationClient extends BaseReputationClient {
   private chain: Chain;
@@ -45,6 +45,65 @@ export class AIAgentReputationClient extends BaseReputationClient {
 
   }
 
+  // Expose base-class methods so TypeScript recognizes them on this subclass
+  getIdentityRegistry(): Promise<string> {
+    return (BaseReputationClient.prototype as any).getIdentityRegistry.call(this);
+  }
+  getLastIndex(agentId: bigint, clientAddress: string): Promise<bigint> {
+    return (BaseReputationClient.prototype as any).getLastIndex.call(this, agentId, clientAddress);
+  }
+  createFeedbackAuth(
+    agentId: bigint,
+    clientAddress: string,
+    indexLimit: bigint,
+    expiry: bigint,
+    chainId: bigint,
+    signerAddress: string
+  ): any {
+    return (BaseReputationClient.prototype as any).createFeedbackAuth.call(
+      this,
+      agentId,
+      clientAddress,
+      indexLimit,
+      expiry,
+      chainId,
+      signerAddress
+    );
+  }
+  signFeedbackAuth(auth: any): Promise<string> {
+    return (BaseReputationClient.prototype as any).signFeedbackAuth.call(this, auth);
+  }
+
+  // Factory: resolve identityRegistry from reputation/registration registry before constructing
+  static async create(
+    agentAdapter: any,
+    clientAdapter: any,
+    registrationRegistryAddress: `0x${string}`,
+    ensRegistryAddress: `0x${string}`
+  ): Promise<AIAgentReputationClient> {
+    let identityRegistryAddress: `0x${string}`;
+    try {
+      identityRegistryAddress = await (agentAdapter as any).call(
+        registrationRegistryAddress,
+        ReputationRegistryABI,
+        'getIdentityRegistry',
+        []
+      );
+      if (!identityRegistryAddress || identityRegistryAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Empty identity registry');
+      }
+    } catch (e) {
+      throw new Error(`Failed to resolve identity registry from reputation registry: ${(e as any)?.message || e}`);
+    }
+    return new AIAgentReputationClient(
+      agentAdapter,
+      clientAdapter,
+      registrationRegistryAddress,
+      identityRegistryAddress,
+      ensRegistryAddress
+    );
+  }
+
   /**
    * Submit feedback for an agent
    * Spec: function giveFeedback(uint256 agentId, uint8 score, bytes32 tag1, bytes32 tag2, string calldata feedbackUri, bytes32 calldata feedbackHash, bytes memory feedbackAuth)
@@ -52,7 +111,7 @@ export class AIAgentReputationClient extends BaseReputationClient {
    * @param params - Feedback parameters (score is MUST, others are OPTIONAL)
    * @returns Transaction result
    */
-  async giveClientFeedback(params: giveFeedbackParams): Promise<{ txHash: string }> {
+  async giveClientFeedback(params: GiveFeedbackParams): Promise<{ txHash: string }> {
     // Validate score is 0-100 (MUST per spec)
     if (params.score < 0 || params.score > 100) {
       throw new Error('Score MUST be between 0 and 100');
