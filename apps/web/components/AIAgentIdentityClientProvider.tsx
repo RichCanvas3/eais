@@ -13,19 +13,33 @@ const AgentIdentityClientContext = React.createContext<Ctx>(null);
 
 export function useAgentIdentityClient(): AIAgentIdentityClient {
   const client = React.useContext(AgentIdentityClientContext);
-  if (!client) throw new Error('useAgentIdentityClient must be used within AIAgentIdentityClientProvider');
-  return client;
+  if (client) return client;
+  // Provide a safe stub during pre-login so the UI can render
+  const stub = React.useMemo(() => {
+    const noop = async (..._args: any[]) => null as any;
+    return {
+      // Minimal subset used by UI; all return null-like values
+      getAgentName: noop,
+      getAgentAccount: noop,
+      getAgentIdentityByName: async (_name: string) => ({ agentId: null, ensName: '', agentAccount: null }),
+      getAgentAccountByName: noop,
+      getAgentUrlByName: noop,
+      getAgentEoaByAgentAccount: noop,
+    } as unknown as AIAgentIdentityClient;
+  }, []);
+  return stub;
 }
 
 type Props = { children: React.ReactNode };
 
 export function AIAgentIdentityClientProvider({ children }: Props) {
-  const { provider: web3AuthProvider } = useWeb3Auth();
+  const { provider: web3AuthProvider, address } = useWeb3Auth();
   const [client, setClient] = React.useState<AIAgentIdentityClient | null>(null);
 
   React.useEffect(() => {
     (async () => {
-      if (!web3AuthProvider || client) return;
+      // Require a connected wallet before attempting to get a signer
+      if (!web3AuthProvider || !address || client) return;
       const identityRegistryAddress = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
       const ensRegistryAddress = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
       const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL!;
@@ -57,14 +71,15 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
       );
       setClient(instance);
     })();
-  }, [web3AuthProvider, client]);
+  }, [web3AuthProvider, address, client]);
 
-  return (
-    client ? (
-      <AgentIdentityClientContext.Provider value={client}>
-        {children}
-      </AgentIdentityClientContext.Provider>
-    ) : null
+  return client ? (
+    <AgentIdentityClientContext.Provider value={client}>
+      {children}
+    </AgentIdentityClientContext.Provider>
+  ) : (
+    // Render the app so users can log in; context will be provided after connection
+    <>{children}</>
   );
 }
 
