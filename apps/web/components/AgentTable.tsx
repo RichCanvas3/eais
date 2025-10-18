@@ -466,6 +466,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 	}
 
 	function buildMerged(base: any) {
+		console.info("&&&&&&&&&&&& buildMerged: base: ", base)
 		const obj = base || {};
 		const name = cardFields.name || obj.name;
 		const description = cardFields.description || obj.description;
@@ -632,6 +633,8 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
 		async function fetchData(page = 1, overrides?: { name?: string; address?: string; agentId?: string }) {
 		setIsLoading(true);
+		console.info("&&&&&&&&&&&& fetchData: page: ", page)
+		console.info("&&&&&&&&&&&& fetchData: overrides: ", overrides)
 			const url = new URL("/api/agents", window.location.origin);
 			const nameFilter = overrides?.name ?? domain;
 			const addressFilter = overrides?.address ?? address;
@@ -642,6 +645,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 		url.searchParams.set("page", String(page));
 		url.searchParams.set("pageSize", "20");
 		try {
+			console.info("&&&&&&&&&&&& fetchData: url: ", url)
 				const res = await fetch(url);
 				if (!res.ok) {
 					setData({ page, pageSize: 20, total: 0, rows: [] });
@@ -1369,10 +1373,12 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
 			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
 				<Table size="small" sx={{ minWidth: 1200 }}>
-                    <TableHead>
+                            <TableHead>
 								<TableRow>
 								<TableCell>Account Address</TableCell>
 								<TableCell>ENS Name</TableCell>
+                                    <TableCell>Agent Name</TableCell>
+                                    <TableCell>Description</TableCell>
 								<TableCell>Identity ID</TableCell>
 								<TableCell>A2A</TableCell>
 								{discoverMatches && <TableCell>Trust Score</TableCell>}
@@ -1385,15 +1391,15 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).length ?? 0) === 0 && (
-							<TableRow>
-								<TableCell colSpan={eoa ? (discoverMatches ? 7 : 6) : (discoverMatches ? 6 : 5)} align="center">
+                            <TableRow>
+                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
-							<TableRow>
-								<TableCell colSpan={eoa ? (discoverMatches ? 7 : 6) : (discoverMatches ? 6 : 5)} align="center">
+                            <TableRow>
+                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -1433,7 +1439,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 													);
 												})()}
 											</Stack>
-										</TableCell>
+                                        </TableCell>
 						<TableCell>
 							{(() => {
 								const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
@@ -1469,6 +1475,26 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 													)}
 										{/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
 						</TableCell>
+                                        <TableCell>
+                                            <Typography
+                                                variant="body2"
+                                                noWrap
+                                                sx={{ fontFamily: 'ui-monospace, monospace' }}
+                                                title={row.agentName || ''}
+                                            >
+                                                {row.agentName || '—'}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography
+                                                variant="body2"
+                                                noWrap
+                                                sx={{ fontFamily: 'ui-monospace, monospace' }}
+                                                title={row.description || ''}
+                                            >
+                                                {(row.description || '—').slice(0, 5)}
+                                            </Typography>
+                                        </TableCell>
 
 									<TableCell>
 										<Stack direction="row" spacing={1} alignItems="center">
@@ -1556,13 +1582,15 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 											>
 												INFO
 											</Button>
-											<Button 
-												size="small" 
-												onClick={() => openIdentityJson(row)}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-											>
-												Reg
-											</Button>
+                                            <Button 
+                                                size="small" 
+                                                onClick={() => openIdentityJson(row)}
+                                                disabled={!row.metadataURI}
+                                                sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+                                                title={row.metadataURI ? '' : 'No registration URI'}
+                                            >
+                                                Reg
+                                            </Button>
 											<Button 
 												size="small" 
 												onClick={() => viewOrCreateCard(row)}

@@ -130,7 +130,13 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         };
         const a2aEndpoint = findEndpoint('A2A');
         const ensEndpoint = findEndpoint('ENS');
-        const agentAccountEndpoint = findEndpoint('agentAccount');
+        let agentAccountEndpoint = findEndpoint('agentAccount');
+        // Always ensure agentAccountEndpoint reflects current owner `to`
+        console.info("............agentAccountEndpoint: ", agentAccountEndpoint)
+        if (!agentAccountEndpoint || !/^eip155:/i.test(agentAccountEndpoint)) {
+          console.info("............agentAccountEndpoint: no endpoint found, setting to: ", `eip155:11155111:${to}`)
+          agentAccountEndpoint = `eip155:11155111:${to}`;
+        }
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
         console.info("............insert into table: agentId: ", agentId)
         console.info("............insert into table: type: ", type)
@@ -173,6 +179,22 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
       }
     }
 
+    // Fallback: if no metadata or no prior row, ensure agentAccountEndpoint is set from current owner
+    /*
+    try {
+      const ensuredAccount = `eip155:11155111:${to}`;
+      const row = db.prepare('SELECT 1 FROM agent_metadata WHERE agentId = ?').get(agentId) as any;
+      if (row) {
+        db.prepare('UPDATE agent_metadata SET agentAccountEndpoint = @account, updatedAtTime = strftime(%s,\'now\') WHERE agentId = @agentId')
+          .run({ agentId, account: ensuredAccount });
+      } else {
+        db.prepare(`INSERT INTO agent_metadata(agentId, agentName, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
+                    VALUES(@agentId, @name, @account, @trust, @raw, strftime('%s','now'))`)
+          .run({ agentId, name: null, account: ensuredAccount, trust: JSON.stringify([]), raw: '{}' });
+      }
+    } catch {}
+     */
+
 
   }
   else {
@@ -184,6 +206,91 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
       recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
     } catch {}
   }
+}
+
+// Parse CAIP-10 like eip155:11155111:0x... to 0x address
+function parseCaip10Address(value: string | null | undefined): string | null {
+  try {
+    if (!value) return null;
+    const v = String(value).trim();
+    if (/^0x[a-fA-F0-9]{40}$/.test(v)) return v;
+    if (v.startsWith('eip155:')) {
+      const parts = v.split(':');
+      const addr = parts[2];
+      if (addr && /^0x[a-fA-F0-9]{40}$/.test(addr)) return addr;
+    }
+  } catch {}
+  return null;
+}
+
+async function upsertFromTokenGraph(item: any) {
+  const tokenId = BigInt(item?.id || 0);
+  if (tokenId <= 0n) return;
+  const agentId = toDecString(tokenId);
+  const ownerAddress = parseCaip10Address(item?.agentAccount) || '0x0000000000000000000000000000000000000000';
+  const agentAddress = ownerAddress;
+  const agentName = typeof item?.agentName === 'string' ? item.agentName : '';
+  const metadataURI = typeof item?.uri === 'string' ? item.uri : null;
+
+  db.prepare(`
+    INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
+    VALUES(@agentId, @agent, @owner, @agentName, @metadataURI, @block, strftime('%s','now'))
+    ON CONFLICT(agentId) DO UPDATE SET
+      agentOwner=excluded.agentOwner,
+      agentName=excluded.agentName,
+      metadataURI=COALESCE(excluded.metadataURI, metadataURI)
+  `).run({
+    agentId,
+    owner: ownerAddress,
+    agentName,
+    metadataURI,
+    block: 0,
+  });
+
+  const type = null;
+  const name = typeof item?.agentName === 'string' ? item.agentName : null;
+  const description = typeof item?.description === 'string' ? item.description : null;
+  const image = item?.image == null ? null : String(item.image);
+  const a2aEndpoint = typeof item?.a2aEndpoint === 'string' ? item.a2aEndpoint : null;
+  const ensEndpoint = typeof item?.ensName === 'string' ? item.ensName : null;
+
+
+  console.info("---------------agentId: ", agentId)
+
+  const supportedTrust: string[] = [];
+
+  let raw: string = '{}';
+  try {
+    if (item?.metadataJson && typeof item.metadataJson === 'string') raw = item.metadataJson;
+    else if (item?.metadataJson && typeof item.metadataJson === 'object') raw = JSON.stringify(item.metadataJson);
+    else raw = JSON.stringify({ agentName: name, description, image, a2aEndpoint, ensEndpoint, agentAccount: agentAccountEndpoint });
+  } catch {}
+
+  db.prepare(`
+    INSERT INTO agent_metadata(agentId, type, agentName, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
+    VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @account, @trust, @raw, strftime('%s','now'))
+    ON CONFLICT(agentId) DO UPDATE SET
+      type=excluded.type,
+      agentName=excluded.agentName,
+      description=excluded.description,
+      image=excluded.image,
+      a2aEndpoint=excluded.a2aEndpoint,
+      ensEndpoint=excluded.ensEndpoint,
+      supportedTrust=excluded.supportedTrust,
+      rawJson=excluded.rawJson,
+      updatedAtTime=strftime('%s','now')
+  `).run({
+    agentId,
+    type,
+    name,
+    description,
+    image,
+    a2a: a2aEndpoint,
+    ens: ensEndpoint,
+
+    trust: JSON.stringify(supportedTrust),
+    raw,
+  });
 }
 
 function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: string) {
@@ -208,7 +315,19 @@ async function backfill() {
     return;
   }
   const last = getCheckpoint();
-  const query = `query Transfers($first: Int!) {
+  const query = `query TokensAndTransfers($first: Int!) {
+    tokens(first: $first, orderBy: mintedAt, orderDirection: desc) {
+      id
+      uri
+      agentName
+      description
+      image
+      a2aEndpoint
+      ensName
+      agentAccount
+      metadataJson
+      mintedAt
+    }
     transfers(first: $first, orderBy: timestamp, orderDirection: desc) {
       id
       token { id }
@@ -236,23 +355,44 @@ async function backfill() {
   console.info("............backfill: GRAPHQL_URL: ", fetchJson)
 
   const pageSize = 100;
-  // Pull once per invocation; scheduler below will poll
   const resp = await fetchJson({ query, variables: { first: pageSize } });
-  const items = (resp?.data?.transfers as any[]) || [];
-  // Returned order is desc; process oldest first to keep checkpoint monotonic
-  const ordered = items
+  // Handle tokens (metadata) and transfers (ownership)
+  
+  const transferItems = (resp?.data?.transfers as any[]) || [];
+
+  // Upsert latest tokens metadata first (oldest-first by mintedAt)
+
+
+
+  // Apply transfers newer than checkpoint
+  const transfersOrdered = transferItems
     .filter((t) => Number(t?.blockNumber || 0) > Number(last))
     .slice()
     .sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
-  for (const tr of ordered) {
+  for (const tr of transfersOrdered) {
+    
     const tokenId = BigInt(tr?.token?.id || '0');
     const toAddr = String(tr?.to?.id || '').toLowerCase();
     const blockNum = BigInt(tr?.blockNumber || 0);
     if (tokenId <= 0n || !toAddr) continue;
     const uri = await tryReadTokenURI(tokenId);
+    console.info("&&&&&&&&&&&& upsertFromTransfer: toAddr: ", toAddr)
+    console.info("&&&&&&&&&&&& upsertFromTransfer: tokenId: ", tokenId)
+    console.info("&&&&&&&&&&&& upsertFromTransfer: blockNum: ", blockNum)
+    console.info("&&&&&&&&&&&& upsertFromTransfer: uri: ", uri)
     await upsertFromTransfer(toAddr, tokenId, blockNum, uri);
     setCheckpoint(blockNum);
   }
+
+  const tokenItems = (resp?.data?.tokens as any[]) || [];
+  const tokensOrdered = tokenItems
+  .slice()
+  .sort((a, b) => Number((a.mintedAt || 0)) - Number((b.mintedAt || 0)));
+  for (const t of tokensOrdered) {
+    console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
+    await upsertFromTokenGraph(t);
+  }
+
 }
 
 async function backfillByIds() {
