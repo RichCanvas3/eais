@@ -77,6 +77,13 @@ export function AgentTable() {
 	const [identityCurrentAgent, setIdentityCurrentAgent] = React.useState<Agent | null>(null);
 	const [identityUpdateLoading, setIdentityUpdateLoading] = React.useState(false);
 	const [identityUpdateError, setIdentityUpdateError] = React.useState<string | null>(null);
+	const [identityTokenUri, setIdentityTokenUri] = React.useState<string | null>(null);
+
+	function isValidRegistrationUri(uri?: string | null): boolean {
+		if (!uri) return false;
+		const u = String(uri).trim();
+		return /^https?:\/\//i.test(u) || /^ipfs:\/\//i.test(u);
+	}
 
 	// ENS details modal state
 	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
@@ -100,6 +107,7 @@ export function AgentTable() {
 			setIdentityJsonLoading(true);
 			setIdentityJsonError(null);
 			setIdentityJsonData(null);
+			setIdentityTokenUri(null);
 			// Use ERC8004 SDK to fetch registration file (handles IPFS/HTTP URIs)
 			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
 			const { ethers } = await import('ethers');
@@ -116,6 +124,11 @@ export function AgentTable() {
 					chainId: 11155111,
 				}
 			});
+			// Read tokenURI for link display even if fetch fails
+			try {
+				const uri = await erc8004Client.identity.getTokenURI(BigInt(row.agentId));
+				setIdentityTokenUri(uri ?? null);
+			} catch {}
 			const data = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId));
 			setIdentityJsonData(data);
 			try {
@@ -1376,8 +1389,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                             <TableHead>
 								<TableRow>
 								<TableCell>Account Address</TableCell>
-								<TableCell>ENS Name</TableCell>
-                                    <TableCell>Agent Name</TableCell>
+                                    <TableCell>Name</TableCell>
                                     <TableCell>Description</TableCell>
 								<TableCell>Identity ID</TableCell>
 								<TableCell>A2A</TableCell>
@@ -1392,14 +1404,14 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).length ?? 0) === 0 && (
                             <TableRow>
-                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
+                                <TableCell colSpan={eoa ? (discoverMatches ? 8 : 7) : (discoverMatches ? 7 : 6)} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
                             <TableRow>
-                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
+                                <TableCell colSpan={eoa ? (discoverMatches ? 8 : 7) : (discoverMatches ? 7 : 6)} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -1440,51 +1452,51 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 												})()}
 											</Stack>
                                         </TableCell>
-						<TableCell>
-							{(() => {
-								const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
-								const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
-								if (ens) {
-									return (
-										<Typography
-											component="a"
-											href={`https://sepolia.app.ens.domains/${ens as string}`}
-											target="_blank"
-											rel="noopener noreferrer"
-											variant="body2"
-											noWrap
-											sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-											title={ens || ''}
-										>
-											{ens}
-										</Typography>
-									);
-								}
-								return <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>—</Typography>;
-							})()}
-													{(row.ensEndpoint || agentEnsNames[row.agentAddress]) && (
-														<>
-															<Button 
-																size="small" 
-																onClick={() => openEnsDetails(row)}
-																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
-															>
-																ENS
-															</Button>
-														</>
-													)}
-										{/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
-						</TableCell>
-                                        <TableCell>
-                                            <Typography
-                                                variant="body2"
-                                                noWrap
-                                                sx={{ fontFamily: 'ui-monospace, monospace' }}
-                                                title={row.agentName || ''}
-                                            >
-                                                {row.agentName || '—'}
-                                            </Typography>
-                                        </TableCell>
+                        <TableCell>
+                            {(() => {
+                                const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+                                const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+                                const nameText = row.agentName || ens || '—';
+                                if (ens) {
+                                    return (
+                                        <Typography
+                                            component="a"
+                                            href={`https://sepolia.app.ens.domains/${ens as string}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            variant="body2"
+                                            noWrap
+                                            sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+                                            title={nameText}
+                                        >
+                                            {nameText}
+                                        </Typography>
+                                    );
+                                }
+                                return (
+                                    <Typography
+                                        variant="body2"
+                                        noWrap
+                                        sx={{ fontFamily: 'ui-monospace, monospace' }}
+                                        title={nameText}
+                                    >
+                                        {nameText}
+                                    </Typography>
+                                );
+                            })()}
+                            {(row.ensEndpoint || agentEnsNames[row.agentAddress]) && (
+                                <>
+                                    <Button 
+                                        size="small" 
+                                        onClick={() => openEnsDetails(row)}
+                                        sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+                                    >
+                                        ENS
+                                    </Button>
+                                </>
+                            )}
+                            {/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
+                        </TableCell>
                                         <TableCell>
                                             <Typography
                                                 variant="body2"
@@ -1582,15 +1594,18 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 											>
 												INFO
 											</Button>
-                                            <Button 
-                                                size="small" 
-                                                onClick={() => openIdentityJson(row)}
-                                                disabled={!row.metadataURI}
-                                                sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-                                                title={row.metadataURI ? '' : 'No registration URI'}
-                                            >
-                                                Reg
-                                            </Button>
+                                            <Tooltip title={row.metadataURI || 'No registration URI'}>
+                                                <span>
+                                                    <Button 
+                                                        size="small" 
+                                                        onClick={() => openIdentityJson(row)}
+                                                        disabled={!isValidRegistrationUri(row.metadataURI)}
+                                                        sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+                                                    >
+                                                        Reg
+                                                    </Button>
+                                                </span>
+                                            </Tooltip>
 											<Button 
 												size="small" 
 												onClick={() => viewOrCreateCard(row)}
@@ -1716,11 +1731,39 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 		<Dialog open={identityJsonOpen} onClose={() => setIdentityJsonOpen(false)} fullWidth maxWidth="md">
 			<DialogTitle>Agent Identity Registration</DialogTitle>
 			<DialogContent dividers>
-				{identityJsonLoading ? (
-					<Typography variant="body2" color="text.secondary">Loading…</Typography>
-				) : identityJsonError ? (
-					<Typography variant="body2" color="error">{identityJsonError}</Typography>
-				) : identityJsonData ? (
+                {/* Always show NFT/registration URI if we know it */}
+                {identityCurrentAgent?.agentId && (
+                    <Box sx={{ mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                            NFT URL:&nbsp;
+                            {(() => {
+                                const reg = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
+                                if (reg) {
+                                    const href = `https://sepolia.etherscan.io/nft/${reg}/${identityCurrentAgent.agentId}`;
+                                    return (
+                                        <Typography component="a" href={href} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
+                                            {href}
+                                        </Typography>
+                                    );
+                                }
+                                return <Typography component="span" variant="caption">—</Typography>;
+                            })()}
+                        </Typography>
+                        {identityTokenUri && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                tokenURI:&nbsp;
+                                <Typography component="a" href={identityTokenUri} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
+                                    {identityTokenUri}
+                                </Typography>
+                            </Typography>
+                        )}
+                    </Box>
+                )}
+                {identityJsonLoading ? (
+                    <Typography variant="body2" color="text.secondary">Loading…</Typography>
+                ) : identityJsonError ? (
+                    <Typography variant="body2" color="error">{identityJsonError}</Typography>
+                ) : identityJsonData ? (
 					<Grid container spacing={2}>
 						{/* Left: endpoints editor */}
 						<Grid item xs={12} md={6}>
@@ -1770,9 +1813,9 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 							</Box>
 						</Grid>
 					</Grid>
-				) : (
-					<Typography variant="body2" color="text.secondary">No data</Typography>
-				)}
+                ) : (
+                    <Typography variant="body2" color="text.secondary">No data</Typography>
+                )}
 			</DialogContent>
 			<DialogActions>
 				<Button 
