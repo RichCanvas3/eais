@@ -81,9 +81,101 @@ export function AgentTable() {
 
 	function isValidRegistrationUri(uri?: string | null): boolean {
 		if (!uri) return false;
-		const u = String(uri).trim();
+		const u = String(uri).trim().replace(/^@+/, '');
 		return /^https?:\/\//i.test(u) || /^ipfs:\/\//i.test(u);
 	}
+
+	// Cache: tokenURI validity by agentId (true=json/valid, false=invalid like HTML), null=unknown
+	const [tokenUriValidById, setTokenUriValidById] = React.useState<Record<string, boolean | null>>({});
+
+	React.useEffect(() => {
+		try {
+			const rows = data?.rows || [];
+			rows.forEach((row) => {
+				const uri = row.metadataURI;
+				//if (!isValidRegistrationUri(uri)) {
+				//	if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: false }));
+				//	return;
+				//}
+				if (tokenUriValidById[row.agentId] !== undefined) return;
+				const target = (() => {
+					if (!uri) return null;
+					const u = String(uri).trim().replace(/^@+/, '');
+					if (/^ipfs:\/\//i.test(u)) {
+						try {
+							const rest = u.slice('ipfs://'.length);
+							const cid = rest.split('/')[0]?.trim();
+							if (cid) return `${IpfsService.apiBase}/api/web3storage/download/${cid}`;
+						} catch {}
+						return null;
+					}
+					return u;
+				})();
+        if (!target) {
+          if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: null }));
+          return;
+        }
+				fetch(target)
+					.then(async (res) => {
+						// Try JSON; on failure, inspect error message and fallback to text heuristics
+						try {
+							await res.clone().json();
+							return true;
+						} catch (err: any) {
+							const msg = typeof err?.message === 'string' ? err.message : '';
+							// Common browser error message when HTML is returned
+							if (/Unexpected token\s*</i.test(msg) || /not valid JSON/i.test(msg)) return false;
+							try {
+								const text = await res.text();
+								const trimmed = (text || '').trim();
+								if (/^</.test(trimmed)) return false; // looks like HTML/XML
+								// If it looks like JSON text, try to parse
+								if (/^[{\[]/.test(trimmed)) {
+									try { JSON.parse(trimmed); return true; } catch {}
+								}
+							} catch {}
+							return false;
+						}
+					})
+          .then((ok) => {
+            setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
+          })
+          .catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
+			});
+		} catch {}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data?.rows]);
+
+	// Cache of A2A endpoint JSON previews by agentId
+	const [a2aJsonById, setA2aJsonById] = React.useState<Record<string, string | null>>({});
+
+	React.useEffect(() => {
+		try {
+			const rows = data?.rows || [];
+			rows.forEach((row) => {
+				const url = row.a2aEndpoint;
+				if (!url || !/^https?:\/\//i.test(String(url))) return;
+				if (a2aJsonById[row.agentId] !== undefined) return;
+				// Fetch preview JSON
+				fetch(String(url))
+					.then((res) => res.json().catch(() => null))
+					.then((json) => {
+						let preview: string | null = null;
+						if (json && typeof json === 'object' && !Array.isArray(json)) {
+							try {
+								preview = JSON.stringify(json, null, 2);
+								if (preview.length > 800) preview = preview.slice(0, 800) + '\n...';
+							} catch {}
+						}
+						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: preview }));
+					})
+					.catch(() => {
+						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: null }));
+					});
+			});
+		} catch {}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data?.rows]);
 
 	// ENS details modal state
 	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
@@ -108,7 +200,7 @@ export function AgentTable() {
 			setIdentityJsonError(null);
 			setIdentityJsonData(null);
 			setIdentityTokenUri(null);
-			// Use ERC8004 SDK to fetch registration file (handles IPFS/HTTP URIs)
+			// Build a robust fetch path to avoid mixed-content/CORS issues
 			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
 			const { ethers } = await import('ethers');
 			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
@@ -124,21 +216,43 @@ export function AgentTable() {
 					chainId: 11155111,
 				}
 			});
-			// Read tokenURI for link display even if fetch fails
+			let fetched: any | null = null;
 			try {
 				const uri = await erc8004Client.identity.getTokenURI(BigInt(row.agentId));
 				setIdentityTokenUri(uri ?? null);
+				if (uri) {
+					const u = String(uri).trim();
+					if (/^ipfs:\/\//i.test(u)) {
+						// Resolve via identity-service download
+						try {
+							const cid = u.slice('ipfs://'.length).split('/')[0]?.trim();
+							if (cid) {
+								const res = await fetch(`${IpfsService.apiBase}/api/web3storage/download/${cid}`);
+								fetched = await res.json().catch(() => null);
+							}
+						} catch {}
+					} else if (/^https?:\/\//i.test(u)) {
+						// Proxy through Next API to avoid mixed-content
+						try {
+							const res = await fetch(`/api/proxy?url=${encodeURIComponent(u)}`);
+							fetched = await res.json().catch(() => null);
+						} catch {}
+					}
+				}
 			} catch {}
-			const data = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId));
-			setIdentityJsonData(data);
+			// Fallback to SDK helper if direct fetch failed
+			if (!fetched) {
+				try { fetched = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId)); } catch {}
+			}
+			if (fetched) setIdentityJsonData(fetched);
 			try {
-				setIdentityJsonText(JSON.stringify(data, null, 2));
+				setIdentityJsonText(JSON.stringify(fetched, null, 2));
 				setIdentityJsonParseError(null);
 			} catch {
 				setIdentityJsonText("");
 			}
 			try {
-				const eps = Array.isArray((data as any)?.endpoints) ? (data as any).endpoints : [];
+				const eps = Array.isArray((fetched as any)?.endpoints) ? (fetched as any).endpoints : [];
 				setIdentityEndpoints(
 					eps.map((e: any) => ({
 						name: String(e?.name ?? ''),
@@ -1456,6 +1570,8 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                             {(() => {
                                 const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
                                 const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+                                const a2aPreview = a2aJsonById[row.agentId];
+                                const tooltip = a2aPreview ? `${row.agentName || ens || ''}\n\n${a2aPreview}` : (row.agentName || ens || '—');
                                 const nameText = row.agentName || ens || '—';
                                 if (ens) {
                                     return (
@@ -1467,7 +1583,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                                             variant="body2"
                                             noWrap
                                             sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-                                            title={nameText}
+                                            title={tooltip}
                                         >
                                             {nameText}
                                         </Typography>
@@ -1478,7 +1594,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                                         variant="body2"
                                         noWrap
                                         sx={{ fontFamily: 'ui-monospace, monospace' }}
-                                        title={nameText}
+                                        title={tooltip}
                                     >
                                         {nameText}
                                     </Typography>
@@ -1599,7 +1715,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                                                     <Button 
                                                         size="small" 
                                                         onClick={() => openIdentityJson(row)}
-                                                        disabled={!isValidRegistrationUri(row.metadataURI)}
+                                                        disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
                                                         sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
                                                     >
                                                         Reg
