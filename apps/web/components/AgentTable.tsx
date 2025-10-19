@@ -769,13 +769,13 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 			if (nameFilter) url.searchParams.set("name", nameFilter);
 			if (addressFilter) url.searchParams.set("address", addressFilter);
 			if (idFilter) url.searchParams.set("agentId", idFilter);
-		url.searchParams.set("page", String(page));
-		url.searchParams.set("pageSize", "20");
+        url.searchParams.set("page", String(page));
+        url.searchParams.set("pageSize", "50");
 		try {
 			console.info("&&&&&&&&&&&& fetchData: url: ", url)
 				const res = await fetch(url);
-				if (!res.ok) {
-					setData({ page, pageSize: 20, total: 0, rows: [] });
+                if (!res.ok) {
+                    setData({ page, pageSize: 50, total: 0, rows: [] });
 					return;
 				}
 				const text = await res.text();
@@ -783,7 +783,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 				if (text && text.trim().length > 0) {
 					try { json = JSON.parse(text); } catch { json = null; }
 				}
-				setData(json ?? { page, pageSize: 20, total: 0, rows: [] });
+                setData(json ?? { page, pageSize: 50, total: 0, rows: [] });
 		} finally {
 			setIsLoading(false);
 		}

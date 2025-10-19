@@ -92,35 +92,43 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
   const agentId = toDecString(tokenId);
   const ownerAddress = to;
   const agentAddress = to; // mirror owner for now
-  const agentName = ""; // not modeled in ERC-721; leave empty
+  let agentName = ""; // not modeled in ERC-721; leave empty
 
   console.info(".... ownerAddress", ownerAddress)
 
   if (ownerAddress != '0x000000000000000000000000000000000000dEaD') {
-
-
+    console.info("@@@@@@@@@@@@@@@@@@@@@ upsertFromTransfer: ", agentAddress)
+    console.info("............insert into table: agentId: ", agentId)
+    console.info("............insert into table: agentAddress: ", agentAddress)
+    console.info("............insert into table: agentOwner: ", ownerAddress)
+    console.info("............insert into table: agentName: ", agentName)
+    console.info("............insert into table: metadataURI: ", tokenURI)
+    console.info("............insert into table: block: ", blockNumber)
     db.prepare(`
       INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-      VALUES(@agentId, @agent, @owner, @agentName, @metadataURI, @block, strftime('%s','now'))
+      VALUES(@agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
       ON CONFLICT(agentId) DO UPDATE SET
-        agentAddress=excluded.agentAddress,
+        agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
         agentOwner=excluded.agentOwner,
-        agentName=excluded.agentName,
+        agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
         metadataURI=COALESCE(excluded.metadataURI, metadataURI)
     `).run({
       agentId,
-      agent: agentAddress,
-      owner: ownerAddress,
+      agentAddress,
+      agentOwner: ownerAddress,
       agentName,
       metadataURI: tokenURI,
       block: Number(blockNumber),
     });
+
+
     const metadata = await fetchIpfsJson(tokenURI);
     if (metadata) {
       try {
         const meta = metadata as any;
         const type = typeof meta.type === 'string' ? meta.type : null;
         const name = typeof meta.name === 'string' ? meta.name : null;
+
         const description = typeof meta.description === 'string' ? meta.description : null;
         const image = meta.image == null ? null : String(meta.image);
         const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
@@ -138,32 +146,38 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
           agentAccountEndpoint = `eip155:11155111:${to}`;
         }
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
-        console.info("............insert into table: agentId: ", agentId)
-        console.info("............insert into table: type: ", type)
-        console.info("............insert into table: name: ", name)
-        console.info("............insert into table: description: ", description)
-        console.info("............insert into table: image: ", image)
-        console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
-        console.info("............insert into table: ensEndpoint: ", ensEndpoint)
-        console.info("AA............insert into table: agentAccountEndpoint: ", agentAccountEndpoint)
+        console.info("............update into table: agentId: ", agentId)
+        console.info("............update into table: agentAddress: ", agentAddress)
+        console.info("............update into table: type: ", type)
+        console.info("............update into table: name: ", name)
+        console.info("............update into table: description: ", description)
+        console.info("............update into table: image: ", image)
+        console.info("............update into table: a2aEndpoint: ", a2aEndpoint)
+        console.info("............update into table: ensEndpoint: ", ensEndpoint)
         db.prepare(`
-          INSERT INTO agent_metadata(agentId, type, agentName, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
-          VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @account, @trust, @raw, strftime('%s','now'))
-          ON CONFLICT(agentId) DO UPDATE SET
-            type=excluded.type,
-            agentName=excluded.agentName,
-            description=excluded.description,
-            image=excluded.image,
-            a2aEndpoint=excluded.a2aEndpoint,
-            ensEndpoint=excluded.ensEndpoint,
-            agentAccountEndpoint=excluded.agentAccountEndpoint,
-            supportedTrust=excluded.supportedTrust,
-            rawJson=excluded.rawJson,
-            updatedAtTime=strftime('%s','now')
+          UPDATE agents SET
+            type = COALESCE(type, @type),
+            agentName = COALESCE(NULLIF(TRIM(@name), ''), agentName),
+            agentAddress = CASE
+              WHEN (agentAddress IS NULL OR agentAddress = '0x0000000000000000000000000000000000000000')
+                   AND (@agentAddress IS NOT NULL AND @agentAddress != '0x0000000000000000000000000000000000000000')
+              THEN @agentAddress
+              ELSE agentAddress
+            END,
+            description = COALESCE(@description, description),
+            image = COALESCE(@image, image),
+            a2aEndpoint = COALESCE(@a2a, a2aEndpoint),
+            ensEndpoint = COALESCE(@ens, ensEndpoint),
+            agentAccountEndpoint = COALESCE(@account, agentAccountEndpoint),
+            supportedTrust = COALESCE(@trust, supportedTrust),
+            rawJson = COALESCE(@raw, rawJson),
+            updatedAtTime = strftime('%s','now')
+          WHERE agentId = @agentId
         `).run({
           agentId,
           type,
           name,
+          agentAddress,
           description,
           image,
           a2a: a2aEndpoint,
@@ -179,29 +193,12 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
       }
     }
 
-    // Fallback: if no metadata or no prior row, ensure agentAccountEndpoint is set from current owner
-    /*
-    try {
-      const ensuredAccount = `eip155:11155111:${to}`;
-      const row = db.prepare('SELECT 1 FROM agent_metadata WHERE agentId = ?').get(agentId) as any;
-      if (row) {
-        db.prepare('UPDATE agent_metadata SET agentAccountEndpoint = @account, updatedAtTime = strftime(%s,\'now\') WHERE agentId = @agentId')
-          .run({ agentId, account: ensuredAccount });
-      } else {
-        db.prepare(`INSERT INTO agent_metadata(agentId, agentName, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
-                    VALUES(@agentId, @name, @account, @trust, @raw, strftime('%s','now'))`)
-          .run({ agentId, name: null, account: ensuredAccount, trust: JSON.stringify([]), raw: '{}' });
-      }
-    } catch {}
-     */
-
 
   }
   else {
     console.info("remove from list")
     try {
       const agentId = toDecString(tokenId);
-      db.prepare("DELETE FROM agent_metadata WHERE agentId = ?").run(agentId);
       db.prepare("DELETE FROM agents WHERE agentId = ?").run(agentId);
       recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
     } catch {}
@@ -229,16 +226,33 @@ async function upsertFromTokenGraph(item: any) {
   const agentId = toDecString(tokenId);
   const ownerAddress = parseCaip10Address(item?.agentAccount) || '0x0000000000000000000000000000000000000000';
   const agentAddress = ownerAddress;
-  const agentName = typeof item?.agentName === 'string' ? item.agentName : '';
+  let agentName = typeof item?.agentName === 'string' ? item.agentName : '';
   const metadataURI = typeof item?.uri === 'string' ? item.uri : null;
 
+  // If name is missing but we have a tokenURI, try to fetch and infer fields
+  let inferred: any | null = null;
+  if ((!agentName || agentName.trim() === '') && metadataURI) {
+    try {
+      console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: metadataURI: ", metadataURI)
+      inferred = await fetchIpfsJson(metadataURI);
+      if (inferred && typeof inferred === 'object') {
+        console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: inferred: ", inferred)
+        if (typeof inferred.name === 'string' && inferred.name.trim() !== '') {
+          agentName = inferred.name.trim();
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: agentName: ", agentName)
+        }
+      }
+    } catch {}
+  }
+
+  console.info("@@@@@@@@@@@@@@@@@@@ upsertFromTokenGraph 1: agentName: ", agentId, agentName)
   db.prepare(`
     INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
     VALUES(@agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
     ON CONFLICT(agentId) DO UPDATE SET
-      agentAddress=excluded.agentAddress,
+      agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
       agentOwner=excluded.agentOwner,
-      agentName=excluded.agentName,
+      agentName=CASE WHEN excluded.agentName IS NOT NULL AND length(excluded.agentName) > 0 THEN excluded.agentName ELSE agentName END,
       metadataURI=COALESCE(excluded.metadataURI, metadataURI)
   `).run({
     agentId,
@@ -250,11 +264,33 @@ async function upsertFromTokenGraph(item: any) {
   });
 
   const type = null;
-  const name = typeof item?.agentName === 'string' ? item.agentName : null;
-  const description = typeof item?.description === 'string' ? item.description : null;
-  const image = item?.image == null ? null : String(item.image);
-  const a2aEndpoint = typeof item?.a2aEndpoint === 'string' ? item.a2aEndpoint : null;
-  const ensEndpoint = typeof item?.ensName === 'string' ? item.ensName : null;
+  let name: string | null = typeof item?.agentName === 'string' ? item.agentName : null;
+  let description: string | null = typeof item?.description === 'string' ? item.description : null;
+  let image: string | null = item?.image == null ? null : String(item.image);
+  let a2aEndpoint: string | null = typeof item?.a2aEndpoint === 'string' ? item.a2aEndpoint : null;
+  let ensEndpoint: string | null = typeof item?.ensName === 'string' ? item.ensName : null;
+
+  // Fill from inferred registration JSON when missing
+  if (inferred && typeof inferred === 'object') {
+    try {
+      if ((!name || !name.trim()) && typeof inferred.name === 'string') name = inferred.name.trim();
+      if ((!description || !description.trim()) && typeof inferred.description === 'string') description = inferred.description;
+      if (!image && inferred.image != null) image = String(inferred.image);
+      if (!a2aEndpoint) {
+        const eps = Array.isArray(inferred.endpoints) ? inferred.endpoints : [];
+        const a2a = eps.find((e: any) => String(e?.name || '').toUpperCase() === 'A2A');
+        const a2aUrl = (a2a?.endpoint || a2a?.url) as string | undefined;
+        if (a2aUrl) a2aEndpoint = a2aUrl;
+      }
+      if (!ensEndpoint) {
+        const eps = Array.isArray(inferred.endpoints) ? inferred.endpoints : [];
+        const ens = eps.find((e: any) => String(e?.name || '').toUpperCase() === 'ENS');
+        const ensName = (ens?.endpoint || ens?.url) as string | undefined;
+        if (ensName) ensEndpoint = ensName;
+      }
+    } catch {}
+  }
+
   const agentAccountEndpoint = (() => {
     const parsedAccount = parseCaip10Address(item?.agentAccount);
     if (parsedAccount) return `eip155:11155111:${parsedAccount}`;
@@ -266,23 +302,24 @@ async function upsertFromTokenGraph(item: any) {
   try {
     if (item?.metadataJson && typeof item.metadataJson === 'string') raw = item.metadataJson;
     else if (item?.metadataJson && typeof item.metadataJson === 'object') raw = JSON.stringify(item.metadataJson);
+    else if (inferred) raw = JSON.stringify(inferred);
     else raw = JSON.stringify({ agentName: name, description, image, a2aEndpoint, ensEndpoint, agentAccount: agentAccountEndpoint });
   } catch {}
 
+  // Write extended fields into agents
   db.prepare(`
-    INSERT INTO agent_metadata(agentId, type, agentName, description, image, a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust, rawJson, updatedAtTime)
-    VALUES(@agentId, @type, @name, @description, @image, @a2a, @ens, @account, @trust, @raw, strftime('%s','now'))
-    ON CONFLICT(agentId) DO UPDATE SET
-      type=excluded.type,
-      agentName=excluded.agentName,
-      description=excluded.description,
-      image=excluded.image,
-      a2aEndpoint=excluded.a2aEndpoint,
-      ensEndpoint=excluded.ensEndpoint,
-      agentAccountEndpoint=excluded.agentAccountEndpoint,
-      supportedTrust=excluded.supportedTrust,
-      rawJson=excluded.rawJson,
-      updatedAtTime=strftime('%s','now')
+    UPDATE agents SET
+      type = COALESCE(type, @type),
+      agentName = COALESCE(NULLIF(TRIM(@name), ''), agentName),
+      description = COALESCE(@description, description),
+      image = COALESCE(@image, image),
+      a2aEndpoint = COALESCE(@a2a, a2aEndpoint),
+      ensEndpoint = COALESCE(@ens, ensEndpoint),
+      agentAccountEndpoint = COALESCE(@account, agentAccountEndpoint),
+      supportedTrust = COALESCE(@trust, supportedTrust),
+      rawJson = COALESCE(@raw, rawJson),
+      updatedAtTime = strftime('%s','now')
+    WHERE agentId = @agentId
   `).run({
     agentId,
     type,
@@ -388,6 +425,7 @@ async function backfill() {
     setCheckpoint(blockNum);
   }
 
+
   const tokenItems = (resp?.data?.tokens as any[]) || [];
   const tokensOrdered = tokenItems
   .slice()
@@ -396,6 +434,7 @@ async function backfill() {
     console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
     await upsertFromTokenGraph(t);
   }
+ 
 
 }
 

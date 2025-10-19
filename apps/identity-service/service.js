@@ -701,6 +701,7 @@ function getAgentsDb() {
 }
 
 app.get('/api/agents/by-address/:address', async (req, res) => {
+  console.info("@@@@@@@@@@@@@@@@@@@@@ /api/agents/by-address/:address")
   try {
     console.info("............getAgentByAddress: ", req.params.address)
     const address = String(req.params.address || '').trim().toLowerCase();
@@ -751,6 +752,7 @@ app.get('/api/agents/by-address/:address', async (req, res) => {
 });
 
 app.get('/api/agents/by-name/:name', async (req, res) => {
+  console.info("/api/agents/by-name/:name")
   try {
     const name = String(req.params.name || '').trim().toLowerCase();
     if (!name) return res.status(400).json({ error: 'Invalid name' });
@@ -797,6 +799,7 @@ app.get('/api/agents/by-name/:name', async (req, res) => {
 
 // Debug endpoint: list agents without filters (logs to console and returns sample)
 app.get('/api/agents/debug', async (req, res) => {
+  console.info("@@@@@@@@@@@@@@@@@@@@@ agents/debug")
   try {
     const db = getAgentsDb();
     let rows = [];

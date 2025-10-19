@@ -26,7 +26,17 @@ CREATE TABLE IF NOT EXISTS agents (
   agentName TEXT NOT NULL,
   metadataURI TEXT,
   createdAtBlock INTEGER NOT NULL,
-  createdAtTime  INTEGER NOT NULL
+  createdAtTime  INTEGER NOT NULL,
+  -- extended metadata fields (formerly in agent_metadata)
+  type TEXT,
+  description TEXT,
+  image TEXT,
+  a2aEndpoint TEXT,
+  ensEndpoint TEXT,
+  agentAccountEndpoint TEXT,
+  supportedTrust TEXT,
+  rawJson TEXT,
+  updatedAtTime INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -58,6 +68,17 @@ CREATE TABLE IF NOT EXISTS agent_metadata (
   updatedAtTime INTEGER NOT NULL
 );
 `);
+
+// Best-effort migrate: ensure extended columns exist on agents
+try { db.exec("ALTER TABLE agents ADD COLUMN type TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN description TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN image TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN a2aEndpoint TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN ensEndpoint TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN agentAccountEndpoint TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN supportedTrust TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN rawJson TEXT"); } catch {}
+try { db.exec("ALTER TABLE agents ADD COLUMN updatedAtTime INTEGER"); } catch {}
 
 export function getCheckpoint(): bigint {
   const row = db.prepare("SELECT value FROM checkpoints WHERE key='lastProcessed'").get() as { value?: string } | undefined;

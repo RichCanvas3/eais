@@ -1,65 +1,50 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { NextResponse } from 'next/server';
+import { db } from '../../../../indexer/src/db';
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const q = (searchParams.get("q") ?? "").trim();
-  const name = (searchParams.get("name") ?? "").trim();
-  const address = (searchParams.get("address") ?? "").trim();
-  const agentId = (searchParams.get("agentId") ?? "").trim();
-  const page = Number(searchParams.get("page") ?? 1);
-  const pageSize = Math.min(Number(searchParams.get("pageSize") ?? 20), 100);
-  const offset = (page - 1) * pageSize;
+  try {
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.get('pageSize') || '50', 10)));
+    const offset = (page - 1) * pageSize;
 
-  const where: string[] = [];
-  const params: any = {};
+    const name = (searchParams.get('name') || '').trim().toLowerCase();
+    const id = (searchParams.get('id') || '').trim();
+    const address = (searchParams.get('address') || '').trim().toLowerCase();
 
-  console.info("............filter list: ", name, address, agentId, q)
+    const where: string[] = [];
+    const params: any = {};
+    if (name) {
+      where.push('(lower(agentName) LIKE @nameLike OR lower(ensEndpoint) LIKE @nameLike)');
+      params.nameLike = `%${name}%`;
+    }
+    if (id) {
+      where.push('agentId = @idExact');
+      params.idExact = id;
+    }
+    if (address) {
+      where.push('(lower(agentAddress) LIKE @addrLike OR lower(agentOwner) LIKE @addrLike)');
+      params.addrLike = `%${address}%`;
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
+    const rows = db.prepare(`
+      SELECT agentId, agentAddress, agentOwner, agentName, description, image, a2aEndpoint, ensEndpoint,
+             agentAccountEndpoint, supportedTrust, rawJson, metadataURI, createdAtBlock, createdAtTime
+      FROM agents
+      ${whereSql}
+      ORDER BY length(agentId) ASC, agentId ASC
+      LIMIT @pageSize OFFSET @offset
+    `).all({ ...params, pageSize, offset }) as any[];
 
-  if (name) {
-    // Match display name: ENS endpoint path or metadata agentName
-    where.push("(lower(m.ensEndpoint) LIKE lower(@name) OR lower(m.agentName) LIKE lower(@name))");
-    params.name = `%${name}%`;
+    const total = db.prepare(`
+      SELECT COUNT(1) as c
+      FROM agents
+      ${whereSql}
+    `).get(params) as { c: number };
+
+    return NextResponse.json({ rows, total: total.c, page, pageSize });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Failed' }, { status: 500 });
   }
-  if (address) {
-    where.push("lower(agentAddress) LIKE lower(@address)");
-    params.address = `%${address}%`;
-  }
-  if (agentId) {
-    where.push("(a.agentId = @agentIdExact OR lower(a.agentId) LIKE lower(@agentIdLike))");
-    params.agentIdExact = agentId;
-    params.agentIdLike = `%${agentId}%`;
-  }
-
-
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  console.info("............whereSql: ", whereSql)
-
-  const rows = db.prepare(`
-    SELECT a.agentId,
-           a.agentAddress,
-            a.agentOwner,
-           a.metadataURI,
-           a.createdAtBlock,
-           a.createdAtTime,
-           m.agentName,
-           m.description as description,
-           m.a2aEndpoint as a2aEndpoint,
-           m.ensEndpoint as ensEndpoint
-    FROM agents a
-    LEFT JOIN agent_metadata m ON m.agentId = a.agentId
-    ${whereSql}
-    ORDER BY a.agentId ASC
-    LIMIT @limit OFFSET @offset
-  `).all({ ...params, limit: pageSize, offset });
-
-  const total = db.prepare(`
-    SELECT COUNT(1) as c
-    FROM agents a
-    LEFT JOIN agent_metadata m ON m.agentId = a.agentId
-    ${whereSql}
-  `).get(params) as { c: number };
-
-  return NextResponse.json({ page, pageSize, total: total.c, rows });
 }
