@@ -234,14 +234,16 @@ async function upsertFromTokenGraph(item: any) {
 
   db.prepare(`
     INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-    VALUES(@agentId, @agent, @owner, @agentName, @metadataURI, @block, strftime('%s','now'))
+    VALUES(@agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
     ON CONFLICT(agentId) DO UPDATE SET
+      agentAddress=excluded.agentAddress,
       agentOwner=excluded.agentOwner,
       agentName=excluded.agentName,
       metadataURI=COALESCE(excluded.metadataURI, metadataURI)
   `).run({
     agentId,
-    owner: ownerAddress,
+    agentAddress,
+    agentOwner: ownerAddress,
     agentName,
     metadataURI,
     block: 0,
@@ -253,11 +255,12 @@ async function upsertFromTokenGraph(item: any) {
   const image = item?.image == null ? null : String(item.image);
   const a2aEndpoint = typeof item?.a2aEndpoint === 'string' ? item.a2aEndpoint : null;
   const ensEndpoint = typeof item?.ensName === 'string' ? item.ensName : null;
-
-
-  console.info("---------------agentId: ", agentId)
-
-  const supportedTrust: string[] = [];
+  const agentAccountEndpoint = (() => {
+    const parsedAccount = parseCaip10Address(item?.agentAccount);
+    if (parsedAccount) return `eip155:11155111:${parsedAccount}`;
+    if (ownerAddress && ownerAddress !== '0x0000000000000000000000000000000000000000') return `eip155:11155111:${ownerAddress}`;
+    return null;
+  })();
 
   let raw: string = '{}';
   try {
@@ -276,6 +279,7 @@ async function upsertFromTokenGraph(item: any) {
       image=excluded.image,
       a2aEndpoint=excluded.a2aEndpoint,
       ensEndpoint=excluded.ensEndpoint,
+      agentAccountEndpoint=excluded.agentAccountEndpoint,
       supportedTrust=excluded.supportedTrust,
       rawJson=excluded.rawJson,
       updatedAtTime=strftime('%s','now')
@@ -287,8 +291,8 @@ async function upsertFromTokenGraph(item: any) {
     image,
     a2a: a2aEndpoint,
     ens: ensEndpoint,
-
-    trust: JSON.stringify(supportedTrust),
+    account: agentAccountEndpoint,
+    trust: JSON.stringify([]),
     raw,
   });
 }
