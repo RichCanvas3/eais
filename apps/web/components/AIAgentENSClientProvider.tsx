@@ -1,5 +1,6 @@
 'use client';
 import * as React from 'react';
+import { sepolia } from 'viem/chains';
 import { EthersAdapter } from '../../erc8004-src';
 import { AIAgentENSClient } from '../../erc8004-agentic-trust-sdk';
 
@@ -26,7 +27,7 @@ export function AIAgentENSClientProvider({ children }: Props) {
     const { ethers } = require('ethers') as typeof import('ethers');
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const adapter = new EthersAdapter(provider);
-    clientRef.current = new AIAgentENSClient(rpcUrl, adapter, ensRegistryAddress, identityRegistryAddress);
+    clientRef.current = new AIAgentENSClient(sepolia as any, rpcUrl, adapter, ensRegistryAddress, identityRegistryAddress);
   }
 
   return (

@@ -4,7 +4,7 @@
  */
 import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexToString, type Chain, type PublicClient } from 'viem';
 import { ethers } from 'ethers';
-import { sepolia } from 'viem/chains';
+
 
 import BaseRegistrarABI from  './abis/BaseRegistrarImplementation.json'
 import ETHRegistrarControllerABI from './abis/ETHRegistrarController.json';
@@ -20,6 +20,7 @@ export class AIAgentENSClient {
   private publicClient: PublicClient | null = null;
 
   constructor(
+    chain: Chain,
     rpcUrl: string,
     adapter: any,
     ensRegistryAddress: `0x${string}`,
@@ -27,9 +28,9 @@ export class AIAgentENSClient {
   ) {
 
 
-    this.chain = sepolia;
+    this.chain = chain;
     this.adapter = adapter;
-    this.publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+    this.publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
     this.ensRegistryAddress = ensRegistryAddress;
     this.identityRegistryAddress = identityRegistryAddress;
 

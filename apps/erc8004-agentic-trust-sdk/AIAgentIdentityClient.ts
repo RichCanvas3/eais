@@ -6,10 +6,6 @@ import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexT
 import { ethers } from 'ethers';
 import { sepolia } from 'viem/chains';
 
-import BaseRegistrarABI from  './abis/BaseRegistrarImplementation.json'
-import ETHRegistrarControllerABI from './abis/ETHRegistrarController.json';
-import NameWrapperABI from './abis/NameWrapper.json';
-import PublicResolverABI from './abis/PublicResolver.json';
 
 import { IdentityClient as BaseIdentityClient } from '../erc8004-src/IdentityClient';
 import IdentityRegistryABI from '../erc8004-src/abis/IdentityRegistry.json';
