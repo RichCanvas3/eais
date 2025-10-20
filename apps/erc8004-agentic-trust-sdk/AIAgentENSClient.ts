@@ -524,6 +524,66 @@ export class AIAgentENSClient {
 
 
 
+  // ENS wrapper
+  async prepareAddAgentNameToOrgCalls(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;                   // e.g., 'my-agent'
+    agentAddress: `0x${string}`;     // AA address for the agent name
+    agentUrl?: string | null                   // optional TTL (defaults to 0)
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(params.orgName);
+    const label = clean(params.agentName).replace(/\s+/g, '-');
+
+
+    const parentNode = namehash(parent + ".eth");
+
+
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+
+    /*
+    const publicResolver = new ethers.Contract(
+      process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PUBLIC_RESOLVER as `0x${string}`,
+      PublicResolverABI.abi,
+      this.agentAdapter.signer
+    );
+
+    const nameWrapper = new ethers.Contract(
+      process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_IDENTITY_WRAPPER as `0x${string}`,
+      NameWrapperABI.abi,
+      this.agentAdapter.signer
+    );
+    */
+    
+
+    const subdomainData = encodeFunctionData({
+      abi: NameWrapperABI.abi,
+      functionName: 'setSubnodeRecord',
+      args: [
+        parentNode,
+        label,
+        params.agentAddress,
+        process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PUBLIC_RESOLVER as `0x${string}`,
+        0,
+        0,
+        0
+      ]
+    });
+    const call = {
+      to: process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_IDENTITY_WRAPPER as `0x${string}`,
+      data: subdomainData,
+      value: 0n
+    }
+    calls.push(call);
+
+    return { calls };
+  }
+
+
 
 
   /** Decode ERC-7930-like agent identity hex string */

@@ -1,7 +1,7 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient, parseCompactSignature } from "viem";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
-import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentENSClient, AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 
 const registryAbi = IdentityRegistryABI as any;
@@ -248,7 +248,7 @@ export async function sendSponsoredUserOperation(params: {
 }
 
 export async function addAgentNameToOrg(params: {
-  agentIdentityClient: AIAgentIdentityClient,
+  agentENSClient: AIAgentENSClient,
   bundlerUrl: string,
   chain: Chain,
   orgAccountClient: any,
@@ -258,10 +258,10 @@ export async function addAgentNameToOrg(params: {
   agentUrl?: string,
   agentAccount: `0x${string}`
 }): Promise<`0x${string}`> {
-  const { agentIdentityClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
+  const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
 
   // 1. Add agent name to org within ENS
-  const { calls : orgCalls } = await agentIdentityClient.prepareAddAgentNameToOrgCalls({
+  const { calls : orgCalls } = await agentENSClient.prepareAddAgentNameToOrgCalls({
     orgName,
     agentName,
     agentAddress: agentAccount
@@ -277,7 +277,7 @@ export async function addAgentNameToOrg(params: {
   const { receipt: orgReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash1 });
 
   // 2. Set agent name info within ENS
-  const { calls: agentCalls } = await agentIdentityClient.prepareSetAgentNameInfoCalls({
+  const { calls: agentCalls } = await agentENSClient.prepareSetAgentNameInfoCalls({
     orgName,
     agentName,
     agentAddress: agentAccount,
@@ -363,18 +363,18 @@ export async function setAgentIdentityRegistrationUri(params: {
 }
 
 export async function setAgentNameUri(params: {
-  agentIdentityClient: AIAgentIdentityClient,
+  agentENSClient: AIAgentENSClient,
   bundlerUrl: string,
   chain: Chain,
   agentAccountClient: any,
   agentName: string,
   agentUri: string,
 }): Promise<string> {
-  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentName, agentUri } = params;
+  const { agentENSClient, bundlerUrl, chain, agentAccountClient, agentName, agentUri } = params;
 
   console.log('-------------------------> setAgentUri: agentName', agentName);
   console.log('-------------------------> setAgentUri: agentUri', agentUri);
-  const { calls: setUriCalls }  = await agentIdentityClient.prepareSetNameUriCalls(agentName, agentUri);
+  const { calls: setUriCalls }  = await agentENSClient.prepareSetNameUriCalls(agentName, agentUri);
 
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
@@ -391,16 +391,16 @@ export async function setAgentNameUri(params: {
 
 
 export async function setAgentIdentity(params: {
-  agentIdentityClient: AIAgentIdentityClient,
+  agentENSClient: AIAgentENSClient,
   bundlerUrl: string,
   chain: Chain,
   agentAccountClient: any,
   agentName: string,
   agentIdentity: BigInt,
 }): Promise<string> {
-  const { agentIdentityClient, bundlerUrl, chain, agentAccountClient, agentName, agentIdentity } = params;
+  const { agentENSClient, bundlerUrl, chain, agentAccountClient, agentName, agentIdentity } = params;
 
-  const { calls: setAgentIdentityCalls }  = await agentIdentityClient.prepareSetAgentIdentityCalls(agentName, agentIdentity);
+  const { calls: setAgentIdentityCalls }  = await agentENSClient.prepareSetNameAgentIdentityCalls(agentName, agentIdentity);
 
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,

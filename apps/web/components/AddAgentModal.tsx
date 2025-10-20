@@ -670,7 +670,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
           const BUNDLER_URL = effectiveBundlerUrl;
           await adapterSetAgentIdentity({
-            agentIdentityClient,
+            agentENSClient,
             bundlerUrl: BUNDLER_URL,
             chain: sepolia,
             agentAccountClient,
@@ -775,7 +775,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
                       const BUNDLER_URL = effectiveBundlerUrl;
                       await adapterSetAgentNameUri({
-                        agentIdentityClient,
+                        agentENSClient,
                         bundlerUrl: BUNDLER_URL,
                         chain: sepolia,
                         agentAccountClient: smartAccountClient,
@@ -866,7 +866,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     const BUNDLER_URL = effectiveBundlerUrl;
 
                     await adapterAddAgentNameToOrg({
-                      agentIdentityClient: agentIdentityClient,
+                      agentENSClient: agentENSClient,
                       bundlerUrl: BUNDLER_URL,
                       chain: sepolia,
                       orgAccountClient,
@@ -939,7 +939,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
                           const BUNDLER_URL = effectiveBundlerUrl;
                           await adapterSetAgentNameUri({
-                            agentIdentityClient,
+                            agentENSClient,
                             bundlerUrl: BUNDLER_URL,
                             chain: sepolia,
                             agentAccountClient,
