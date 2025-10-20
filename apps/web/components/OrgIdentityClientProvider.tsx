@@ -18,8 +18,8 @@ export function OrgIdentityClientProvider({ children }: Props) {
   const clientRef = React.useRef<OrgIdentityClient | null>(null);
 
   if (!clientRef.current) {
-    const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
-    const ensRegistry = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+    const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+    const ensRegistry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`;
     const { ethers } = require('ethers') as typeof import('ethers');
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const adapter = new EthersAdapter(provider);

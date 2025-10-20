@@ -107,13 +107,13 @@ class ensService {
 
                 // Create bundler client for setting ENS records
                 const bundlerClient = createBundlerClient({
-                    transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                    transport: http((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string)),
                     chain: chain
                 });
 
                 // Create Pimlico client for gas prices
                 const pimlicoClient = createPimlicoClient({
-                    transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                    transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
                 });
 
                 // Get gas prices from Pimlico
@@ -394,7 +394,7 @@ class ensService {
 
                 // Step 2: commit
                 const bundlerClient = createBundlerClient({
-                    transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                    transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
                     paymaster: true,
                     chain: chain,
                     paymasterContext: {
@@ -529,12 +529,12 @@ class ensService {
     ): Promise<boolean> {
       validateSepoliaChain(chain);
       const bundlerClient = createBundlerClient({
-        transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+        transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
         paymaster: true,
         chain,
         paymasterContext: { mode: 'SPONSORED' }
       });
-      const pimlicoClient = createPimlicoClient({ transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL) });
+      const pimlicoClient = createPimlicoClient({ transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))) });
       const { fast: gasFee } = await pimlicoClient.getUserOperationGasPrice();
 
       const fee = {
@@ -664,13 +664,13 @@ class ensService {
 
           // Create clients
           const bundlerClient = createBundlerClient({
-            transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+            transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
             chain: chain
           });
 
           const publicClient = createPublicClient({
             chain: chain,
-            transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+            transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string),
           });
 
           // Get gas estimate
@@ -1108,7 +1108,7 @@ class ensService {
           signer
         );
 
-        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+        const ENS_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`;
         const ensRegistry = new ethers.Contract(
           ENS_REGISTRY_ADDRESS,
           ['function owner(bytes32 node) view returns (address)', 'function setSubnodeRecord(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl) external'],
@@ -1142,12 +1142,12 @@ class ensService {
 
         // Create bundler client and get gas prices
         const bundlerClient = createBundlerClient({
-          transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+          transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
           chain: chain
         });
 
         const pimlicoClient = createPimlicoClient({
-          transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+          transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
         });
 
         const { fast: gasFee } = await pimlicoClient.getUserOperationGasPrice();
@@ -1410,7 +1410,7 @@ class ensService {
 
         // Create bundler client and get gas prices (with paymaster like the test)
         const bundlerClient = createBundlerClient({
-          transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+          transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
           paymaster: true,
           chain: chain,
           paymasterContext: {
@@ -1750,7 +1750,7 @@ class ensService {
             });
 
             const bundlerClient = createBundlerClient({
-                transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
                 paymaster: true,
                 chain: chain,
                 paymasterContext: {
@@ -1860,7 +1860,7 @@ class ensService {
 
 
                   const bundlerClient = createBundlerClient({
-                    transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                    transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
                     paymaster: true,
                     chain: chain,
                     paymasterContext: {
@@ -1989,7 +1989,7 @@ class ensService {
             });
 
             const bundlerClient = createBundlerClient({
-                transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
                 paymaster: true,
                 chain: chain,
                 paymasterContext: {
@@ -2054,7 +2054,7 @@ class ensService {
     static async getTextRecord(name: string, key: string, chain: Chain, rpcUrl?: string): Promise<string | null> {
       try {
         validateSepoliaChain(chain);
-        const rpc = rpcUrl || (process.env.NEXT_PUBLIC_RPC_URL as string);
+        const rpc = rpcUrl || (process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
         if (!rpc) throw new Error('RPC URL is not configured');
         const publicClient = createPublicClient({ chain, transport: http(rpc) });
         const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
@@ -2284,7 +2284,7 @@ class ensService {
 
             // Create bundler client for setting ENS records
             const ensBundlerClient = createBundlerClient({
-                transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+                    transport: http(((process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string) || (process.env.NEXT_PUBLIC_BUNDLER_URL as string))),
                 paymaster: true,
                 chain: chain,
                 paymasterContext: {

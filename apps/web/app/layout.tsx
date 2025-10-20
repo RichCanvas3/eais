@@ -3,6 +3,7 @@ import ThemeRegistry from '@/components/ThemeRegistry';
 import { Web3AuthProvider } from '@/components/Web3AuthProvider';
 import { OrgIdentityClientProvider } from '@/components/OrgIdentityClientProvider';
 import {  AIAgentIdentityClientProvider } from '@/components/AIAgentIdentityClientProvider';
+import { AIAgentIdentityClientsProvider } from '@/components/AIAgentIdentityClientsProvider';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,12 +12,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeRegistry>
           <Web3AuthProvider
             clientId={process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID as string}
-            chainIdHex={(process.env.NEXT_PUBLIC_CHAIN_ID_HEX as string) || '0xaa36a7'}
-            rpcUrl={(process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia'}
+            chainIdHex={process.env.NEXT_PUBLIC_ETH_SEPOLIA_CHAIN_ID_HEX as string}
+            rpcUrl={process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string}
           >
             <OrgIdentityClientProvider>
             <AIAgentIdentityClientProvider>
-              {children}
+              <AIAgentIdentityClientsProvider>
+                {children}
+                </AIAgentIdentityClientsProvider>
               </AIAgentIdentityClientProvider>
             </OrgIdentityClientProvider>
             </Web3AuthProvider>

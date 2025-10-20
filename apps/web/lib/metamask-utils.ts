@@ -13,7 +13,7 @@ export const SEPOLIA_CONFIG = {
     decimals: 18,
   },
   rpcUrls: [
-    process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.ankr.com/eth_sepolia',
+    process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string,
   ],
   blockExplorerUrls: ['https://sepolia.etherscan.io'],
 };

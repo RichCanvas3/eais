@@ -40,14 +40,14 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
     (async () => {
       // Require a connected wallet before attempting to get a signer
       if (!web3AuthProvider || !address || client) return;
-      const identityRegistryAddress = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
-      const ensRegistryAddress = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
-      const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL!;
+      const identityRegistryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+      const ensRegistryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`;
+      const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
       const { ethers } = require('ethers') as typeof import('ethers');
 
       // Org signer from env (server-managed)
       const orgProvider = new ethers.JsonRpcProvider(rpcUrl);
-      const orgSigner = new ethers.Wallet(process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY! as `0x${string}`, orgProvider);
+      const orgSigner = new ethers.Wallet(process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`, orgProvider);
       const orgAdapter = new EthersAdapter(orgProvider, orgSigner);
 
       // Agent signer from Web3Auth (browser EIP-1193)

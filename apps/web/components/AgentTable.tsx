@@ -31,6 +31,7 @@ import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.jso
 
 
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
+import { useAgentIdentityClientFor } from './AIAgentIdentityClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;
@@ -49,7 +50,9 @@ export type Agent = {
   ensEndpoint?: string | null;
 };
 
-export function AgentTable() {
+type AgentTableProps = { chainIdHex?: string };
+
+export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [domain, setDomain] = React.useState("");
 	const [address, setAddress] = React.useState("");
 	const [agentId, setAgentId] = React.useState("");
@@ -57,7 +60,7 @@ export function AgentTable() {
 	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number } | null>(null);
 	const [mineOnly, setMineOnly] = React.useState(false);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
-	const { provider, address: eoa } = useWeb3Auth();
+    const { provider, address: eoa } = useWeb3Auth();
 
 	// Discover state
 	const [discoverQuery, setDiscoverQuery] = React.useState("");
@@ -189,7 +192,7 @@ export function AgentTable() {
 	const [infoError, setInfoError] = React.useState<string | null>(null);
 	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
 	
-	const agentIdentityClient = useAgentIdentityClient();
+    const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
 	const orgIdentityClient = useOrgIdentityClient();
 
 	async function openIdentityJson(row: Agent) {
@@ -201,7 +204,7 @@ export function AgentTable() {
 			setIdentityJsonData(null);
 			setIdentityTokenUri(null);
 			// Build a robust fetch path to avoid mixed-content/CORS issues
-			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
 			const { ethers } = await import('ethers');
 			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
 			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
@@ -209,8 +212,8 @@ export function AgentTable() {
 			const adapter = new EthersAdapter(ethersProvider);
 			const erc8004Client = new ERC8004Client({
 				adapter,
-				addresses: {
-					identityRegistry: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as string,
+                addresses: {
+                    identityRegistry: process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string,
 					reputationRegistry: '0x0000000000000000000000000000000000000000',
 					validationRegistry: '0x0000000000000000000000000000000000000000',
 					chainId: 11155111,
@@ -303,7 +306,7 @@ export function AgentTable() {
 			}
 			// Build agent account client for AA
 			if (!provider || !eoa) throw new Error('Not connected');
-			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
 			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 			const agentAccountClient = await toMetaMaskSmartAccount({
@@ -313,7 +316,7 @@ export function AgentTable() {
 				signatory: { walletClient },
 			} as any);
 			// Send setUri via bundler
-			const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+			const bundlerUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 
 			await adapterSetAgentIdentityRegistrationUri({
 				agentIdentityClient: agentIdentityClient as any,
@@ -359,7 +362,7 @@ export function AgentTable() {
 			const agentId = row.agentId;
 			const agentIdNum = BigInt(agentId);
 			// Read on-chain metadata: string keys, string values
-			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_RPC_URL as string) });
+			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
 			let name: string | null = null;
 			let account: string | null = null;
 			try {
@@ -413,8 +416,8 @@ export function AgentTable() {
 			const name = (row.ensEndpoint || agentEnsNames[row.agentAddress]) as string | undefined;
 			if (!name) { setEnsDetailsError('No ENS name'); return; }
 			const tokenId = BigInt(namehash(name)).toString();
-			const urlText = await ensService.getTextRecord(name, 'url', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
-			const agentIdentityHex = await ensService.getTextRecord(name, 'agent-identity', sepolia, process.env.NEXT_PUBLIC_RPC_URL as string);
+			const urlText = await ensService.getTextRecord(name, 'url', sepolia, process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
+			const agentIdentityHex = await ensService.getTextRecord(name, 'agent-identity', sepolia, process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
 			const decoded = decodeAgentIdentity(agentIdentityHex);
 			setEnsDetails({ name, tokenId, urlText, agentIdentity: agentIdentityHex ?? null, decodedIdentity: decoded });
 		} catch (e: any) {
@@ -473,9 +476,9 @@ export function AgentTable() {
 
 	// Check if parent ENS domain is already wrapped
 	const checkParentWrapStatus = async () => {
-		const orgName = process.env.NEXT_PUBLIC_ENS_NAME;
+		const orgName = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_NAME as string;
 		if (!orgName) {
-			console.log('❌ NEXT_PUBLIC_ENS_NAME not configured');
+			console.log('❌ NEXT_PUBLIC_ETH_SEPOLIA_ENS_NAME not configured');
 			setEnsError('Parent ENS name not configured');
 			return;
 		}
@@ -498,7 +501,7 @@ export function AgentTable() {
 			// Create public client for reading contract data
 			const publicClient = createPublicClient({
 				chain: sepolia,
-				transport: http(process.env.NEXT_PUBLIC_RPC_URL as string),
+				transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string),
 			});
 
 			const agentIdentityClient = agentIdentityClientRef.current;
@@ -795,7 +798,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
         (async () => {
             try {
                 const { ethers } = await import('ethers');
-                const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL as string);
+				const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
                 const adapter = new EthersAdapter(provider);
                 agentIdentityClientRef.current = agentIdentityClient;
                 orgIdentityClientRef.current = orgIdentityClient;
@@ -803,7 +806,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
         })();
         async function computeOwnership() {
             if (!data?.rows || !provider || !eoa) { setOwned({}); return; }
-            const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+				const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
             const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
             const entries: Record<string, boolean> = {};
             for (const row of data.rows) {
@@ -934,7 +937,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 		const out: { name?: string; description?: string; url?: string } = {};
 		try {
 			// Use ERC8004 SDK to fetch registration file
-			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
 			const { ethers } = await import('ethers');
 			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
 			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
@@ -943,7 +946,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 			const erc8004Client = new ERC8004Client({
 				adapter,
 				addresses: {
-					identityRegistry: process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as string,
+					identityRegistry: process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string,
 					reputationRegistry: '0x0000000000000000000000000000000000000000',
 					validationRegistry: '0x0000000000000000000000000000000000000000',
 					chainId: 11155111,
@@ -1039,7 +1042,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 				} catch {}
 			}
 			*/
-			const registry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
+                    const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
 			if (!provider || !eoa) throw new Error('Not connected');
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 			const cardObj = await buildAgentCard({
@@ -1101,7 +1104,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
     try {
 		console.info("............xxxx openFeedbackFor for agentId: ", row.agentId)
-        const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+        const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
         const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
         const reputationRegistry = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`;
         if (!reputationRegistry) throw new Error('Reputation registry not configured');
@@ -1145,7 +1148,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 		setEnsSubdomainName('');
 		
 		// Set parent name from environment variables
-		const parentEnsName = process.env.NEXT_PUBLIC_ENS_NAME;
+		const parentEnsName = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_NAME as string;
 		if (parentEnsName) {
 			setEnsParentName(cleanEnsName(parentEnsName) + '.eth');
 		}
@@ -1188,7 +1191,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 		setSessionLoading(true);
 		try {
 			if (!provider || !eoa) throw new Error('Not connected');
-			const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
 			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
@@ -1210,7 +1213,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 			const aaCode = await publicClient.getBytecode({ address: aa });
 			const aaDeployed = !!aaCode && aaCode !== '0x';
 			if (!aaDeployed) {
-				const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+				const bundlerUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 				const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
 				console.info("create bundler client ", bundlerUrl, paymasterUrl);
 				const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
@@ -1255,7 +1258,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 			const validAfter = now - 60;
 			const validUntil = now + 60*30;
 
-			const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+			const bundlerUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 			const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
 			const reputationRegistry = (process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`) || '0x0000000000000000000000000000000000000000';
 
@@ -1336,7 +1339,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
 			// Approve sessionAA as operator for this specific Identity tokenId on IdentityRegistry
 			try {
-				const registry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
+                const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
 				if (registry) {
 					const approveCalldata = encodeFunctionData({
 						abi: registryAbi as any,
@@ -1398,7 +1401,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 							)}
 							<Stack direction="row" spacing={1}>
 								<Chip
-									label={`Identity: ${(process.env.NEXT_PUBLIC_IDENTITY_REGISTRY || 'Not configured').slice(0, 10)}...`}
+                                    label={`Identity: ${(process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string).slice(0, 10)}...`}
 									size="small"
 									variant="outlined"
 									sx={{ 
@@ -1409,7 +1412,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 										}
 									}}
 									onClick={() => {
-										const address = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
+                                        const address = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
 										if (address) {
 											window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
 										}
@@ -1626,7 +1629,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
 									<TableCell>
 										<Stack direction="row" spacing={1} alignItems="center">
-											{process.env.NEXT_PUBLIC_IDENTITY_REGISTRY ? (
+											{process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY ? (
 												<Typography
 													component="a"
 													href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_IDENTITY_REGISTRY}/${row.agentId}`}
@@ -1649,7 +1652,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 														color="error"
 														onClick={async () => {
 															try {
-																const registry = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`;
+                                            const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
 																if (!registry) throw new Error('Registry address not configured');
 																const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
 																const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
@@ -1853,7 +1856,7 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                         <Typography variant="caption" color="text.secondary">
                             NFT URL:&nbsp;
                             {(() => {
-                                const reg = process.env.NEXT_PUBLIC_IDENTITY_REGISTRY;
+                                const reg = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
                                 if (reg) {
                                     const href = `https://sepolia.etherscan.io/nft/${reg}/${identityCurrentAgent.agentId}`;
                                     return (
@@ -2589,8 +2592,8 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 			<AddAgentModal
 				open={addAgentOpen}
 				onClose={() => setAddAgentOpen(false)}
-				registryAddress={process.env.NEXT_PUBLIC_IDENTITY_REGISTRY as `0x${string}`}
-				rpcUrl={process.env.NEXT_PUBLIC_RPC_URL as string}
+				registryAddress={process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`}
+				rpcUrl={process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string}
 			/>
 
 			{/* DID:Web Modal */}

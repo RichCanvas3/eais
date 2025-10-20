@@ -601,13 +601,13 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
 
     const publicResolver = new ethers.Contract(
-      (process.env.NEXT_PUBLIC_ENS_PUBLIC_RESOLVER as `0x${string}`) || '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5',
+      process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PUBLIC_RESOLVER as `0x${string}`,
       PublicResolverABI.abi,
       this.agentAdapter.signer
     );
 
     const nameWrapper = new ethers.Contract(
-      (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+      process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_IDENTITY_WRAPPER as `0x${string}`,
       NameWrapperABI.abi,
       this.agentAdapter.signer
     );
@@ -702,7 +702,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
       const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
 
       const BASE_REVERSE_NODE = namehash("addr.reverse");
-      const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+      const ENS_REGISTRY_ADDRESS = this.ensRegistryAddress
       const reverseRegistrar = await this.publicClient.readContract({
           address: ENS_REGISTRY_ADDRESS as `0x${string}`,
           abi: [{

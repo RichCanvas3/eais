@@ -19,6 +19,7 @@ import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
+import { useAgentIdentityClientFor } from './AIAgentIdentityClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 
@@ -32,11 +33,12 @@ type Props = {
   onClose: () => void;
   registryAddress: `0x${string}`;
   rpcUrl: string;
+  chainIdHex?: string;
 };
 
-export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props) {
+export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdHex }: Props) {
   const { provider, address: eoaAddress } = useWeb3Auth();
-  const agentIdentityClient = useAgentIdentityClient();
+  const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
   const orgIdentityClient = useOrgIdentityClient();
   const [domain, setDomain] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -493,7 +495,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
     setError(null);
     setIsSubmitting(true);
     try {
-      const bundlerUrl = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
       const agentNameLower = agentName.trim().toLowerCase();
 
       console.log('********************* agentNameLower', agentNameLower);
@@ -527,7 +528,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
       // Ensure Agent AA is deployed (sponsored via Pimlico)
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
-        const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+        const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
         if (!BUNDLER_URL) throw new Error('Missing BUNDLER_URL for deployment');
         const pimlicoClient = createPimlicoClient({ transport: http(BUNDLER_URL) } as any);
         const bundlerClient = createBundlerClient({
@@ -555,7 +556,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
         }
       } catch {}
 
-      const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+      const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 
       // Build ERC-8004 registration metadata and upload to IPFS to get tokenUri
       let tokenUri = '';
@@ -643,7 +644,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
           // Use the agent AA derived from the name to authorize setText via AA
           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
-          const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+          const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
           await adapterSetAgentIdentity({
             agentIdentityClient,
             bundlerUrl: BUNDLER_URL,
@@ -737,7 +738,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                         signatory: { walletClient },
                       });
 
-                      const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+                      const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
                       await adapterSetAgentNameUri({
                         agentIdentityClient,
                         bundlerUrl: BUNDLER_URL,
@@ -812,7 +813,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
                     // ENS owner EOA from private key for AA signatory
-                    const ensPrivateKey = process.env.NEXT_PUBLIC_ENS_PRIVATE_KEY as `0x${string}`;
+                    const ensPrivateKey = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`;
                     const ensOwnerEOA = privateKeyToAccount(ensPrivateKey);
 
                     // ENS Owner AA: parent domain controller
@@ -827,7 +828,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                     const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
                     const agentAccount = await agentAccountClient.getAddress();
 
-                    const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+                    const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 
                     await adapterAddAgentNameToOrg({
                       agentIdentityClient: agentIdentityClient,
@@ -901,7 +902,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl }: Props)
                           // Use the agent AA derived from the name to authorize setText via AA
                           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
-                          const BUNDLER_URL = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+                          const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
                           await adapterSetAgentNameUri({
                             agentIdentityClient,
                             bundlerUrl: BUNDLER_URL,
