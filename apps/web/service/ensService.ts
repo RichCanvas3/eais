@@ -1670,6 +1670,8 @@ class ensService {
      */
     static async getEnsName(address: string, chain: Chain): Promise<string | null> {
         try {
+          console.info("++++++++++++++++++++ getEnsName: address", address);
+          console.info("++++++++++++++++++++ getEnsName: chain", chain);
             const ensClient = createEnsPublicClient({
                 chain: chain as any,
                 transport: http(process.env.NEXT_PUBLIC_RPC_URL),

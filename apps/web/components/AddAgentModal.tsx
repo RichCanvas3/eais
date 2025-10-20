@@ -18,8 +18,9 @@ import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-too
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 
+import { useAgentENSClient } from './AIAgentENSClientProvider';
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
-import { useAgentIdentityClientFor } from './AIAgentIdentityClientsProvider';
+import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIdentityClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 
@@ -38,7 +39,16 @@ type Props = {
 
 export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdHex }: Props) {
   const { provider, address: eoaAddress } = useWeb3Auth();
-  const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
+  const clients = useAgentIdentityClients();
+  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string | undefined>(chainIdHex);
+  React.useEffect(() => {
+    if (!selectedChainIdHex) {
+      const first = Object.keys(clients)[0];
+      if (first) setSelectedChainIdHex(first);
+    }
+  }, [clients, selectedChainIdHex]);
+  const agentENSClient = useAgentENSClient() 
+  const agentIdentityClient = useAgentIdentityClientFor(selectedChainIdHex) || useAgentIdentityClient();
   const orgIdentityClient = useOrgIdentityClient();
   const [domain, setDomain] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -86,6 +96,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
   const adapter = React.useMemo(() => createAgentAdapter({ registryAddress, rpcUrl }), [registryAddress, rpcUrl]);
 
+  const effectiveRpcUrl = React.useMemo(() => {
+    if (selectedChainIdHex === '0xaa36a7') return process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+    if (selectedChainIdHex === '0x14a34') return process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string;
+    return rpcUrl;
+  }, [selectedChainIdHex, rpcUrl]);
+
+  const effectiveBundlerUrl = React.useMemo(() => {
+    if (selectedChainIdHex === '0xaa36a7') return process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+    if (selectedChainIdHex === '0x14a34') return process.env.NEXT_PUBLIC_BASE_SEPOLIA_BUNDLER_URL as string;
+    return process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+  }, [selectedChainIdHex]);
+
   function cleanAgentLabel(label: string) {
     return label.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
   }
@@ -99,7 +121,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     try {
       if (agentName && agentName.trim() !== '') {
         // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
-        const { agentId, agentAccount } = await agentIdentityClient.getAgentIdentityByName(agentName.trim());
+        console.info("@@@@@@@@@@@@@@ getDefaultAgentAccountClient: agentName", agentName);
+        const agentId = await agentENSClient.getAgentIdentityByName(agentName.trim());
+        console.info("++++++++++++++ getDefaultAgentAccountClient: agentId", agentId);
         const foundAddr = agentAccount;
         if (foundAddr) {
           const agentAccountClient = await toMetaMaskSmartAccount({
@@ -114,13 +138,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           return agentAccountClient;
         }
       }
-    } catch {
-      console.error("error getting agent by name", agentName);
+    } catch (error: any) {
+      console.error("error getting agent by name", agentName, error);
     }
 
     // first look for ENS match to get address
     // had an ownership issue.  someone else owns the ENS name
-    const ensAgentAddress = await agentIdentityClient.getAgentAccountByName(agentName);
+    const ensAgentAddress = await agentENSClient.getAgentAccountByName(agentName);
     if (ensAgentAddress) {
       const agentAccountClient = await toMetaMaskSmartAccount({
         address: ensAgentAddress as `0x${string}`,
@@ -172,7 +196,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
           if (!cancelled) setAgentAccount(orgAccount);
 
-          const agentAccount = await agentIdentityClient.getAgentAccountByName(full);
+          const agentAccount = await agentENSClient.getAgentAccountByName(full);
           // Track ENS agent addr and its owner EOA (if any)
           try {
             setEnsAgentAddress(agentAccount ?? null);
@@ -239,7 +263,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         if (!agentName || !provider || !eoaAddress) return;
         
         const agentNameLower = agentName.trim().toLowerCase();
-        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+        const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
         const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
@@ -247,7 +271,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         const agentAddress = await agentAccountClient.getAddress();
         if (!cancelled) setAgentAADefaultAddress(agentAddress);
         try {
-          const { agentId } = await agentIdentityClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
+          const { agentId } = await agentENSClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
           if (!cancelled) setAgentIdentityExists(!!agentId && agentId > 0n);
         } catch {
           if (!cancelled) setAgentIdentityExists(false);
@@ -257,7 +281,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       }
     })();
     return () => { cancelled = true; };
-  }, [agentName, provider, eoaAddress, rpcUrl]);
+  }, [agentName, provider, eoaAddress, effectiveRpcUrl]);
 
 
   // Load agent ENS URL text record if the preview exists
@@ -271,7 +295,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         if (!agentName) return;
         // Get resolver and url text for agent ENS
         setAgentUrlLoading(true);
-        const normalized = await agentIdentityClient.getAgentUrlByName(agentName);
+        const normalized = await agentENSClient.getAgentUrlByName(agentName);
         if (!cancelled) {
         setAgentUrlText(normalized);
         setAgentUrlEdit(normalized ?? '');
@@ -279,7 +303,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         }
         // Read and decode agent-identity per ENSIP (ERC-7930 address + agentId)
         try {
-          const agentIdentity = await agentIdentityClient.getAgentIdentityByName(agentName);
+          const agentIdentity = await agentENSClient.getAgentIdentityByName(agentName);
           if (agentIdentity) {
             console.info('agent-identity exists:', agentIdentity);
           } else {
@@ -296,7 +320,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       }
     })();
     return () => { cancelled = true; };
-  }, [agentName, rpcUrl]);
+  }, [agentName, effectiveRpcUrl]);
 
   // Prefill Agent URL when agent ENS doesn't exist, using domain URL text + agent name
   React.useEffect(() => {
@@ -355,7 +379,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
         if (owner) {
           try {
-            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+            const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
             const code = await publicClient.getBytecode({ address: owner as `0x${string}` });
             if (!cancelled) setDomainOwnerIsContract(!!code);
           } catch {
@@ -399,7 +423,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
           // If AA (contract), attempt to find controlling EOA via common owner functions
           try {
-            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+            const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
             let controller: string | null = null;
             const ownerCode = await publicClient.getBytecode({ address: owner as `0x${string}` });
             if (!!ownerCode) {
@@ -510,7 +534,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       } catch {}
 
       // 1) Create Agent AA (Hybrid) similar to indiv account abstraction
-      const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+      const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
 
       // Owner/signatory based on current EOA from Web3Auth
       if (!eoaAddress) { throw new Error('No EOA address from Web3Auth'); }
@@ -528,7 +552,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       // Ensure Agent AA is deployed (sponsored via Pimlico)
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
-        const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+        const BUNDLER_URL = effectiveBundlerUrl;
         if (!BUNDLER_URL) throw new Error('Missing BUNDLER_URL for deployment');
         const pimlicoClient = createPimlicoClient({ transport: http(BUNDLER_URL) } as any);
         const bundlerClient = createBundlerClient({
@@ -548,7 +572,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
       // Check if an agent already exists for this AA address via backend DB
       try {
-        const { agentId } = await agentIdentityClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
+        const { agentId } = await agentENSClient.getAgentIdentityByAccount(agentAddress as `0x${string}`);
         if (agentId && agentId > 0n) {
           setIsSubmitting(false);
           setError(`Agent already exists for address ${agentAddress} (id ${agentId.toString()})`);
@@ -556,7 +580,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         }
       } catch {}
 
-      const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+      const BUNDLER_URL = effectiveBundlerUrl;
 
       // Build ERC-8004 registration metadata and upload to IPFS to get tokenUri
       let tokenUri = '';
@@ -637,14 +661,14 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         if (agentIdNum > 0n) {
           
           // Build agent metamask AA client
-          const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+          const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
           const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
           try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
           // Use the agent AA derived from the name to authorize setText via AA
           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
-          const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+          const BUNDLER_URL = effectiveBundlerUrl;
           await adapterSetAgentIdentity({
             agentIdentityClient,
             bundlerUrl: BUNDLER_URL,
@@ -673,7 +697,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         </Typography>
       </DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+        <Stack spacing={2}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Typography variant="body2">Chain</Typography>
+            <select value={selectedChainIdHex || ''} onChange={(e) => setSelectedChainIdHex(e.target.value || undefined)}>
+              {Object.keys(clients).map((cid) => {
+                const label = cid === '0xaa36a7' ? 'ETH Sepolia' : cid === '0x14a34' ? 'Base Sepolia' : cid;
+                return (
+                  <option key={cid} value={cid}>{label}</option>
+                );
+              })}
+            </select>
+          </Stack>
           <TextField label="Domain" placeholder="airbnb.eth" value={domain} onChange={(e) => setDomain(e.target.value)} fullWidth autoFocus />
           <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5 }}>
             {domain ? (
@@ -727,7 +762,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     if (domainOwnerIsContract) {
 
                       // Build AA client using connected EOA (controller) like other parts of the app
-                      const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                      const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
                       const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
                       try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
@@ -738,7 +773,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                         signatory: { walletClient },
                       });
 
-                      const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+                      const BUNDLER_URL = effectiveBundlerUrl;
                       await adapterSetAgentNameUri({
                         agentIdentityClient,
                         bundlerUrl: BUNDLER_URL,
@@ -808,7 +843,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     const agentUrl = agentUrlText ? agentUrlText.trim() : null;
 
                     // Build clients for ENS owner AA and agent AA
-                    const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                    const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
                     const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
                     try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
@@ -828,7 +863,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
                     const agentAccount = await agentAccountClient.getAddress();
 
-                    const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+                    const BUNDLER_URL = effectiveBundlerUrl;
 
                     await adapterAddAgentNameToOrg({
                       agentIdentityClient: agentIdentityClient,
@@ -849,7 +884,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                       setAgentAccount(agentAccount);
 
                       try {
-                        const normalized = await agentIdentityClient.getAgentUrlByName(agentName)
+                        const normalized = await agentENSClient.getAgentUrlByName(agentName)
                         setAgentUrlText(normalized);
                         setAgentUrlEdit(normalized ?? '');
                       } catch {}
@@ -894,7 +929,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                           setAgentUrlError(null);
 
                           // Build agent metamask AA client
-                          const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+                          const publicClient = createPublicClient({ chain: sepolia, transport: http(effectiveRpcUrl) });
                           const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoaAddress as Address });
                           try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
@@ -902,7 +937,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                           // Use the agent AA derived from the name to authorize setText via AA
                           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
-                          const BUNDLER_URL = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+                          const BUNDLER_URL = effectiveBundlerUrl;
                           await adapterSetAgentNameUri({
                             agentIdentityClient,
                             bundlerUrl: BUNDLER_URL,

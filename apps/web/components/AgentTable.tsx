@@ -21,7 +21,7 @@ import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
-import { AIAgentIdentityClient, OrgIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentENSClient, AIAgentIdentityClient, OrgIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import { EthersAdapter } from '../../erc8004-src';
 import { 
 	setAgentNameUri as adapterSetAgentNameUri, 
@@ -32,6 +32,7 @@ import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.jso
 
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 import { useAgentIdentityClientFor } from './AIAgentIdentityClientsProvider';
+import { useAgentENSClient } from './AIAgentENSClientProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;
@@ -192,6 +193,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [infoError, setInfoError] = React.useState<string | null>(null);
 	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
 	
+	const agentENSClient = useAgentENSClient();
     const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
 	const orgIdentityClient = useOrgIdentityClient();
 
@@ -360,15 +362,17 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			setInfoError(null);
 			setInfoData(null);
 			const agentId = row.agentId;
+			console.info("+++++++++++++++++++ openAgentInfo: agentId", agentId);
 			const agentIdNum = BigInt(agentId);
 			// Read on-chain metadata: string keys, string values
 			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
 			let name: string | null = null;
 			let account: string | null = null;
 			try {
-				console.info(".................openAgentInfo: ");
+				console.info("++++++++++++++++++++++++ openAgentInfo: ");
 				const agentIdentityClient = agentIdentityClientRef.current;
 				if (agentIdentityClient) {
+					console.info("++++++++++++++++++++++++ openAgentInfo: get agent name from agentIdentityClient");
 					name = await agentIdentityClient.getAgentName(agentIdNum);
 					account = await agentIdentityClient.getAgentAccount(agentIdNum);
 				}
@@ -384,6 +388,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				}
 
 			}
+
+			console.info("++++++++++++++++++++ openAgentInfo: name", name, "account", account);
 
 			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null });
 		} catch (e: any) {
@@ -560,6 +566,7 @@ const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string |
 const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
 const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
 const agentIdentityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
+const agentENSClientRef = React.useRef<AIAgentENSClient | null>(null);
 const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
 
 	const [ensOpen, setEnsOpen] = React.useState(false);
@@ -800,6 +807,8 @@ const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
                 const { ethers } = await import('ethers');
 				const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
                 const adapter = new EthersAdapter(provider);
+
+				agentENSClientRef.current = agentENSClient;
                 agentIdentityClientRef.current = agentIdentityClient;
                 orgIdentityClientRef.current = orgIdentityClient;
             } catch {}

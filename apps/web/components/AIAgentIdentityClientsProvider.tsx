@@ -104,9 +104,7 @@ export function AIAgentIdentityClientsProvider({ children }: Props) {
         const client = new AIAgentIdentityClient(
           cfg.rpcUrl,
           agentAdapter,
-          orgAdapter,
-          cfg.identityRegistryAddress,
-          cfg.ensRegistryAddress,
+          cfg.identityRegistryAddress
         );
         result[cfg.chainIdHex] = client;
       }

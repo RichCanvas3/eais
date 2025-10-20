@@ -1,0 +1,549 @@
+/**
+ * Agentic Trust SDK - Identity Client
+ * Extends the base ERC-8004 IdentityClient with AA-centric helpers.
+ */
+import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexToString, type Chain, type PublicClient } from 'viem';
+import { ethers } from 'ethers';
+import { sepolia } from 'viem/chains';
+
+import BaseRegistrarABI from  './abis/BaseRegistrarImplementation.json'
+import ETHRegistrarControllerABI from './abis/ETHRegistrarController.json';
+import NameWrapperABI from './abis/NameWrapper.json';
+import PublicResolverABI from './abis/PublicResolver.json';
+
+
+export class AIAgentENSClient {
+  private chain: Chain;
+  private adapter: any;
+  private ensRegistryAddress: `0x${string}`;
+  private identityRegistryAddress: `0x${string}`;
+  private publicClient: PublicClient | null = null;
+
+  constructor(
+    rpcUrl: string,
+    adapter: any,
+    ensRegistryAddress: `0x${string}`,
+    identityRegistryAddress: `0x${string}`,
+  ) {
+
+
+    this.chain = sepolia;
+    this.adapter = adapter;
+    this.publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+    this.ensRegistryAddress = ensRegistryAddress;
+    this.identityRegistryAddress = identityRegistryAddress;
+
+  }
+
+  encodeCall(
+    abi: any[],
+    functionName: string,
+    args: any[]
+  ): string {
+    const iface = new ethers.Interface(abi);
+    return iface.encodeFunctionData(functionName, args);
+  }
+
+
+
+
+
+
+
+  async encodeSetNameUri(name: string, uri: string): Promise<`0x${string}`>  {
+    const node = namehash(name) as `0x${string}`;
+    const data = encodeFunctionData({
+        abi: PublicResolverABI.abi,
+        functionName: 'setText',
+        args: [node, "url", uri]
+    });
+    return data as `0x${string}`;
+  }
+
+  async prepareSetNameUriCalls(
+    name: string,
+    uri: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    const data = await this.encodeSetNameUri(name, uri);
+    
+
+    if (this.publicClient) {
+        const node = namehash(name) as `0x${string}`;
+        const resolver = await this.publicClient.readContract({
+            address: this.ensRegistryAddress,
+            abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                    inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+            functionName: "resolver",
+            args: [node],
+        });
+
+        calls.push({ to: resolver, data: data as `0x${string}`});
+    }
+
+    return { calls };
+
+  } 
+
+  async encodeSetNameAgentIdentity(name: string, agentIdentity: BigInt): Promise<`0x${string}`>  {
+
+    // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]
+    const chainHex = (this.chain.id >>> 0).toString(16).padStart(8, '0');
+    const addrHex = (this.identityRegistryAddress).slice(2).toLowerCase().padStart(40, '0');
+    const idHex = agentIdentity.toString(16);
+    const idLen = Math.ceil(idHex.length / 2);
+    const idLenHex = idLen.toString(16).padStart(2, '0');
+    const valueHex = `0x01` + `01` + chainHex + addrHex + idLenHex + idHex.padStart(idLen * 2, '0');
+
+    const node = namehash(name) as `0x${string}`;
+    const data = encodeFunctionData({
+        abi: PublicResolverABI.abi,
+        functionName: 'setText',
+        args: [node, "agent-identity", valueHex]
+    });
+    return data as `0x${string}`;
+  }
+  async prepareSetNameAgentIdentityCalls(
+    name: string,
+    agentIdentity: BigInt
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const data = await this.encodeSetNameAgentIdentity(name, agentIdentity);
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+    if (this.publicClient) {
+        const node = namehash(name) as `0x${string}`;
+        const resolver = await this.publicClient.readContract({
+            address: this.ensRegistryAddress,
+            abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                    inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+            functionName: "resolver",
+            args: [node],
+        });
+
+        calls.push({ to: resolver, data: data as `0x${string}`});
+    }
+
+    return { calls };
+
+  } 
+
+  async isValidAgentAccount(agentAccount: `0x${string}`): Promise<boolean | null> {
+    if (this.publicClient) {
+    const code = await this.publicClient.getBytecode({ address: agentAccount as `0x${string}` });
+      return code ? true : false;
+    } 
+    return false;
+  }
+
+
+  /**
+   * Resolve an agent by account address via ENS reverse + text record.
+   * 1) Reverse resolve address -> ENS name via ENS Registry + resolver.name(bytes32)
+   * 2) Read resolver.text(node, 'agent-identity') and decode agentId
+   */
+  async getAgentIdentityByAccount(account: `0x${string}`): Promise<{ agentId: bigint | null; ensName: string | null }> {
+    const ensRegistry = this.ensRegistryAddress;
+    const accountLower = account.toLowerCase();
+
+    // Minimal ABIs
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'name', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'string' }] },
+      { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+
+    const reverseNode = namehash(`${accountLower.slice(2)}.addr.reverse`);
+
+    // 1) resolver for reverse node
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      resolverAddr = await (this as any).adapter.call(
+        ensRegistry,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [reverseNode]
+      );
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return { agentId: null, ensName: null };
+    }
+
+    // 2) resolver.name to get ENS name
+    let ensName: string | null = null;
+    try {
+      ensName = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'name',
+        [reverseNode]
+      );
+      if (typeof ensName !== 'string' || !ensName) ensName = null;
+    } catch {}
+
+    // 3) resolver.text(node, 'agent-identity') on forward node if we have a name
+    let agentId: bigint | null = null;
+    if (ensName) {
+      const forwardNode = namehash(ensName);
+      try {
+        const value: string = await (this as any).adapter.call(
+          resolverAddr,
+          RESOLVER_ABI,
+          'text',
+          [forwardNode, 'agent-identity']
+        );
+        const decoded = this.decodeAgentIdentity(value);
+        agentId = decoded?.agentId ?? null;
+      } catch {}
+    }
+
+    return { agentId, ensName };
+  }
+
+  /**
+   * Resolve an agent by ENS name via resolver.text(namehash(name), 'agent-identity')
+   */
+  async getAgentIdentityByName(name: string): Promise<bigint | null> {
+    console.info("####################### getAgentIdentityByName: name", name);
+    const ensName = name.trim().toLowerCase();
+    if (!ensName) return  null;
+
+    console.info("++++++++++++++++++++ getAgentIdentityByName: ensName", ensName);
+
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+
+    const node = namehash(ensName);
+
+    // resolver
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      console.info("++++++++++++++++++++ getAgentIdentityByName 1: ensRegistryAddress", this.ensRegistryAddress);
+      resolverAddr = await (this as any).adapter.call(
+        this.ensRegistryAddress,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [node]
+      );
+    } catch (error) {
+      console.info("++++++++++++++++++++ getAgentIdentityByName 1: error", error);
+    }
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+    console.info("++++++++++++++++++++ getAgentIdentityByName: resolverAddr", resolverAddr);
+
+    // agent-identity text
+    let agentId: bigint | null = null;
+    try {
+      const value: string = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'text',
+        [node, 'agent-identity']
+      );
+      const decoded = this.decodeAgentIdentity(value);
+      console.info("++++++++++++++++++++ getAgentIdentityByName: decoded", decoded);
+      agentId = decoded?.agentId ?? null;
+    } catch (error) {
+      console.info("++++++++++++++++++++ getAgentIdentityByName 2: error", error);
+    }
+
+    console.info("++++++++++++++++++++ getAgentIdentityByName: agentId", agentId);
+
+    return agentId;
+  }
+
+
+  /**
+   * Resolve account address for an ENS name via resolver.addr(namehash(name)).
+   */
+  async getAgentAccountByName(name: string): Promise<`0x${string}` | null> {
+    const ensName = name.trim().toLowerCase();
+    if (!ensName) return null;
+
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'addr', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+
+    const node = namehash(ensName);
+
+    // resolver
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      resolverAddr = await (this as any).adapter.call(
+        this.ensRegistryAddress,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [node]
+      );
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+
+    try {
+      const addr: `0x${string}` = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'addr',
+        [node]
+      );
+      if (addr && /^0x[a-fA-F0-9]{40}$/.test(addr) && addr !== '0x0000000000000000000000000000000000000000') {
+        return addr;
+      }
+    } catch {}
+
+    return null;
+  }
+
+  /**
+   * Get the Agent URL via ENS text record for a given ENS name.
+   */
+  async getAgentUrlByName(name: string): Promise<string | null> {
+    const ensName = name.trim().toLowerCase();
+    if (!ensName) return null;
+
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'text', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }, { name: 'key', type: 'string' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+    const node = namehash(ensName);
+
+    // resolver
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      resolverAddr = await (this as any).adapter.call(
+        this.ensRegistryAddress,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [node]
+      );
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+
+    try {
+      const url: string = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'text',
+        [node, 'url']
+      );
+      const trimmed = (url || '').trim();
+      return trimmed.length > 0 ? trimmed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Reverse lookup: account address -> ENS name via resolver.name(reverseNode)
+   */
+  async getAgentNameByAccount(account: `0x${string}`): Promise<string | null> {
+    const ensRegistry = this.ensRegistryAddress;
+    const accountLower = account.toLowerCase();
+
+    const ENS_REGISTRY_ABI = [
+      { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
+    ] as any[];
+    const RESOLVER_ABI = [
+      { name: 'name', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'string' }] },
+    ] as any[];
+
+
+
+    const reverseNode = namehash(`${accountLower.slice(2)}.addr.reverse`);
+
+    // resolver for reverse node
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      resolverAddr = await (this as any).adapter.call(
+        ensRegistry,
+        ENS_REGISTRY_ABI,
+        'resolver',
+        [reverseNode]
+      );
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+
+    try {
+      const ensName: string = await (this as any).adapter.call(
+        resolverAddr,
+        RESOLVER_ABI,
+        'name',
+        [reverseNode]
+      );
+      const normalized = (ensName || '').trim().toLowerCase();
+      return normalized.length > 0 ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
+
+  
+  async prepareSetAgentNameInfoCalls(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;                   // e.g., 'my-agent'
+    agentAddress: `0x${string}`;     // AA address for the agent name
+    agentUrl?: string | null                   // optional TTL (defaults to 0)
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[]   }> {
+
+    const RESOLVER_ABI = [
+      { name: 'setAddr', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'addr', type: 'address' }
+      ], outputs: [] },
+      { name: 'setText', type: 'function', stateMutability: 'nonpayable', inputs: [
+        { name: 'node', type: 'bytes32' },
+        { name: 'key', type: 'string' },
+        { name: 'value', type: 'string' }
+      ], outputs: [] },
+    ] as any[];
+
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(params.orgName);
+    const label = clean(params.agentName).replace(/\s+/g, '-');
+    const childDomain = `${label}.${parent}`;
+    
+    const ensFullName = childDomain + ".eth";
+    const childNode = namehash(ensFullName);
+
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+    if (this.publicClient) {
+
+      const resolver = await this.publicClient.readContract({
+        address: this.ensRegistryAddress,
+        abi: [{ name: "resolver", stateMutability: "view", type: "function",
+                inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
+        functionName: "resolver",
+        args: [childNode],
+      });
+
+      // 1) Set addr record
+      const setAddrData = encodeFunctionData({
+        abi: [{ name: "setAddr", type: "function", stateMutability: "nonpayable",
+                inputs: [{ name: "node", type: "bytes32" }, { name: "a", type: "address" }]}],
+        functionName: "setAddr",
+        args: [childNode, params.agentAddress],
+      });
+        
+
+      calls.push({ to: resolver as `0x${string}`, data: setAddrData });
+    
+      // 2) Optionally set URL text
+      if (params.agentUrl && params.agentUrl.trim() !== '') {
+        const dataSetUrl = this.encodeCall(
+          RESOLVER_ABI,
+          'setText(bytes32,string,string)',
+          [childNode, 'url', params.agentUrl.trim()]
+        ) as `0x${string}`;
+        calls.push({ to: resolver as `0x${string}`, data: dataSetUrl });
+      }
+
+
+      // 3) Set reverse record
+      const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
+
+      const BASE_REVERSE_NODE = namehash("addr.reverse");
+      const ENS_REGISTRY_ADDRESS = this.ensRegistryAddress
+      const reverseRegistrar = await this.publicClient.readContract({
+          address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+          abi: [{
+            name: "owner",
+            type: "function",
+            stateMutability: "view",
+            inputs: [{ name: "node", type: "bytes32" }],
+            outputs: [{ name: "", type: "address" }],
+          }],
+          functionName: "owner",
+          args: [BASE_REVERSE_NODE],
+        });
+
+      const ourReverseRegistrar = await this.publicClient.readContract({
+        address: ENS_REGISTRY_ADDRESS as `0x${string}`,
+        abi: [{
+          name: "owner",
+          type: "function",
+          stateMutability: "view",  
+          inputs: [{ name: "node", type: "bytes32" }],
+          outputs: [{ name: "", type: "address" }],
+        }],
+        functionName: "owner",
+        args: [reverseNode],
+      });
+
+
+      const setNameData = encodeFunctionData({
+        abi: [{
+          name: "setName",
+          type: "function",
+          stateMutability: "nonpayable",
+          inputs: [{ name: "name", type: "string" }],
+          outputs: [{ name: "node", type: "bytes32" }],
+        }],
+        functionName: "setName",
+        args: [ensFullName], // e.g. "finder-airbnb-com.orgtrust.eth"
+      });
+
+      const call = {
+        to: reverseRegistrar as `0x${string}`,
+        data: setNameData,
+        value: 0n
+      }
+      calls.push(call);
+
+
+    }
+
+ 
+
+    return { calls };
+  }
+
+
+
+
+
+  /** Decode ERC-7930-like agent identity hex string */
+  private decodeAgentIdentity(value?: string | null): { chainId: number; registry: `0x${string}`; agentId: bigint } | null {
+    try {
+      if (!value || !/^0x[0-9a-fA-F]+$/.test(value)) return null;
+      const hex = value.slice(2);
+      // [v1=01][ns=eip155=01][chainId(4)][address(20)][len(1)][id(var)]
+      if (hex.length < 2 + 2 + 8 + 40 + 2) return null;
+      const chainIdHex = hex.slice(4, 12);
+      const chainId = parseInt(chainIdHex, 16);
+      const addrHex = hex.slice(12, 52);
+      const idLen = parseInt(hex.slice(52, 54), 16);
+      const idHex = hex.slice(54, 54 + idLen * 2);
+      const registry = (`0x${addrHex}`) as `0x${string}`;
+      const agentId = BigInt(`0x${idHex || '0'}`);
+      return { chainId, registry, agentId };
+    } catch {
+      return null;
+    }
+  }
+}
+

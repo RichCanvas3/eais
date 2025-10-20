@@ -4,6 +4,7 @@ import { Web3AuthProvider } from '@/components/Web3AuthProvider';
 import { OrgIdentityClientProvider } from '@/components/OrgIdentityClientProvider';
 import {  AIAgentIdentityClientProvider } from '@/components/AIAgentIdentityClientProvider';
 import { AIAgentIdentityClientsProvider } from '@/components/AIAgentIdentityClientsProvider';
+import { AIAgentENSClientProvider } from '@/components/AIAgentENSClientProvider';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,13 +16,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             chainIdHex={process.env.NEXT_PUBLIC_ETH_SEPOLIA_CHAIN_ID_HEX as string}
             rpcUrl={process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string}
           >
-            <OrgIdentityClientProvider>
-            <AIAgentIdentityClientProvider>
+            <AIAgentENSClientProvider>
+              <OrgIdentityClientProvider>
+              
+              <AIAgentIdentityClientProvider>
               <AIAgentIdentityClientsProvider>
                 {children}
                 </AIAgentIdentityClientsProvider>
               </AIAgentIdentityClientProvider>
-            </OrgIdentityClientProvider>
+              </OrgIdentityClientProvider>
+            </AIAgentENSClientProvider>
             </Web3AuthProvider>
         </ThemeRegistry>
       </body>
