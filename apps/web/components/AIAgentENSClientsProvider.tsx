@@ -32,6 +32,7 @@ type ChainConfig = {
   chainIdHex: string;
   rpcUrl: string;
   ensRegistryAddress: `0x${string}`;
+  ensResolverAddress: `0x${string}`;
   identityRegistryAddress: `0x${string}`;
   chain: any; // viem chain object
 };
@@ -43,13 +44,15 @@ function getConfiguredChains(): ChainConfig[] {
   const ethSepoliaChainId = process.env.NEXT_PUBLIC_ETH_SEPOLIA_CHAIN_ID_HEX as string | undefined;
   const ethSepoliaIdentity = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}` | undefined;
   const ethSepoliaEns = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
+  const ethSepoliaResolver = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
 
-  if (ethSepoliaRpc && ethSepoliaChainId && ethSepoliaIdentity && ethSepoliaEns) {
+  if (ethSepoliaRpc && ethSepoliaChainId && ethSepoliaIdentity && ethSepoliaEns && ethSepoliaResolver) {
     chains.push({ 
       chainIdHex: ethSepoliaChainId, 
       rpcUrl: ethSepoliaRpc, 
       identityRegistryAddress: ethSepoliaIdentity, 
       ensRegistryAddress: ethSepoliaEns,
+      ensResolverAddress: ethSepoliaResolver,
       chain: sepolia
     });
   }
@@ -59,12 +62,14 @@ function getConfiguredChains(): ChainConfig[] {
   const baseSepoliaChainId = process.env.NEXT_PUBLIC_BASE_SEPOLIA_CHAIN_ID_HEX as string | undefined; // e.g., 0x14a34
   const baseSepoliaIdentity = process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY as `0x${string}` | undefined;
   const baseSepoliaEns = process.env.NEXT_PUBLIC_BASE_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
-  if (baseSepoliaRpc && baseSepoliaChainId && baseSepoliaIdentity && baseSepoliaEns) {
+  const baseSepoliaResolver = process.env.NEXT_PUBLIC_BASE_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
+  if (baseSepoliaRpc && baseSepoliaChainId && baseSepoliaIdentity && baseSepoliaEns && baseSepoliaResolver) {
     chains.push({ 
       chainIdHex: baseSepoliaChainId, 
       rpcUrl: baseSepoliaRpc, 
       identityRegistryAddress: baseSepoliaIdentity, 
       ensRegistryAddress: baseSepoliaEns,
+      ensResolverAddress: baseSepoliaResolver,
       chain: baseSepolia
     });
   }
@@ -117,6 +122,7 @@ export function AIAgentENSClientsProvider({ children }: Props) {
           cfg.rpcUrl,
           ensAdapter,
           cfg.ensRegistryAddress,
+          cfg.ensResolverAddress,
           cfg.identityRegistryAddress
         );
         result[cfg.chainIdHex] = client;

@@ -23,11 +23,12 @@ export function AIAgentENSClientProvider({ children }: Props) {
   if (!clientRef.current) {
     const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
     const ensRegistryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`;
+    const ensResolverAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_RESOLVER as `0x${string}`;
     const identityRegistryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
     const { ethers } = require('ethers') as typeof import('ethers');
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const adapter = new EthersAdapter(provider);
-    clientRef.current = new AIAgentENSClient(sepolia as any, rpcUrl, adapter, ensRegistryAddress, identityRegistryAddress);
+    clientRef.current = new AIAgentENSClient(sepolia as any, rpcUrl, adapter, ensRegistryAddress, ensResolverAddress, identityRegistryAddress);
   }
 
   return (

@@ -357,7 +357,7 @@ export async function setAgentIdentityRegistrationUri(params: {
   });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
-  console.log('********************* setAgentUri: aaReceipt', aaReceipt);
+  console.log('********************* setAgentUri 1: aaReceipt', aaReceipt);
 
   return "success";
 }
@@ -374,6 +374,9 @@ export async function setAgentNameUri(params: {
 
   console.log('-------------------------> setAgentUri: agentName', agentName);
   console.log('-------------------------> setAgentUri: agentUri', agentUri);
+
+
+  console.log('-------------------------> setAgentUri: calls', bundlerUrl, chain.id, agentAccountClient.address);
   const { calls: setUriCalls }  = await agentENSClient.prepareSetNameUriCalls(agentName, agentUri);
 
   const userOpHash = await sendSponsoredUserOperation({
@@ -384,7 +387,7 @@ export async function setAgentNameUri(params: {
   });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
-  console.log('********************* setAgentUri: aaReceipt', aaReceipt);
+  console.log('********************* setAgentUri 2: aaReceipt', aaReceipt);
 
   return "success";
 }

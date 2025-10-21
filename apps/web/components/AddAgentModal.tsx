@@ -687,18 +687,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     }
   }, [name, org]);
 
-	// Default Agent URL to domain URL + agent name when available and not yet set
+	// Default Agent URL to org URL + agent name when available and not yet set
 	React.useEffect(() => {
 		try {
 			if (!orgUrlText) return;
-			if (!name || !name.trim()) return;
+			if (!agentName || !agentName.trim()) return;
 			if (agentUrlEdit && agentUrlEdit.trim() !== '') return; // don't override user input
 			const orgPath = (orgUrlText || '').replace(/\/$/, '');
-			const label = cleanAgentLabel(name);
-			if (!label) return;
-			setAgentUrlEdit(`${orgPath}/${label}`);
+			const agentLabel = cleanAgentLabel(agentName.split('.')[0]); // Extract label from full agent name
+			if (!agentLabel) return;
+			setAgentUrlEdit(`${orgPath}/${agentLabel}`);
 		} catch {}
-	}, [orgUrlText, name]);
+	}, [orgUrlText, agentName]);
 
   // Check if the derived Agent Identity already exists (disable Create if true)
   React.useEffect(() => {
@@ -780,25 +780,25 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     return () => { cancelled = true; };
   }, [agentName, effectiveRpcUrl]);
 
-  // Prefill Agent URL when agent ENS doesn't exist, using domain URL text + agent name
+  // Prefill Agent URL when agent ENS doesn't exist, using org URL text + agent name
   React.useEffect(() => {
     if (agentExists === false) {
-      const label = cleanAgentLabel(name);
+      const agentLabel = cleanAgentLabel(agentName ? agentName.split('.')[0] : '');
       const base = (orgUrlText ?? '').replace(/\/$/, '');
-      const suggested = base && label ? `${base}/${label}` : '';
+      const suggested = base && agentLabel ? `${base}/${agentLabel}` : '';
       if (agentUrlIsAuto || !agentUrlEdit) setAgentUrlEdit(suggested);
     }
-  }, [agentExists, orgUrlText, name]);
+  }, [agentExists, orgUrlText, agentName]);
 
   // Also prefill when agent ENS exists but has no URL text record
   React.useEffect(() => {
     if (agentExists === true && !agentUrlText) {
-      const label = cleanAgentLabel(name);
+      const agentLabel = cleanAgentLabel(agentName ? agentName.split('.')[0] : '');
       const base = (orgUrlText ?? '').replace(/\/$/, '');
-      const suggested = base && label ? `${base}/${label}` : '';
+      const suggested = base && agentLabel ? `${base}/${agentLabel}` : '';
       if ((agentUrlIsAuto || !agentUrlEdit) && suggested) setAgentUrlEdit(suggested);
     }
-  }, [agentExists, agentUrlText, orgUrlText, name, agentUrlIsAuto, agentUrlEdit]);
+  }, [agentExists, agentUrlText, orgUrlText, agentName, agentUrlIsAuto, agentUrlEdit]);
 
   React.useEffect(() => {
     const base = cleanOrg(org);
@@ -1212,17 +1212,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="body2">Chain</Typography>
-            <select value={selectedChainIdHex || ''} onChange={(e) => setSelectedChainIdHex(e.target.value || undefined)}>
-              {Object.keys(clients).map((cid) => {
-                const label = cid === '0xaa36a7' ? 'ETH Sepolia' : cid === '0x14a34' ? 'Base Sepolia' : cid;
-                return (
-                  <option key={cid} value={cid}>{label}</option>
-                );
-              })}
-            </select>
-          </Stack>
           <TextField label="Org" placeholder="airbnb.eth" value={org} onChange={(e) => setOrg(e.target.value)} fullWidth autoFocus />
           <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5 }}>
             {org ? (
@@ -1336,6 +1325,20 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           )}
           
           <br></br>
+          
+          {/* Agent Chain Selection */}
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Typography variant="body2">Agent Chain</Typography>
+            <select value={selectedChainIdHex || ''} onChange={(e) => setSelectedChainIdHex(e.target.value || undefined)}>
+              {Object.keys(clients).map((cid) => {
+                const label = cid === '0xaa36a7' ? 'ETH Sepolia' : cid === '0x14a34' ? 'Base Sepolia' : cid;
+                return (
+                  <option key={cid} value={cid}>{label}</option>
+                );
+              })}
+            </select>
+          </Stack>
+          
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
           <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
             Agent AA: {(() => {
@@ -1567,6 +1570,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                   disabled={Boolean(
                     agentUrlSaving ||
                     !provider ||
+                    !agentName ||
                     !/^https?:\/\//i.test(agentUrlEdit.trim())
                   )}
                   onClick={async () => {

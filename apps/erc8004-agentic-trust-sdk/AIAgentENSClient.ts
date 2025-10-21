@@ -16,6 +16,7 @@ export class AIAgentENSClient {
   private chain: Chain;
   private adapter: any;
   private ensRegistryAddress: `0x${string}`;
+  private ensResolverAddress: `0x${string}`;
   private identityRegistryAddress: `0x${string}`;
   private publicClient: PublicClient | null = null;
 
@@ -24,6 +25,7 @@ export class AIAgentENSClient {
     rpcUrl: string,
     adapter: any,
     ensRegistryAddress: `0x${string}`,
+    ensResolverAddress: `0x${string}`,
     identityRegistryAddress: `0x${string}`,
   ) {
 
@@ -32,8 +34,13 @@ export class AIAgentENSClient {
     this.adapter = adapter;
     this.publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
     this.ensRegistryAddress = ensRegistryAddress;
+    this.ensResolverAddress = ensResolverAddress;
     this.identityRegistryAddress = identityRegistryAddress;
 
+  }
+
+  getEnsResolverAddress(): `0x${string}` {
+    return this.ensResolverAddress;
   }
 
   encodeCall(
@@ -72,6 +79,8 @@ export class AIAgentENSClient {
     
 
     if (this.publicClient) {
+      const resolver = this.getEnsResolverAddress();
+      /*
         const node = namehash(name) as `0x${string}`;
         const resolver = await this.publicClient.readContract({
             address: this.ensRegistryAddress,
@@ -80,6 +89,9 @@ export class AIAgentENSClient {
             functionName: "resolver",
             args: [node],
         });
+        */
+        console.info("++++++++++++++++++++ prepareSetNameUriCalls: chain", this.publicClient?.chain?.id);
+        console.info("++++++++++++++++++++ prepareSetNameUriCalls: resolver", resolver);
 
         calls.push({ to: resolver, data: data as `0x${string}`});
     }
