@@ -213,9 +213,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
       // Check if agent is available using ENS client
       try {
-        // Check if agent identity exists (this is what matters for availability)
-        const existingAgentIdentity = await ensClient.getAgentIdentityByName(fullAgentName);
-        isAvailable = !existingAgentIdentity || existingAgentIdentity === 0n;
+        // Check if agent account exists (this is what matters for availability)
+        const existingAgentAccount = await ensClient.getAgentAccountByName(fullAgentName);
+        isAvailable = !existingAgentAccount || existingAgentAccount === '0x0000000000000000000000000000000000000000';
       } catch {
         isAvailable = true; // Assume available if check fails
       }
@@ -505,11 +505,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     try {
       if (agentName && agentName.trim() !== '') {
         // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
-        const agentId = await getENSClientForChain().getAgentIdentityByName(agentName.trim());
-        const foundAddr = agentAccount;
-        if (foundAddr) {
+        const { agentId, account } = await getENSClientForChain().getAgentIdentityByName(agentName.trim());
+        if (account) {
           const agentAccountClient = await toMetaMaskSmartAccount({
-            address: foundAddr as `0x${string}`,
+            address: account as `0x${string}`,
             client: publicClient,
             implementation: Implementation.Hybrid,
             signatory: { walletClient },
@@ -589,10 +588,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             setEnsAgentOwnerEoa(null);
           }
 
-          // Check if agent identity exists (this determines if the agent name is taken)
+          // Check if agent account exists (this determines if the agent name is taken)
           try {
-            const agentIdentity = await getENSClientForChain().getAgentIdentityByName(full);
-            if (!cancelled) setAgentExists(!!agentIdentity && agentIdentity > 0n);
+            const agentAccount = await getENSClientForChain().getAgentAccountByName(full);
+            if (!cancelled) setAgentExists(!!agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000');
           } catch {
             if (!cancelled) setAgentExists(null);
           }
@@ -692,16 +691,16 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         setAgentUrlIsAuto(false);
         }
         
-        try {
-          const agentIdentity = await getENSClientForChain().getAgentIdentityByName(agentName);
-          if (agentIdentity) {
-            console.info('agent-identity exists:', agentIdentity);
-          } else {
-            console.info('agent-identity text not set');
+          try {
+            const agentId = await getENSClientForChain().getAgentIdentityByName(agentName);
+            if (agentId) {
+              console.info('agent-identity exists:', agentId);
+            } else {
+              console.info('agent-identity text not set');
+            }
+          } catch (e) {
+            console.info('failed to read/parse agent-identity text', e);
           }
-        } catch (e) {
-          console.info('failed to read/parse agent-identity text', e);
-        }
         
       } catch (e: any) {
         if (!cancelled) setAgentUrlError(e?.message ?? 'Failed to read agent url');

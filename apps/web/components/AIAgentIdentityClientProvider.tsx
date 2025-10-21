@@ -17,7 +17,7 @@ export function useAgentIdentityClient(): AIAgentIdentityClient {
       // Minimal subset used by UI; all return null-like values
       getAgentName: noop,
       getAgentAccount: noop,
-      getAgentIdentityByName: async (_name: string) => (null),
+      getAgentIdentityByName: async (_name: string) => ({agentId: null, account: null}),
       getAgentAccountByName: noop,
       getAgentUrlByName: noop,
       getAgentEoaByAgentAccount: noop,

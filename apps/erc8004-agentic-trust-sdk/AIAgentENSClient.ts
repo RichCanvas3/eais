@@ -53,11 +53,6 @@ export class AIAgentENSClient {
   }
 
 
-
-
-
-
-
   async encodeSetNameUri(name: string, uri: string): Promise<`0x${string}`>  {
     const node = namehash(name) as `0x${string}`;
     const data = encodeFunctionData({
@@ -67,7 +62,6 @@ export class AIAgentENSClient {
     });
     return data as `0x${string}`;
   }
-
   async prepareSetNameUriCalls(
     name: string,
     uri: string
@@ -221,9 +215,9 @@ export class AIAgentENSClient {
   /**
    * Resolve an agent by ENS name via resolver.text(namehash(name), 'agent-identity')
    */
-  async getAgentIdentityByName(name: string): Promise<bigint | null> {
+  async getAgentIdentityByName(name: string): Promise<{ agentId: bigint | null; account: string | null }> {
     const ensName = name.trim().toLowerCase();
-    if (!ensName) return  null;
+    if (!ensName) return  { agentId: null, account: null };
 
     const ENS_REGISTRY_ABI = [
       { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
@@ -259,10 +253,10 @@ export class AIAgentENSClient {
       // returns 0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5
     } catch (error) {
       console.info("++++++++++++++++++++ getAgentIdentityByName 1: error", error);
-      return null; // Return null if we can't get resolver
+      return { agentId: null, account: null }; // Return null if we can't get resolver
     }
     if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
-      return null;
+      return { agentId: null, account: null };
     }
 
     // agent-identity text
@@ -314,26 +308,36 @@ export class AIAgentENSClient {
     // resolver
     let resolverAddr: `0x${string}` | null = null;
     try {
-      resolverAddr = await (this as any).adapter.call(
-        this.ensRegistryAddress,
-        ENS_REGISTRY_ABI,
-        'resolver',
-        [node]
-      );
+      resolverAddr = await this.publicClient?.readContract({
+        address: this.ensRegistryAddress as `0x${string}`,
+        abi: [{
+            name: 'resolver',
+            type: 'function',
+            stateMutability: 'view',
+            inputs: [{ name: 'node', type: 'bytes32' }],
+            outputs: [{ name: '', type: 'address' }]
+        }],
+        functionName: 'resolver',
+        args: [node]
+      }) as `0x${string}` | null;
+      // returns 0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5
+
     } catch {}
     if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
       return null;
     }
 
     try {
-      const addr: `0x${string}` = await (this as any).adapter.call(
-        resolverAddr,
-        RESOLVER_ABI,
-        'addr',
-        [node]
-      );
+
+      const addr  = await this.publicClient?.readContract({
+        address: resolverAddr,
+        abi: PublicResolverABI.abi,
+        functionName: 'addr',
+        args: [node]
+      }).catch(() => null) as string | null;
+
       if (addr && /^0x[a-fA-F0-9]{40}$/.test(addr) && addr !== '0x0000000000000000000000000000000000000000') {
-        return addr;
+        return addr as `0x${string}`;
       }
     } catch {}
 
