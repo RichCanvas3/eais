@@ -385,21 +385,24 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           account: eoaAddress as Address 
         });
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
+
+        const bundlerUrl = effectiveBundlerUrl;
+          if (!bundlerUrl) throw new Error('Missing BUNDLER_URL for deployment');
+        console.info("Deployment - bundlerUrl:", bundlerUrl, "chain:", resolvedChain.name, "chainId:", resolvedChain.id);
+        const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
+        const bundlerClient = createBundlerClient({
+          transport: http(bundlerUrl),
+          paymaster: true as any,
+          chain: resolvedChain as any,
+          paymasterContext: { mode: 'SPONSORED' },
+        } as any);
         
         
         // Ensure Agent AA is deployed (sponsored via Pimlico)
         const deployed = await agentAccountClient.isDeployed();
         if (!deployed) {
-          const bundlerUrl = effectiveBundlerUrl;
-          if (!bundlerUrl) throw new Error('Missing BUNDLER_URL for deployment');
-          console.info("Deployment - bundlerUrl:", bundlerUrl, "chain:", resolvedChain.name, "chainId:", resolvedChain.id);
-          const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
-          const bundlerClient = createBundlerClient({
-            transport: http(bundlerUrl),
-            paymaster: true as any,
-            chain: resolvedChain as any,
-            paymasterContext: { mode: 'SPONSORED' },
-          } as any);
+          
+
   
           console.info("using hardcoded gas fees for deployment");
           const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
@@ -478,15 +481,33 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       console.info('Transaction parameters:', { to, data, value });
 
 
-        console.info("@@@@@@@@@@@@@@@@@@ Subname minting - bundlerUrl:", effectiveBundlerUrl, "chain:", resolvedChain.name, "chainId:", resolvedChain.id);
-        const bundlerClient = createBundlerClient({
-          transport: http(effectiveBundlerUrl),
-          paymaster: true,
-          chain: resolvedChain,
-          paymasterContext: { mode: 'SPONSORED' },
-        } as any);
+
+
+        console.info("@@@@@@@@@@@@@@@@@@@ sendUserOperation for mint");
+        /*
         
-        // Send user operation via bundler
+        // First, estimate the user operation to get proper gas fees
+        const gasEstimate = await bundlerClient.estimateUserOperationGas({
+          account: agentAccountClient,
+          calls: [{
+            to: to as `0x${string}`,
+            data: data as `0x${string}`,
+            value: value,
+          }],
+        });
+        
+        console.info("Estimated gas:", gasEstimate);
+        */
+
+
+
+        console.info("using hardcoded gas fees for deployment");
+        const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+        console.info("fee: ", fee);
+
+
+        
+        // Send user operation via bundler with estimated gas
         const userOperationHash = await bundlerClient.sendUserOperation({
           account: agentAccountClient,
           calls: [{
@@ -494,6 +515,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             data: data as `0x${string}`,
             value: value,
           }],
+          ...fee,
         });
         
         console.log("UserOp submitted:", userOperationHash);
