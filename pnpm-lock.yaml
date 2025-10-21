@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      '@thenamespace/mint-manager':
+        specifier: ^1.1.0
+        version: 1.1.0
 
   apps/identity-service:
     dependencies:

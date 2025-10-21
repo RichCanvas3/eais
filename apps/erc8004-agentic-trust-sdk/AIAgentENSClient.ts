@@ -233,19 +233,33 @@ export class AIAgentENSClient {
     ] as any[];
 
 
+    console.info("++++++++++++++++++++ getAgentIdentityByName: ensName", ensName);
+    console.info("++++++++++++++++++++ getAgentIdentityByName: this.ensRegistryAddress", this.ensRegistryAddress);
+
+    console.info("++++++++++++++++++++ getAgentIdentityByName: adapter", this.adapter);
+
     const node = namehash(ensName);
 
     // resolver
     let resolverAddr: `0x${string}` | null = null;
     try {
-      resolverAddr = await (this as any).adapter.call(
-        this.ensRegistryAddress,
-        ENS_REGISTRY_ABI,
-        'resolver',
-        [node]
-      );
+
+      resolverAddr = await this.publicClient?.readContract({
+        address: this.ensRegistryAddress as `0x${string}`,
+        abi: [{
+            name: 'resolver',
+            type: 'function',
+            stateMutability: 'view',
+            inputs: [{ name: 'node', type: 'bytes32' }],
+            outputs: [{ name: '', type: 'address' }]
+        }],
+        functionName: 'resolver',
+        args: [node]
+      }) as `0x${string}` | null;
+      // returns 0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5
     } catch (error) {
       console.info("++++++++++++++++++++ getAgentIdentityByName 1: error", error);
+      return null; // Return null if we can't get resolver
     }
     if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
       return null;
@@ -254,17 +268,27 @@ export class AIAgentENSClient {
     // agent-identity text
     let agentId: bigint | null = null;
     try {
-      const value: string = await (this as any).adapter.call(
-        resolverAddr,
-        RESOLVER_ABI,
-        'text',
-        [node, 'agent-identity']
-      );
-      const decoded = this.decodeAgentIdentity(value);
 
+      const value = await this.publicClient?.readContract({
+        address: resolverAddr,
+        abi: PublicResolverABI.abi,
+        functionName: 'text',
+        args: [node, 'agent-identity']
+      }).catch(() => null) as string | null;
+
+      console.info("################ getAgentIdentityByName: value", value);
+      
+      // Handle empty response
+      if (!value || value === '0x' || value === '') {
+        console.info("++++++++++++++++++++ getAgentIdentityByName: empty agent-identity text record");
+        return null;
+      }
+      
+      const decoded = this.decodeAgentIdentity(value as string);
       agentId = decoded?.agentId ?? null;
     } catch (error) {
       console.info("++++++++++++++++++++ getAgentIdentityByName 2: error", error);
+      return null; // Return null if we can't get the text record
     }
 
     return agentId;

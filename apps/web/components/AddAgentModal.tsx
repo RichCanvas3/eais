@@ -9,7 +9,6 @@ import { createAgentAdapter,
   setAgentIdentityRegistrationUri as adapterSetAgentRegistrationUri, 
   setAgentIdentity as adapterSetAgentIdentity } 
   from '@/lib/agentAdapter';
-import { createMintClient } from '@thenamespace/mint-manager';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 
 import { sepolia, baseSepolia } from 'viem/chains';
@@ -93,12 +92,11 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   const [orgUrlEdit, setOrgUrlEdit] = React.useState('');
   const [orgUrlSaving, setOrgUrlSaving] = React.useState(false);
   
-  // Namespace.ninja state
-  const [namespaceClient, setNamespaceClient] = React.useState<any>(null);
-  const [subnameAvailable, setSubnameAvailable] = React.useState<boolean | null>(null);
-  const [subnameChecking, setSubnameChecking] = React.useState(false);
-  const [subnameCreating, setSubnameCreating] = React.useState(false);
-  const [subnameError, setSubnameError] = React.useState<string | null>(null);
+  // Agent availability state
+  const [agentAvailable, setAgentAvailable] = React.useState<boolean | null>(null);
+  const [agentChecking, setAgentChecking] = React.useState(false);
+  const [agentCreating, setAgentCreating] = React.useState(false);
+  const [agentError, setAgentError] = React.useState<string | null>(null);
 
   // Conditional hook after all other hooks
   const agentIdentityClient = useAgentIdentityClientFor(selectedChainIdHex) || useAgentIdentityClient();
@@ -183,102 +181,59 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     return base.replace(/[^a-z0-9-]/g, '');
   }
 
-  // Initialize namespace.ninja client
-  React.useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_NAMESPACE_API_KEY;
-    console.info('Namespace.ninja API key available:', !!apiKey);
-    console.info('API key value:', apiKey ? `${apiKey.substring(0, 8)}...` : 'null');
-    
-    try {
-      const client = createMintClient({
-        isTestnet: true, // Use testnet (sepolia)
-        cursomRpcUrls: {
-          [sepolia.id]: process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/demo',
-          [baseSepolia.id]: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://base-sepolia.g.alchemy.com/v2/demo',
-        }
-      });
 
-      /*
-      console.info('Client created successfully, checking for HTTP clients...');
-      console.info('mintManagerHttp exists:', !!(client as any).mintManagerHttp);
-      console.info('listManagerHttp exists:', !!(client as any).listManagerHttp);
-      
-      // Add API key authentication if available
-      if (apiKey && (client as any).mintManagerHttp) {
-        console.info('Adding API key authentication to namespace.ninja client');
-        (client as any).mintManagerHttp.defaults.headers.common['x-auth-token'] = apiKey;
-        (client as any).listManagerHttp.defaults.headers.common['x-auth-token'] = apiKey;
-        console.info('API key headers set successfully');
-      } else {
-        console.warn('API key or HTTP clients not available:', { apiKey: !!apiKey, mintManagerHttp: !!(client as any).mintManagerHttp });
-      }
-      */
-      
-      setNamespaceClient(client);
-      console.info('Namespace.ninja mint manager initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize namespace.ninja client:', error);
-    }
-  }, []);
-
-  // Check subname availability when agent name or domain changes
+  // Check agent availability when agent name or domain changes
   React.useEffect(() => {
-    if (namespaceClient && agentName && org && agentName.trim() !== '' && org.trim() !== '') {
-      checkSubnameAvailability(agentName.trim(), org.trim());
+    if (agentName && org && agentName.trim() !== '' && org.trim() !== '') {
+      checkAgentAvailability(agentName.trim(), org.trim());
     } else {
-      console.info('Not calling checkSubnameAvailability - conditions not met');
+      console.info('Not calling checkAgentAvailability - conditions not met');
     }
-  }, [namespaceClient, agentName, org]);
+  }, [agentName, org]);
 
-  // Check subname availability
-  async function checkSubnameAvailability(agentName: string, parentDomain: string) {
-    if (!namespaceClient || !agentName || !parentDomain) return;
+  // Check agent availability
+  async function checkAgentAvailability(agentName: string, parentDomain: string) {
+    if (!agentName || !parentDomain) return;
 
-    console.info("set subname activity")
+    console.info("checking agent availability")
     
-    setSubnameChecking(true);
-    setSubnameError(null);
+    setAgentChecking(true);
+    setAgentError(null);
     
     try {
-      // agentName is already the full subname (e.g., "atl-test-1.theorg.eth")
-      // so we can use it directly
-      const fullSubname = agentName;
+      const fullAgentName = agentName;
       const chainId = resolvedChain.id;
       const isBaseSepolia = selectedChainIdHex === '0x14a34';
+      const ensClient = getENSClientForChain();
       
-      console.info(`Checking availability for: ${fullSubname} (${isBaseSepolia ? 'L2' : 'L1'})`);
+      console.info(`Checking availability for: ${fullAgentName} (${isBaseSepolia ? 'L2' : 'L1'})`);
       console.info(`Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isBaseSepolia: ${isBaseSepolia}`);
       
       let isAvailable = false;
+
+      // Check if agent is available using ENS client
+      try {
+        // Check if agent identity exists (this is what matters for availability)
+        const existingAgentIdentity = await ensClient.getAgentIdentityByName(fullAgentName);
+        isAvailable = !existingAgentIdentity || existingAgentIdentity === 0n;
+      } catch {
+        isAvailable = true; // Assume available if check fails
+      }
       
-
-      // Check if subname is available using namespace.ninja SDK
-      console.info(`Attempting ${isBaseSepolia ? 'L2' : 'L1'} availability check for: ${fullSubname}`);
-      console.info("chainId: ", chainId);
-
-      const l2Available = await namespaceClient.isL2SubnameAvailable(fullSubname, chainId)
-      
-      console.info("l2Available: ", l2Available);
-
-      isAvailable = isBaseSepolia 
-        ? await namespaceClient.isL2SubnameAvailable(fullSubname, chainId)
-        : await namespaceClient.isL1SubnameAvailable(fullSubname);
       console.info(`${isBaseSepolia ? 'L2' : 'L1'} availability result:`, isAvailable);
-
-      setSubnameAvailable(isAvailable);
-      console.info(`Subname ${fullSubname} availability:`, isAvailable);
-      console.info('Setting subnameAvailable state to:', isAvailable);
+      setAgentAvailable(isAvailable);
+      console.info(`Agent ${fullAgentName} availability:`, isAvailable);
     } catch (error) {
-      console.error('Error checking subname availability:', error);
-      setSubnameError(error instanceof Error ? error.message : 'Failed to check availability');
+      console.error('Error checking agent availability:', error);
+      setAgentError(error instanceof Error ? error.message : 'Failed to check availability');
     } finally {
-      setSubnameChecking(false);
+      setAgentChecking(false);
     }
   }
 
-  // Create subname using namespace.ninja for L1/L2 architecture
-  async function createSubname(agentName: string, parentDomain: string, agentAddress: `0x${string}`) {
-    if (!namespaceClient || !agentName || !parentDomain) return;
+  // Create agent name using ENS client for L1/L2 architecture
+  async function createAgentName(agentName: string, parentDomain: string, agentAddress: `0x${string}`) {
+    if (!agentName || !parentDomain) return;
     
     // Use ensAgentAddress if available, otherwise fall back to agentAccount, or compute it
     let addressToUse = ensAgentAddress || agentAccount;
@@ -315,18 +270,18 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         
         agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
         addressToUse = await agentAccountClient.getAddress();
-        console.info('Computed agent address for subname creation:', addressToUse);
+        console.info('Computed agent address for agent name creation:', addressToUse);
       } catch (error) {
         console.error('Failed to compute agent address:', error);
-        setSubnameError('Failed to compute agent address for subname creation');
+        setAgentError('Failed to compute agent address for agent name creation');
         return;
       }
     }
     
     if (!addressToUse) return;
     
-    setSubnameCreating(true);
-    setSubnameError(null);
+    setAgentCreating(true);
+    setAgentError(null);
     
     try {
       // agentName is already the full subname (e.g., "atl-test-1.theorg.eth")
@@ -415,42 +370,20 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         
         const chainName = isBaseSepolia ? 'base-sepolia' : 'eth-sepolia';
 
-      // Prepare mint transaction parameters using namespace.ninja SDK
-      const mintRequest = {
-        parentName: parentName, // e.g., "theorg.eth"
-        label: label, // e.g., "atl-test-1"
-        owner: addressToUse,
-        minterAddress: addressToUse,
-        records: {
-          texts: [
-            { key: 'name', value: label },
-            { key: 'description', value: description || `Agent: ${label}` },
-            { key: 'agent-identity', value: `eip155:${chainId}:${addressToUse}` },
-            { key: 'chain', value: chainName },
-            { key: 'agent-account', value: addressToUse },
-          ],
-          addresses: [
-            { 
-              chain: 60, // Ethereum coin type
-              value: addressToUse 
-            },
-          ],
-        }
-      };
-
-      const mintParams = await namespaceClient.getMintTransactionParameters(mintRequest);
+      // Get mint transaction parameters from ENS client
+      const ensClientForSubname = getENSClientForChain();
+      const mintParams = await (ensClientForSubname as any).createSubname({
+        fullSubname,
+        parentName,
+        label,
+        addressToUse,
+        description,
+        chainId,
+        isBaseSepolia
+      });
       
-
       // Extract transaction parameters
-      const { to, data, value } = {
-        to: mintParams.contractAddress,
-        data: encodeFunctionData({
-          abi: mintParams.abi,
-          functionName: mintParams.functionName,
-          args: mintParams.args,
-        }),
-        value: mintParams.value || 0n
-      };
+      const { to, data, value } = mintParams;
 
 
 
@@ -480,7 +413,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
         
         // Now set up ENS records using the chain-specific ENS client
-        const ensClient = getENSClientForChain();
+        const ensClientForRecords = getENSClientForChain();
         console.log("Setting up ENS records for subname:", fullSubname);
         
         /*
@@ -558,13 +491,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         }
         */
         
-        setSubnameAvailable(false); // Mark as no longer available since we minted it
+        setAgentAvailable(false); // Mark as no longer available since we created it
       
     } catch (error) {
-      console.error('Error creating subname:', error);
-      setSubnameError(error instanceof Error ? error.message : 'Failed to create subname');
+      console.error('Error creating agent name:', error);
+      setAgentError(error instanceof Error ? error.message : 'Failed to create agent name');
     } finally {
-      setSubnameCreating(false);
+      setAgentCreating(false);
     }
   }
 
@@ -656,11 +589,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             setEnsAgentOwnerEoa(null);
           }
 
-
-          // Also check Registry ownership to determine if the name exists even without an addr record
+          // Check if agent identity exists (this determines if the agent name is taken)
           try {
-
-            if (!cancelled) setAgentExists(!!agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000');
+            const agentIdentity = await getENSClientForChain().getAgentIdentityByName(full);
+            if (!cancelled) setAgentExists(!!agentIdentity && agentIdentity > 0n);
           } catch {
             if (!cancelled) setAgentExists(null);
           }
@@ -759,7 +691,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         setAgentUrlEdit(normalized ?? '');
         setAgentUrlIsAuto(false);
         }
-        // Read and decode agent-identity per ENSIP (ERC-7930 address + agentId)
+        
         try {
           const agentIdentity = await getENSClientForChain().getAgentIdentityByName(agentName);
           if (agentIdentity) {
@@ -1173,13 +1105,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
           const BUNDLER_URL = effectiveBundlerUrl;
-          // Create subname using namespace.ninja if available
-          if (namespaceClient && subnameAvailable && ensAgentAddress) {
+          // Create agent name if available
+          if (agentAvailable && ensAgentAddress) {
             try {
-              await createSubname(agentNameLower, org, ensAgentAddress as `0x${string}`);
-              console.info('Subname created successfully via namespace.ninja');
-            } catch (subnameError) {
-              console.warn('Failed to create subname via namespace.ninja, continuing with standard ENS setup:', subnameError);
+              await createAgentName(agentNameLower, org, ensAgentAddress as `0x${string}`);
+              console.info('Agent name created successfully');
+            } catch (agentError) {
+              console.warn('Failed to create agent name, continuing with standard ENS setup:', agentError);
             }
           }
 
@@ -1354,87 +1286,46 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             })()}
           </Typography>
           
-          {/* Agent Name Creation - L1 vs L2 */}
+          {/* Agent Name Creation */}
           {agentName && org && (
             <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
               <Typography variant="caption" color="info.main" fontWeight="bold">
-                Agent Name Creation:
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {selectedChainIdHex === '0x14a34' 
-                  ? 'Base Sepolia (L2) - Create subname via namespace.ninja'
-                  : 'ETH Sepolia (L1) - Create ENS subdomain'
-                }
+                Agent Name:
               </Typography>
               
-              {/* L2: namespace.ninja subname creation */}
-              {selectedChainIdHex === '0x14a34' && namespaceClient && (
-                <>
-                  {subnameChecking ? (
-                    <Typography variant="caption" color="text.secondary">
-                      Checking availability...
-                    </Typography>
-                  ) : subnameAvailable === true ? (
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Typography variant="caption" color="success.main">
-                        ✓ {agentName} is available
-                      </Typography>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => createSubname(agentName, org, (ensAgentAddress || agentAccount) as `0x${string}`)}
-                        disabled={subnameCreating}
-                        sx={{ width: 'fit-content' }}
-                      >
-                        {subnameCreating ? 'Creating...' : 'Create Agent Name'}
-                      </Button>
-                    </Stack>
-                  ) : subnameAvailable === false ? (
-                    <Typography variant="caption" color="warning.main">
-                      ⚠ {agentName} is not available
-                    </Typography>
-                  ) : subnameError ? (
-                    <Typography variant="caption" color="error">
-                      Error: {subnameError}
-                    </Typography>
-                  ) : null}
-                </>
-              )}
               
-              {/* L1: Traditional ENS creation */}
-              {selectedChainIdHex !== '0x14a34' && agentExists === false && (
+              {/* Agent name creation */}
+              {agentChecking ? (
+                <Typography variant="caption" color="text.secondary">
+                  Checking availability...
+                </Typography>
+              ) : agentAvailable === true ? (
                 <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography variant="caption" color="info.main">
-                    {agentName} - Create ENS subdomain
+                  <Typography variant="caption" color="success.main">
+                    ✓ {agentName} is available
                   </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => createAgentName(agentName, org, (ensAgentAddress || agentAccount) as `0x${string}`)}
+                    disabled={agentCreating}
+                    sx={{ width: 'fit-content' }}
+                  >
+                    {agentCreating ? 'Creating...' : 'Create Agent Name'}
+                  </Button>
                 </Stack>
-              )}
+              ) : agentAvailable === false ? (
+                <Typography variant="caption" color="warning.main">
+                  ⚠ {agentName} is not available
+                </Typography>
+              ) : agentError ? (
+                <Typography variant="caption" color="error">
+                  Error: {agentError}
+                </Typography>
+              ) : null}
             </Stack>
           )}
           
-          {/* Debug info when namespace client is not available */}
-          {!namespaceClient && agentName && (
-            <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
-              <Typography variant="caption" color="warning.main" fontWeight="bold">
-                Namespace.ninja Status:
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                ⚠ Namespace.ninja client not initialized. Add NEXT_PUBLIC_NAMESPACE_API_KEY to enable subdomain creation.
-              </Typography>
-            </Stack>
-          )}
-          
-          {/* Debug info when namespace client is available but domain is missing */}
-          {namespaceClient && agentName && !org && (
-            <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
-              <Typography variant="caption" color="info.main" fontWeight="bold">
-                Namespace.ninja Debug:
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                ✓ Client initialized, agentName: {agentName}, but org is missing: "{org}"
-              </Typography>
-            </Stack>
-          )}
           
           <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: 5 }}>
             <Typography variant="caption" color="text.secondary">
@@ -1536,7 +1427,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     } catch {}
 
                   } catch (e: any) {
-                    setError(e?.message ?? 'Failed to create ENS subdomain');
+                    setError(e?.message ?? 'Failed to create ENS name');
                   } finally {
                     setCreatingAgentName(false);
                   }

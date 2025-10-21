@@ -9,5 +9,8 @@
     "dev:indexer": "pnpm --filter erc8004-indexer dev",
     "dev:web": "pnpm --filter erc8004-web dev"
   },
-  "packageManager": "pnpm@9.7.0"
+  "packageManager": "pnpm@9.7.0",
+  "dependencies": {
+    "@thenamespace/mint-manager": "^1.1.0"
+  }
 }

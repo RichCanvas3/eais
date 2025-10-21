@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { EthersAdapter } from '../../erc8004-src';
 import { AIAgentENSClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentL2ENSClient } from '../../erc8004-agentic-trust-sdk/AIAgentL2ENSClient';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { sepolia, baseSepolia } from 'viem/chains';
 
@@ -117,14 +118,25 @@ export function AIAgentENSClientsProvider({ children }: Props) {
         const ensAdapter = ensSigner ? new EthersAdapter(ensProvider, ensSigner) : new EthersAdapter(ensProvider, undefined as any);
 
         console.log("🔍 ENS agentAdapter: ", ensAdapter);
-        const client = new AIAgentENSClient(
-          cfg.chain,
-          cfg.rpcUrl,
-          ensAdapter,
-          cfg.ensRegistryAddress,
-          cfg.ensResolverAddress,
-          cfg.identityRegistryAddress
-        );
+        
+        // Use L2 client for Base Sepolia, standard client for others
+        const client = cfg.chainIdHex === '0x14a34' 
+          ? new AIAgentL2ENSClient(
+              cfg.chain,
+              cfg.rpcUrl,
+              ensAdapter,
+              cfg.ensRegistryAddress,
+              cfg.ensResolverAddress,
+              cfg.identityRegistryAddress
+            )
+          : new AIAgentENSClient(
+              cfg.chain,
+              cfg.rpcUrl,
+              ensAdapter,
+              cfg.ensRegistryAddress,
+              cfg.ensResolverAddress,
+              cfg.identityRegistryAddress
+            );
         result[cfg.chainIdHex] = client;
       }
 
