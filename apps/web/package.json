@@ -14,6 +14,7 @@
     "@mui/icons-material": "^6.1.2",
     "@mui/material": "^6.1.2",
     "@mui/material-nextjs": "^6.1.2",
+    "@thenamespace/mint-manager": "^1.1.0",
     "@web3auth/base": "^8.12.4",
     "@web3auth/ethereum-provider": "^8.12.4",
     "@web3auth/metamask-adapter": "^8.12.4",

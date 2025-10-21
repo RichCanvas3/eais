@@ -210,11 +210,8 @@ export class AIAgentENSClient {
    * Resolve an agent by ENS name via resolver.text(namehash(name), 'agent-identity')
    */
   async getAgentIdentityByName(name: string): Promise<bigint | null> {
-    console.info("####################### getAgentIdentityByName: name", name);
     const ensName = name.trim().toLowerCase();
     if (!ensName) return  null;
-
-    console.info("++++++++++++++++++++ getAgentIdentityByName: ensName", ensName);
 
     const ENS_REGISTRY_ABI = [
       { name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ name: '', type: 'address' }] },
@@ -229,7 +226,6 @@ export class AIAgentENSClient {
     // resolver
     let resolverAddr: `0x${string}` | null = null;
     try {
-      console.info("++++++++++++++++++++ getAgentIdentityByName 1: ensRegistryAddress", this.ensRegistryAddress);
       resolverAddr = await (this as any).adapter.call(
         this.ensRegistryAddress,
         ENS_REGISTRY_ABI,
@@ -242,7 +238,6 @@ export class AIAgentENSClient {
     if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
       return null;
     }
-    console.info("++++++++++++++++++++ getAgentIdentityByName: resolverAddr", resolverAddr);
 
     // agent-identity text
     let agentId: bigint | null = null;
@@ -254,13 +249,11 @@ export class AIAgentENSClient {
         [node, 'agent-identity']
       );
       const decoded = this.decodeAgentIdentity(value);
-      console.info("++++++++++++++++++++ getAgentIdentityByName: decoded", decoded);
+
       agentId = decoded?.agentId ?? null;
     } catch (error) {
       console.info("++++++++++++++++++++ getAgentIdentityByName 2: error", error);
     }
-
-    console.info("++++++++++++++++++++ getAgentIdentityByName: agentId", agentId);
 
     return agentId;
   }

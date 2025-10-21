@@ -9,9 +9,10 @@ import { createAgentAdapter,
   setAgentIdentityRegistrationUri as adapterSetAgentRegistrationUri, 
   setAgentIdentity as adapterSetAgentIdentity } 
   from '@/lib/agentAdapter';
+import { createMintClient } from '@thenamespace/mint-manager';
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 
-import { sepolia } from 'viem/chains';
+import { sepolia, baseSepolia } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
@@ -38,18 +39,14 @@ type Props = {
 };
 
 export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdHex }: Props) {
+  // All useContext hooks first
   const { provider, address: eoaAddress } = useWeb3Auth();
   const clients = useAgentIdentityClients();
-  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string | undefined>(chainIdHex);
-  React.useEffect(() => {
-    if (!selectedChainIdHex) {
-      const first = Object.keys(clients)[0];
-      if (first) setSelectedChainIdHex(first);
-    }
-  }, [clients, selectedChainIdHex]);
-  const agentENSClient = useAgentENSClient() 
-  const agentIdentityClient = useAgentIdentityClientFor(selectedChainIdHex) || useAgentIdentityClient();
+  const agentENSClient = useAgentENSClient();
   const orgIdentityClient = useOrgIdentityClient();
+  
+  // All useState hooks second
+  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string | undefined>(chainIdHex);
   const [domain, setDomain] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,6 +63,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   const [agentUrlEdit, setAgentUrlEdit] = React.useState('');
   const [agentUrlIsAuto, setAgentUrlIsAuto] = React.useState(true);
   const [agentUrlSaving, setAgentUrlSaving] = React.useState(false);
+
   // ENS agent name ownership check
   const [ensAgentAddress, setEnsAgentAddress] = React.useState<string | null>(null);
   const [ensAgentOwnerEoa, setEnsAgentOwnerEoa] = React.useState<string | null>(null);
@@ -92,6 +90,61 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   const [domainUrlError, setDomainUrlError] = React.useState<string | null>(null);
   const [domainUrlEdit, setDomainUrlEdit] = React.useState('');
   const [domainUrlSaving, setDomainUrlSaving] = React.useState(false);
+  
+  // Namespace.ninja state
+  const [namespaceClient, setNamespaceClient] = React.useState<any>(null);
+  const [subnameAvailable, setSubnameAvailable] = React.useState<boolean | null>(null);
+  const [subnameChecking, setSubnameChecking] = React.useState(false);
+  const [subnameCreating, setSubnameCreating] = React.useState(false);
+  const [subnameError, setSubnameError] = React.useState<string | null>(null);
+
+  // Conditional hook after all other hooks
+  const agentIdentityClient = useAgentIdentityClientFor(selectedChainIdHex) || useAgentIdentityClient();
+
+  // Helper function to convert ethers.js provider to viem-compatible provider
+  const createViemCompatibleProvider = (ethersProvider: any) => {
+    return {
+      request: async ({ method, params }: { method: string; params?: any[] }) => {
+        console.log(`🔍 Provider request: ${method}`, params);
+        try {
+          // Handle different ethers.js provider interfaces
+          let result;
+          
+          if (ethersProvider.request) {
+            // Direct request method (some providers have this)
+            result = await ethersProvider.request({ method, params });
+          } else if (ethersProvider.send) {
+            // Use send method (common in ethers.js providers)
+            result = await ethersProvider.send(method, params || []);
+          } else if (ethersProvider._send) {
+            // Use private _send method (fallback)
+            result = await ethersProvider._send(method, params || []);
+          } else {
+            // Try to access the underlying provider
+            const underlyingProvider = ethersProvider.provider || ethersProvider._provider;
+            if (underlyingProvider && underlyingProvider.request) {
+              result = await underlyingProvider.request({ method, params });
+            } else {
+              throw new Error(`No compatible request method found on provider: ${Object.keys(ethersProvider)}`);
+            }
+          }
+          
+          console.log(`🔍 Provider response:`, result);
+          return result;
+        } catch (error) {
+          console.error(`❌ Provider request failed:`, error);
+          throw error;
+        }
+      }
+    };
+  };
+
+  React.useEffect(() => {
+    if (!selectedChainIdHex) {
+      const first = Object.keys(clients)[0];
+      if (first) setSelectedChainIdHex(first);
+    }
+  }, [clients, selectedChainIdHex]);
 
 
   const adapter = React.useMemo(() => createAgentAdapter({ registryAddress, rpcUrl }), [registryAddress, rpcUrl]);
@@ -110,7 +163,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
   const resolvedChain = React.useMemo(() => {
     if (selectedChainIdHex === '0xaa36a7') return sepolia;
-    if (selectedChainIdHex === '0x14a34') return { ...sepolia, id: 84532, name: 'Base Sepolia' } as any;
+    if (selectedChainIdHex === '0x14a34') return baseSepolia;
     return sepolia;
   }, [selectedChainIdHex]);
 
@@ -123,13 +176,347 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     return base.replace(/[^a-z0-9-]/g, '');
   }
 
+  // Initialize namespace.ninja client
+  React.useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_NAMESPACE_API_KEY;
+    console.info('Namespace.ninja API key available:', !!apiKey);
+    console.info('API key value:', apiKey ? `${apiKey.substring(0, 8)}...` : 'null');
+    
+    try {
+      const client = createMintClient({
+        isTestnet: true, // Use testnet (sepolia)
+        cursomRpcUrls: {
+          [sepolia.id]: process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/demo',
+          [baseSepolia.id]: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://base-sepolia.g.alchemy.com/v2/demo',
+        }
+      });
+
+      /*
+      console.info('Client created successfully, checking for HTTP clients...');
+      console.info('mintManagerHttp exists:', !!(client as any).mintManagerHttp);
+      console.info('listManagerHttp exists:', !!(client as any).listManagerHttp);
+      
+      // Add API key authentication if available
+      if (apiKey && (client as any).mintManagerHttp) {
+        console.info('Adding API key authentication to namespace.ninja client');
+        (client as any).mintManagerHttp.defaults.headers.common['x-auth-token'] = apiKey;
+        (client as any).listManagerHttp.defaults.headers.common['x-auth-token'] = apiKey;
+        console.info('API key headers set successfully');
+      } else {
+        console.warn('API key or HTTP clients not available:', { apiKey: !!apiKey, mintManagerHttp: !!(client as any).mintManagerHttp });
+      }
+      */
+      
+      setNamespaceClient(client);
+      console.info('Namespace.ninja mint manager initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize namespace.ninja client:', error);
+    }
+  }, []);
+
+  // Check subname availability when agent name or domain changes
+  React.useEffect(() => {
+    if (namespaceClient && agentName && domain && agentName.trim() !== '' && domain.trim() !== '') {
+      checkSubnameAvailability(agentName.trim(), domain.trim());
+    } else {
+      console.info('Not calling checkSubnameAvailability - conditions not met');
+    }
+  }, [namespaceClient, agentName, domain]);
+
+  // Check subname availability
+  async function checkSubnameAvailability(agentName: string, parentDomain: string) {
+    if (!namespaceClient || !agentName || !parentDomain) return;
+
+    console.info("set subname activity")
+    
+    setSubnameChecking(true);
+    setSubnameError(null);
+    
+    try {
+      // agentName is already the full subname (e.g., "atl-test-1.theorg.eth")
+      // so we can use it directly
+      const fullSubname = agentName;
+      const chainId = resolvedChain.id;
+      const isBaseSepolia = selectedChainIdHex === '0x14a34';
+      
+      console.info(`Checking availability for: ${fullSubname} (${isBaseSepolia ? 'L2' : 'L1'})`);
+      console.info(`Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isBaseSepolia: ${isBaseSepolia}`);
+      
+      let isAvailable = false;
+      
+      try {
+        // Check if subname is available using namespace.ninja SDK
+        console.info(`Attempting ${isBaseSepolia ? 'L2' : 'L1'} availability check for: ${fullSubname}`);
+
+        const l2Available = await namespaceClient.isL2SubnameAvailable(fullSubname, chainId)
+        
+        console.info("l2Available: ", l2Available);
+
+        isAvailable = isBaseSepolia 
+          ? await namespaceClient.isL2SubnameAvailable(fullSubname, chainId)
+          : await namespaceClient.isL1SubnameAvailable(fullSubname);
+        console.info(`${isBaseSepolia ? 'L2' : 'L1'} availability result:`, isAvailable);
+        
+        // For Base Sepolia, if L2 returns false, try L1 fallback since L2 registry might not be configured
+        if (isBaseSepolia && !isAvailable) {
+          console.info('L2 returned false, attempting L1 fallback for Base Sepolia');
+          try {
+            console.info('Attempting L1 fallback availability check for:', fullSubname);
+            isAvailable = await namespaceClient.isL1SubnameAvailable(fullSubname);
+            console.info('L1 fallback availability result:', isAvailable);
+          } catch (l1Error) {
+            console.error('L1 fallback availability check failed:', l1Error);
+            // Keep the L2 result if L1 fails
+          }
+        }
+      } catch (l2Error) {
+        // If L2 availability check fails with an error, fall back to L1 check for Base Sepolia agents
+        if (isBaseSepolia) {
+          console.warn('L2 availability check failed with error, falling back to L1 check:', l2Error);
+          try {
+            console.info('Attempting L1 fallback availability check for:', fullSubname);
+            isAvailable = await namespaceClient.isL1SubnameAvailable(fullSubname);
+            console.info('L1 fallback availability result:', isAvailable);
+          } catch (l1Error) {
+            console.error('Both L2 and L1 availability checks failed:', l1Error);
+            throw l1Error;
+          }
+        } else {
+          throw l2Error;
+        }
+      }
+        
+      setSubnameAvailable(isAvailable);
+      console.info(`Subname ${fullSubname} availability:`, isAvailable);
+      console.info('Setting subnameAvailable state to:', isAvailable);
+    } catch (error) {
+      console.error('Error checking subname availability:', error);
+      setSubnameError(error instanceof Error ? error.message : 'Failed to check availability');
+    } finally {
+      setSubnameChecking(false);
+    }
+  }
+
+  // Create subname using namespace.ninja for L1/L2 architecture
+  async function createSubname(agentName: string, parentDomain: string, agentAddress: `0x${string}`) {
+    if (!namespaceClient || !agentName || !parentDomain) return;
+    
+    // Use ensAgentAddress if available, otherwise fall back to agentAccount, or compute it
+    let addressToUse = ensAgentAddress || agentAccount;
+
+    let agentAccountClient: any = null;
+    
+    // If we don't have an address, compute it using getDefaultAgentAccountClient
+    if (!addressToUse) {
+      try {
+        const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
+        
+        console.info("@@@@@@@@@@@@@@@@@@@ agentIdentityClient: ", agentIdentityClient);
+        
+        // Use the selected chain's provider by converting ethers.js provider to viem-compatible format
+        const agentAdapter = (agentIdentityClient as any).adapter;
+        const ethersProvider = agentAdapter.getProvider();
+        console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider: ", ethersProvider);
+        
+        // Debug the ethers provider to see what methods are available
+        console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider methods:", Object.getOwnPropertyNames(ethersProvider));
+        console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(ethersProvider)));
+        
+        // Convert ethers.js provider to viem-compatible provider
+        const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+        
+        console.info("@@@@@@@@@@@@@@@@@@@ eoaAddress: ", eoaAddress);
+        const walletClient = createWalletClient({ 
+          chain: resolvedChain as any, 
+          transport: custom(viemCompatibleProvider as any), 
+          account: eoaAddress as Address 
+        });
+        console.info("@@@@@@@@@@@@@@@@@@@ walletClient: ", walletClient);
+        try { (walletClient as any).account = eoaAddress as Address; } catch {}
+        
+        agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
+        addressToUse = await agentAccountClient.getAddress();
+        console.info('Computed agent address for subname creation:', addressToUse);
+      } catch (error) {
+        console.error('Failed to compute agent address:', error);
+        setSubnameError('Failed to compute agent address for subname creation');
+        return;
+      }
+    }
+    
+    if (!addressToUse) return;
+    
+    setSubnameCreating(true);
+    setSubnameError(null);
+    
+    try {
+      // agentName is already the full subname (e.g., "atl-test-1.theorg.eth")
+      // We need to extract the label and parent name from it
+      const fullSubname = agentName;
+      const parts = fullSubname.split('.');
+      if (parts.length < 2) {
+        throw new Error('Invalid subname format');
+      }
+      
+      const label = parts[0]; // e.g., "atl-test-1"
+      const parentName = parts.slice(1).join('.'); // e.g., "theorg.eth"
+      
+      const chainId = resolvedChain.id;
+      const isBaseSepolia = selectedChainIdHex === '0x14a34';
+      
+      console.info(`Creating subname - Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isBaseSepolia: ${isBaseSepolia}`);
+      
+
+
+
+        
+        // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+        const agentAdapter = (agentIdentityClient as any).adapter;
+        const ethersProvider = agentAdapter.getProvider();
+        const adapterSigner = agentAdapter.getSigner();
+        
+        // Convert ethers.js provider to viem-compatible provider
+        const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+        
+        // Create wallet client using the selected chain's provider
+        const walletClient = createWalletClient({ 
+          chain: resolvedChain as any, 
+          transport: custom(viemCompatibleProvider as any), 
+          account: eoaAddress as Address 
+        });
+        try { (walletClient as any).account = eoaAddress as Address; } catch {}
+        
+        
+        // Ensure Agent AA is deployed (sponsored via Pimlico)
+        const deployed = await agentAccountClient.isDeployed();
+        if (!deployed) {
+          const bundlerUrl = effectiveBundlerUrl;
+          if (!bundlerUrl) throw new Error('Missing BUNDLER_URL for deployment');
+          console.info("Deployment - bundlerUrl:", bundlerUrl, "chain:", resolvedChain.name, "chainId:", resolvedChain.id);
+          const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
+          const bundlerClient = createBundlerClient({
+            transport: http(bundlerUrl),
+            paymaster: true as any,
+            chain: resolvedChain as any,
+            paymasterContext: { mode: 'SPONSORED' },
+          } as any);
+  
+          console.info("using hardcoded gas fees for deployment");
+          const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+          console.info("fee: ", fee);
+
+          try {
+            console.info("send user operation with bundlerClient 2: ", bundlerClient);
+
+            console.info("send user operation with bundlerClient 2: ", bundlerClient);
+            const userOperationHash = await bundlerClient!.sendUserOperation({
+              account: agentAccountClient as any,
+              calls: [
+                {
+                  to: zeroAddress,
+                },
+              ],
+              ...fee,
+            });
+
+            console.info("individual account is deployed - done");
+            const { receipt } = await bundlerClient!.waitForUserOperationReceipt({
+              hash: userOperationHash,
+            });
+
+
+
+          } catch (error) {
+            console.info("error deploying indivAccountClient: ", error);
+          }
+        }
+        
+        console.info("@@@@@@@@@@@@@@@@@@@ addressToUse: ", addressToUse);
+        console.info("@@@@@@@@@@@@@@@@@@@ agentAccountClient address: ", agentAccountClient.address);
+
+        const chainName = isBaseSepolia ? 'base-sepolia' : 'eth-sepolia';
+        console.info("@@@@@@@@@@@@@@@@@@@ chainName: ", chainName);
+
+      // Prepare mint transaction parameters using namespace.ninja SDK
+      const mintRequest = {
+        parentName: parentName, // e.g., "theorg.eth"
+        label: label, // e.g., "atl-test-1"
+        owner: addressToUse,
+        minterAddress: addressToUse,
+        records: {
+          texts: [
+            { key: 'name', value: label },
+            { key: 'description', value: description || `Agent: ${label}` },
+            { key: 'agent-identity', value: `eip155:${chainId}:${addressToUse}` },
+            { key: 'chain', value: chainName },
+            { key: 'agent-account', value: addressToUse },
+          ],
+          addresses: [
+            { 
+              chain: 60, // Ethereum coin type
+              value: addressToUse 
+            },
+          ],
+        }
+      };
+
+      const mintParams = await namespaceClient.getMintTransactionParameters(mintRequest);
+      
+      console.info(`Mint parameters for ${fullSubname}:`, mintParams);
+      
+      // Extract transaction parameters
+      const { to, data, value } = {
+        to: mintParams.contractAddress,
+        data: encodeFunctionData({
+          abi: mintParams.abi,
+          functionName: mintParams.functionName,
+          args: mintParams.args,
+        }),
+        value: mintParams.value || 0n
+      };
+      
+      console.info('Transaction parameters:', { to, data, value });
+
+
+        console.info("@@@@@@@@@@@@@@@@@@ Subname minting - bundlerUrl:", effectiveBundlerUrl, "chain:", resolvedChain.name, "chainId:", resolvedChain.id);
+        const bundlerClient = createBundlerClient({
+          transport: http(effectiveBundlerUrl),
+          paymaster: true,
+          chain: resolvedChain,
+          paymasterContext: { mode: 'SPONSORED' },
+        } as any);
+        
+        // Send user operation via bundler
+        const userOperationHash = await bundlerClient.sendUserOperation({
+          account: agentAccountClient,
+          calls: [{
+            to: to as `0x${string}`,
+            data: data as `0x${string}`,
+            value: value,
+          }],
+        });
+        
+        console.log("UserOp submitted:", userOperationHash);
+        
+        // Wait for the transaction to be mined
+        const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
+        console.log("Subname minted successfully! Transaction hash:", receipt.receipt.transactionHash);
+        
+        setSubnameAvailable(false); // Mark as no longer available since we minted it
+      
+    } catch (error) {
+      console.error('Error creating subname:', error);
+      setSubnameError(error instanceof Error ? error.message : 'Failed to create subname');
+    } finally {
+      setSubnameCreating(false);
+    }
+  }
+
   async function getDefaultAgentAccountClient(agentName: string, publicClient: any, walletClient: any)  {
     try {
       if (agentName && agentName.trim() !== '') {
         // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
-        console.info("@@@@@@@@@@@@@@ getDefaultAgentAccountClient: agentName", agentName);
         const agentId = await agentENSClient.getAgentIdentityByName(agentName.trim());
-        console.info("++++++++++++++ getDefaultAgentAccountClient: agentId", agentId);
         const foundAddr = agentAccount;
         if (foundAddr) {
           const agentAccountClient = await toMetaMaskSmartAccount({
@@ -139,8 +526,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             signatory: { walletClient },
           });
           
-          
-          console.info("++++++++++++++ get agent info from SDK via ENS agent-identity", { agentId: agentId?.toString(), foundAddr });
           return agentAccountClient;
         }
       }
@@ -173,7 +558,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       signatory: { walletClient },
       deploySalt: salt,
     } as any);
-    console.info("++++++++++++++ salt found with name", agentName, agentAccountClient.address);
     //try { await logAgent(await agentAccountClient.getAddress()); } catch {}
     
     return agentAccountClient
@@ -270,7 +654,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         
         const agentNameLower = agentName.trim().toLowerCase();
         const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-        const walletClient = createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: eoaAddress as Address });
+        
+        // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+        const agentAdapter = (agentIdentityClient as any).adapter;
+        const ethersProvider = agentAdapter.getProvider();
+        
+        // Convert ethers.js provider to viem-compatible provider
+        const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+        
+        const walletClient = createWalletClient({ 
+          chain: resolvedChain as any, 
+          transport: custom(viemCompatibleProvider as any), 
+          account: eoaAddress as Address 
+        });
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
         const agentAccountClient = await getDefaultAgentAccountClient(agentNameLower, publicClient, walletClient);
@@ -549,12 +945,24 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       // Owner/signatory based on current EOA from Web3Auth
       if (!eoaAddress) { throw new Error('No EOA address from Web3Auth'); }
       const owner = eoaAddress as Address;
-      const signatory = { walletClient: createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: owner }) } as any;
-      // Ensure viem client has a default account for signing (toolkit calls signTypedData without passing account)
-      try { (signatory.walletClient as any).account = owner; } catch {}
       
-      const walletClient = createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: eoaAddress as Address });
+      // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+      const agentAdapter = (agentIdentityClient as any).adapter;
+      const ethersProvider = agentAdapter.getProvider();
+      const adapterSigner = agentAdapter.getSigner();
+      
+      // Convert ethers.js provider to viem-compatible provider
+      const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+      
+      // Create wallet client using the selected chain's provider
+      const walletClient = createWalletClient({ 
+        chain: resolvedChain as any, 
+        transport: custom(viemCompatibleProvider as any), 
+        account: eoaAddress as Address 
+      });
       try { (walletClient as any).account = eoaAddress as Address; } catch {}
+      
+      const signatory = { walletClient } as any;
       const agentAccountClient = await getDefaultAgentAccountClient(agentNameLower, publicClient, walletClient);
         
       const agentAddress = await agentAccountClient.getAddress();
@@ -562,6 +970,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       // Ensure Agent AA is deployed (sponsored via Pimlico)
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
+        /*
         const BUNDLER_URL = effectiveBundlerUrl;
         if (!BUNDLER_URL) throw new Error('Missing BUNDLER_URL for deployment');
         const pimlicoClient = createPimlicoClient({ transport: http(BUNDLER_URL) } as any);
@@ -578,6 +987,22 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           ...fee,
         });
         await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOperationHash });
+        */
+
+        const pimlico = createPimlicoClient({ transport: http(effectiveBundlerUrl) });
+				const bundlerClient = createBundlerClient({
+					transport: http(effectiveBundlerUrl),
+					paymaster: true as any,
+					chain: resolvedChain as any,
+					paymasterContext: { mode: 'SPONSORED' },
+				} as any);
+				const { fast: fee } = await pimlico.getUserOperationGasPrice();
+				const userOperationHash = await bundlerClient.sendUserOperation({
+					account: agentAccountClient as any,
+					calls: [ { to: zeroAddress } ],
+					...fee,
+				});
+				await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
       }
 
       // Check if an agent already exists for this AA address via backend DB
@@ -672,13 +1097,35 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           
           // Build agent metamask AA client
           const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-          const walletClient = createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: eoaAddress as Address });
+          
+          // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+          const agentAdapter = (agentIdentityClient as any).adapter;
+          const ethersProvider = agentAdapter.getProvider();
+          
+          // Convert ethers.js provider to viem-compatible provider
+          const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+          
+          const walletClient = createWalletClient({ 
+            chain: resolvedChain as any, 
+            transport: custom(viemCompatibleProvider as any), 
+            account: eoaAddress as Address 
+          });
           try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
           // Use the agent AA derived from the name to authorize setText via AA
           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
           const BUNDLER_URL = effectiveBundlerUrl;
+          // Create subname using namespace.ninja if available
+          if (namespaceClient && subnameAvailable && ensAgentAddress) {
+            try {
+              await createSubname(agentNameLower, domain, ensAgentAddress as `0x${string}`);
+              console.info('Subname created successfully via namespace.ninja');
+            } catch (subnameError) {
+              console.warn('Failed to create subname via namespace.ninja, continuing with standard ENS setup:', subnameError);
+            }
+          }
+
           await adapterSetAgentIdentity({
             agentENSClient,
             bundlerUrl: BUNDLER_URL,
@@ -773,7 +1220,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
                       // Build AA client using connected EOA (controller) like other parts of the app
                       const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-                      const walletClient = createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: eoaAddress as Address });
+                      
+                      // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+                      const agentAdapter = (agentIdentityClient as any).adapter;
+                      const ethersProvider = agentAdapter.getProvider();
+                      
+                      // Convert ethers.js provider to viem-compatible provider
+                      const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+                      
+                      const walletClient = createWalletClient({ 
+                        chain: resolvedChain as any, 
+                        transport: custom(viemCompatibleProvider as any), 
+                        account: eoaAddress as Address 
+                      });
                       try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
                       console.info("++++++++++++++ orgOwnerAddress", orgOwnerAddress);
@@ -822,6 +1281,80 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
               );
             })()}
           </Typography>
+          
+          {/* Namespace.ninja subname status */}
+          {(() => {
+            return namespaceClient && agentName && domain;
+          })() && (
+            <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
+              <Typography variant="caption" color="info.main" fontWeight="bold">
+                L1/L2 Subname Status:
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {selectedChainIdHex === '0x14a34' 
+                  ? 'Creating Base Sepolia agent with L1 ENS subdomain (L2 registry fallback to L1)'
+                  : 'Creating ETH Sepolia agent with ENS subdomain'
+                }
+              </Typography>
+              {subnameChecking ? (
+                <Typography variant="caption" color="text.secondary">
+                  Checking availability...
+                </Typography>
+              ) : subnameAvailable === true ? (
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="caption" color="success.main">
+                    ✓ {agentName} is available
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => createSubname(agentName, domain, (ensAgentAddress || agentAccount) as `0x${string}`)}
+                    disabled={subnameCreating}
+                    sx={{ width: 'fit-content' }}
+                  >
+                    {subnameCreating ? 'Creating...' : 'Create Subname'}
+                  </Button>
+                </Stack>
+              ) : subnameAvailable === false ? (
+                <Typography variant="caption" color="warning.main">
+                  ⚠ {agentName} is not available
+                </Typography>
+              ) : subnameError ? (
+                <Typography variant="caption" color="error">
+                  Error: {subnameError}
+                </Typography>
+              ) : subnameAvailable === false && selectedChainIdHex === '0x14a34' ? (
+                <Typography variant="caption" color="warning.main">
+                  ⚠ L2 registry unavailable, checked L1 availability instead
+                </Typography>
+              ) : null}
+            </Stack>
+          )}
+          
+          {/* Debug info when namespace client is not available */}
+          {!namespaceClient && agentName && (
+            <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
+              <Typography variant="caption" color="warning.main" fontWeight="bold">
+                Namespace.ninja Status:
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                ⚠ Namespace.ninja client not initialized. Add NEXT_PUBLIC_NAMESPACE_API_KEY to enable subdomain creation.
+              </Typography>
+            </Stack>
+          )}
+          
+          {/* Debug info when namespace client is available but domain is missing */}
+          {namespaceClient && agentName && !domain && (
+            <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
+              <Typography variant="caption" color="info.main" fontWeight="bold">
+                Namespace.ninja Debug:
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                ✓ Client initialized, agentName: {agentName}, but domain is missing: "{domain}"
+              </Typography>
+            </Stack>
+          )}
+          
           <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: 5 }}>
             <Typography variant="caption" color="text.secondary">
               Agent Name: {agentName ? (
@@ -862,7 +1395,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
                     // Build clients for ENS owner AA and agent AA
                     const ensPublicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-                    const ensWalletClient = createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: eoaAddress as Address });
+                    
+                    // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+                    const agentAdapter = (agentIdentityClient as any).adapter;
+                    const ethersProvider = agentAdapter.getProvider();
+                    
+                    // Convert ethers.js provider to viem-compatible provider
+                    const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+                    
+                    const ensWalletClient = createWalletClient({ 
+                      chain: resolvedChain as any, 
+                      transport: custom(viemCompatibleProvider as any), 
+                      account: eoaAddress as Address 
+                    });
                     try { (ensWalletClient as any).account = eoaAddress as Address; } catch {}
 
                     // ENS owner EOA from private key for AA signatory
@@ -949,7 +1494,19 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
                           // Build agent metamask AA client
                           const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-                          const walletClient = createWalletClient({ chain: resolvedChain as any, transport: custom(provider as any), account: eoaAddress as Address });
+                          
+                          // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
+                          const agentAdapter = (agentIdentityClient as any).adapter;
+                          const ethersProvider = agentAdapter.getProvider();
+                          
+                          // Convert ethers.js provider to viem-compatible provider
+                          const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+                          
+                          const walletClient = createWalletClient({ 
+                            chain: resolvedChain as any, 
+                            transport: custom(viemCompatibleProvider as any), 
+                            account: eoaAddress as Address 
+                          });
                           try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
 

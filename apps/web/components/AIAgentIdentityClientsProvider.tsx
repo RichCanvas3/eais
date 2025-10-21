@@ -76,31 +76,45 @@ export function AIAgentIdentityClientsProvider({ children }: Props) {
       const orgPriv = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}` | undefined;
       const result: ClientsByChain = {};
 
+      /*
       let web3authPk: `0x${string}` | null = null;
       try {
+
+        console.log('🔍 AAAA Extracting private key from wallet:', web3AuthProvider, address);
         web3authPk = await extractPrivateKeyFromWallet(web3AuthProvider, address);
-      } catch {}
+        console.log('🔍 Private key extraction result:', web3authPk ? 'SUCCESS' : 'FAILED');
+      } catch (error) {
+        console.error('❌ Error extracting private key:', error);
+      }
+      */
+
+      const eip1193 = web3AuthProvider as any;
+      
 
       for (const cfg of chains) {
-        const orgProvider = new ethers.JsonRpcProvider(cfg.rpcUrl);
-        const orgSigner = orgPriv ? new ethers.Wallet(orgPriv, orgProvider) : undefined;
-        const orgAdapter = orgSigner ? new EthersAdapter(orgProvider, orgSigner) : new EthersAdapter(orgProvider, undefined as any);
+        console.log(`🔍 Processing chain ${cfg.chainIdHex} (${cfg.rpcUrl})`);
 
-        let agentAdapter;
-        if (web3authPk) {
-          const agentSigner = new ethers.Wallet(web3authPk, orgProvider);
-          agentAdapter = new EthersAdapter(orgProvider, agentSigner);
-        } else {
-          // Fallback to BrowserProvider for the first configured chain only
-          try {
-            const browserProvider = new ethers.BrowserProvider(web3AuthProvider as any);
-            const agentSigner = await browserProvider.getSigner();
-            agentAdapter = new EthersAdapter(browserProvider as any, agentSigner);
-          } catch {
-            continue;
-          }
-        }
+        cfg.rpcUrl
+        await eip1193.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: cfg.chainIdHex,            // 84532
+              chainName: "Base Sepolia",
+              nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+              rpcUrls: [cfg.rpcUrl]
+            }]
+          });
+          await eip1193.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: cfg.chainIdHex }]
+          });
 
+        const agentProvider = new ethers.BrowserProvider(eip1193);
+        const agentSigner = await agentProvider.getSigner();
+        const agentAdapter = agentSigner ? new EthersAdapter(agentProvider, agentSigner) : new EthersAdapter(agentProvider, undefined as any);
+
+
+        console.log("🔍 AAAA agentAdapter: ", agentAdapter);
         const client = new AIAgentIdentityClient(
           cfg.rpcUrl,
           agentAdapter,

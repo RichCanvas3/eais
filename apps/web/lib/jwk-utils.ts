@@ -349,7 +349,11 @@ export async function extractPrivateKeyFromWallet(provider: any, address: string
     console.log('🔍 Extracting private key from wallet:', { 
       provider: !!provider, 
       address,
-      providerKeys: provider ? Object.keys(provider) : 'no provider'
+      providerKeys: provider ? Object.keys(provider) : 'no provider',
+      providerType: provider?.constructor?.name,
+      hasPrivateKey: !!(provider?.privateKey),
+      hasPrivateKeyProp: !!(provider?.['privateKey']),
+      providerValues: provider ? Object.values(provider).slice(0, 5) : 'no provider'
     });
     
     // For Web3Auth, try to get the private key from the provider
@@ -363,7 +367,8 @@ export async function extractPrivateKeyFromWallet(provider: any, address: string
       const web3auth = (window as any).web3auth;
       console.log('🔍 Checking global web3auth:', { 
         hasProvider: !!web3auth.provider,
-        providerKeys: web3auth.provider ? Object.keys(web3auth.provider) : 'no provider'
+        providerKeys: web3auth.provider ? Object.keys(web3auth.provider) : 'no provider',
+        hasPrivateKey: !!(web3auth.provider?.privateKey)
       });
       if (web3auth.provider && web3auth.provider.privateKey) {
         console.log('✅ Found private key in global web3auth.provider.privateKey');
@@ -375,6 +380,15 @@ export async function extractPrivateKeyFromWallet(provider: any, address: string
     if (provider && provider._privateKey) {
       console.log('✅ Found private key in provider._privateKey');
       return provider._privateKey as `0x${string}`;
+    }
+    
+    // Check for other possible private key locations
+    const possibleKeys = ['_privateKey', 'privateKey', 'key', '_key', 'signingKey'];
+    for (const key of possibleKeys) {
+      if (provider && provider[key]) {
+        console.log(`✅ Found private key in provider.${key}`);
+        return provider[key] as `0x${string}`;
+      }
     }
     
     // For MetaMask and similar wallets, private keys are not accessible

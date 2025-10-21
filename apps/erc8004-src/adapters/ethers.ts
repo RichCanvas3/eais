@@ -14,6 +14,15 @@ export class EthersAdapter implements BlockchainAdapter {
     this.signer = signer;
   }
 
+  // Public getters to access the private provider and signer
+  getProvider(): ethers.Provider {
+    return this.provider;
+  }
+
+  getSigner(): ethers.Signer | undefined {
+    return this.signer;
+  }
+
   async call(
     contractAddress: string,
     abi: any[],

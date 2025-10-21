@@ -84,13 +84,9 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
 
   // Auto-generate DID document when modal opens
   useEffect(() => {
-    console.log('🔍 DidAgentModal useEffect triggered:', { open, agent: !!agent, provider: !!provider, eoa: !!eoa, ensName });
     if (open && agent && provider && eoa) {
-      console.log('🔍 All conditions met, calling generateDidDocumentAuto...');
       generateDidDocumentAuto();
-    } else {
-      console.log('🔍 Conditions not met:', { open, hasAgent: !!agent, hasProvider: !!provider, hasEoa: !!eoa });
-    }
+    } 
   }, [open, agent, provider, eoa, ensName]);
 
   // Set service endpoints based on agent data when agent changes

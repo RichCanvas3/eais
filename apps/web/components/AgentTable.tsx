@@ -83,15 +83,110 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [identityUpdateError, setIdentityUpdateError] = React.useState<string | null>(null);
 	const [identityTokenUri, setIdentityTokenUri] = React.useState<string | null>(null);
 
+	// Cache: tokenURI validity by agentId (true=json/valid, false=invalid like HTML), null=unknown
+	const [tokenUriValidById, setTokenUriValidById] = React.useState<Record<string, boolean | null>>({});
+
+	// Cache of A2A endpoint JSON previews by agentId
+	const [a2aJsonById, setA2aJsonById] = React.useState<Record<string, string | null>>({});
+
+	// ENS details modal state
+	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
+	const [ensDetailsLoading, setEnsDetailsLoading] = React.useState(false);
+	const [ensDetailsError, setEnsDetailsError] = React.useState<string | null>(null);
+	const [ensDetails, setEnsDetails] = React.useState<{ name: string; tokenId: string; urlText?: string | null; agentIdentity?: string | null; decodedIdentity?: { chainId: number; address: `0x${string}`; agentId: string } | null } | null>(null);
+
+	// Agent INFO modal
+	const [infoOpen, setInfoOpen] = React.useState(false);
+	const [infoLoading, setInfoLoading] = React.useState(false);
+	const [infoError, setInfoError] = React.useState<string | null>(null);
+	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
+
+	// Agent Card modal state
+	const [cardOpen, setCardOpen] = React.useState(false);
+	const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | null>(null);
+	const [cardJson, setCardJson] = React.useState<string | null>(null);
+	const [cardDomain, setCardDomain] = React.useState<string | null>(null);
+	const [cardError, setCardError] = React.useState<string | null>(null);
+	const [cardLoading, setCardLoading] = React.useState(false);
+	const [cardFields, setCardFields] = React.useState<Record<string, any>>({});
+
+	// Session modal state
+	const [sessionOpen, setSessionOpen] = React.useState(false);
+	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
+	const [sessionLoading, setSessionLoading] = React.useState(false);
+
+	// Feedback modal state
+	const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+	const [feedbackData, setFeedbackData] = React.useState<any[]>([]);
+	const [feedbackLoading, setFeedbackLoading] = React.useState(false);
+	const [feedbackError, setFeedbackError] = React.useState<string | null>(null);
+	const [allFeedbackOpen, setAllFeedbackOpen] = React.useState(false);
+	const [allFeedbackData, setAllFeedbackData] = React.useState<any[]>([]);
+	const [allFeedbackLoading, setAllFeedbackLoading] = React.useState(false);
+	const [allFeedbackError, setAllFeedbackError] = React.useState<string | null>(null);
+	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
+
+	// Agent ENS names and metadata
+	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
+	const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
+	const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
+
+	// ENS modal state
+	const [ensOpen, setEnsOpen] = React.useState(false);
+	const [ensData, setEnsData] = React.useState<{
+		agentName: string;
+		agentAccount: string;
+		agentId: string;
+		agentAddress: string;
+		agentOwner: string;
+		agentEndpoint: string;
+		agentENSDomain: string;
+		agentDNSDomain: string;
+		agentENSName: string;
+		agentAccountEndpoint: string;
+		metadataURI: string;
+		blockNumber: number;
+		transactionHash: string;
+		ensEndpoint: string;
+		a2aEndpoint: string;
+	} | null>(null);
+	const [ensLoading, setEnsLoading] = React.useState(false);
+	const [ensError, setEnsError] = React.useState<string | null>(null);
+	const [ensCurrentAgent, setEnsCurrentAgent] = React.useState<Agent | null>(null);
+	const [ensSubdomainName, setEnsSubdomainName] = React.useState('');
+	const [ensParentName, setEnsParentName] = React.useState('');
+	const [isCheckingWrapStatus, setIsCheckingWrapStatus] = React.useState(false);
+	const [orgOwner, setOrgOwner] = React.useState<string | null>(null);
+
+	// Modal states
+	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
+	const [didWebOpen, setDidWebOpen] = React.useState(false);
+	const [didAgentOpen, setDidAgentOpen] = React.useState(false);
+	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
+	const [currentAgentEnsName, setCurrentAgentEnsName] = React.useState<string | null>(null);
+
+	// Trust graph modal state
+	const [trustGraphOpen, setTrustGraphOpen] = React.useState(false);
+	const [currentAgentForGraph, setCurrentAgentForGraph] = React.useState<Agent | null>(null);
+
+	// Refs
+	const saveTimeoutRef = React.useRef<number | undefined>(undefined);
+	const agentIdentityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
+	const agentENSClientRef = React.useRef<AIAgentENSClient | null>(null);
+	const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
+
+	// Client hooks
+	const agentENSClient = useAgentENSClient();
+    const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
+	const orgIdentityClient = useOrgIdentityClient();
+
 	function isValidRegistrationUri(uri?: string | null): boolean {
 		if (!uri) return false;
 		const u = String(uri).trim().replace(/^@+/, '');
 		return /^https?:\/\//i.test(u) || /^ipfs:\/\//i.test(u);
 	}
 
-	// Cache: tokenURI validity by agentId (true=json/valid, false=invalid like HTML), null=unknown
-	const [tokenUriValidById, setTokenUriValidById] = React.useState<Record<string, boolean | null>>({});
-
+	/*
 	React.useEffect(() => {
 		try {
 			const rows = data?.rows || [];
@@ -141,18 +236,17 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 							return false;
 						}
 					})
-          .then((ok) => {
-            setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
-          })
-          .catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
-			});
-		} catch {}
+					.then((ok) => {
+						setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
+					})
+					.catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
+						});
+					 } catch {}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [data?.rows]);
+	*/
 
-	// Cache of A2A endpoint JSON previews by agentId
-	const [a2aJsonById, setA2aJsonById] = React.useState<Record<string, string | null>>({});
-
+	/*
 	React.useEffect(() => {
 		try {
 			const rows = data?.rows || [];
@@ -180,22 +274,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 		} catch {}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [data?.rows]);
-
-	// ENS details modal state
-	const [ensDetailsOpen, setEnsDetailsOpen] = React.useState(false);
-	const [ensDetailsLoading, setEnsDetailsLoading] = React.useState(false);
-	const [ensDetailsError, setEnsDetailsError] = React.useState<string | null>(null);
-	const [ensDetails, setEnsDetails] = React.useState<{ name: string; tokenId: string; urlText?: string | null; agentIdentity?: string | null; decodedIdentity?: { chainId: number; address: `0x${string}`; agentId: string } | null } | null>(null);
-
-	// Agent INFO modal
-	const [infoOpen, setInfoOpen] = React.useState(false);
-	const [infoLoading, setInfoLoading] = React.useState(false);
-	const [infoError, setInfoError] = React.useState<string | null>(null);
-	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
-	
-	const agentENSClient = useAgentENSClient();
-    const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
-	const orgIdentityClient = useOrgIdentityClient();
+	*/
 
 	async function openIdentityJson(row: Agent) {
 		try {
@@ -456,6 +535,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	};
 
 	// Fetch ENS names when data changes
+	/*
     React.useEffect(() => {
         if (data?.rows) {
             data.rows.forEach(async (row) => {
@@ -478,6 +558,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
             });
         }
     }, [data?.rows]);
+	*/
 
 
 	// Check if parent ENS domain is already wrapped
@@ -537,65 +618,6 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			setIsCheckingWrapStatus(false);
 		}
 	};
-
-const [cardOpen, setCardOpen] = React.useState(false);
-const [currentAgentForCard, setCurrentAgentForCard] = React.useState<Agent | null>(null);
-	const [cardJson, setCardJson] = React.useState<string | null>(null);
-	const [cardDomain, setCardDomain] = React.useState<string | null>(null);
-	const [cardError, setCardError] = React.useState<string | null>(null);
-	const [cardLoading, setCardLoading] = React.useState(false);
-	const [cardFields, setCardFields] = React.useState<Record<string, any>>({});
-	const saveTimeoutRef = React.useRef<number | undefined>(undefined);
-
-	const [sessionOpen, setSessionOpen] = React.useState(false);
-	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
-	const [sessionLoading, setSessionLoading] = React.useState(false);
-
-	const [feedbackOpen, setFeedbackOpen] = React.useState(false);
-	const [feedbackData, setFeedbackData] = React.useState<any[]>([]);
-	const [feedbackLoading, setFeedbackLoading] = React.useState(false);
-	const [feedbackError, setFeedbackError] = React.useState<string | null>(null);
-	const [allFeedbackOpen, setAllFeedbackOpen] = React.useState(false);
-	const [allFeedbackData, setAllFeedbackData] = React.useState<any[]>([]);
-	const [allFeedbackLoading, setAllFeedbackLoading] = React.useState(false);
-	const [allFeedbackError, setAllFeedbackError] = React.useState<string | null>(null);
-	const [currentAgent, setCurrentAgent] = React.useState<Agent | null>(null);
-// legacy state no longer used; feedback is read from Reputation Registry
-// const [agentFeedbackURIs, setAgentFeedbackURIs] = React.useState<Record<string, string>>({});
-const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
-const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
-const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
-const agentIdentityClientRef = React.useRef<AIAgentIdentityClient | null>(null);
-const agentENSClientRef = React.useRef<AIAgentENSClient | null>(null);
-const orgIdentityClientRef = React.useRef<OrgIdentityClient | null>(null);
-
-	const [ensOpen, setEnsOpen] = React.useState(false);
-	const [ensData, setEnsData] = React.useState<{
-		name: string | null;
-		avatar: string | null;
-		website: string | null;
-		email: string | null;
-		twitter: string | null;
-		github: string | null;
-		discord: string | null;
-	} | null>(null);
-	const [ensLoading, setEnsLoading] = React.useState(false);
-	const [ensError, setEnsError] = React.useState<string | null>(null);
-	const [ensCurrentAgent, setEnsCurrentAgent] = React.useState<Agent | null>(null);
-	const [ensSubdomainName, setEnsSubdomainName] = React.useState('');
-	const [ensParentName, setEnsParentName] = React.useState('');
-	const [isCheckingWrapStatus, setIsCheckingWrapStatus] = React.useState(false);
-	const [orgOwner, setOrgOwner] = React.useState<string | null>(null);
-	
-	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
-	const [didWebOpen, setDidWebOpen] = React.useState(false);
-	const [didAgentOpen, setDidAgentOpen] = React.useState(false);
-	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
-	const [currentAgentEnsName, setCurrentAgentEnsName] = React.useState<string | null>(null);
-	
-	// Trust graph modal state
-	const [trustGraphOpen, setTrustGraphOpen] = React.useState(false);
-	const [currentAgentForGraph, setCurrentAgentForGraph] = React.useState<Agent | null>(null);
 
 	function scheduleAutoSave() {
 		if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);

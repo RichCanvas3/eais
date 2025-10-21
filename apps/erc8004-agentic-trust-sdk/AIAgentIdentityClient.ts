@@ -61,7 +61,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
     console.info("name: ", name);
     console.info("agentAccount: ", agentAccount);
-    
+
     // check that ENS name is associated with this agent account
     /*
     const foundAccount = await this.getAgentAccountByName(name);
@@ -188,10 +188,9 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
    * Get agentName from on-chain metadata (string value)
    */
   async getAgentName(agentId: bigint): Promise<string | null> {
-    console.info("++++++++++++++++++++++++ getAgentName: agentId", agentId);
+
     try {
       const name = await (this as any).getMetadata(agentId, 'agentName');
-      console.info("++++++++++++++++++++++++ getAgentName: name", name);
       if (typeof name === 'string') {
         const trimmed = name.trim();
         return trimmed.length > 0 ? trimmed : null;
@@ -235,10 +234,6 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
   extractAgentIdFromLogs(receipt: any): bigint {
     return this.extractAgentIdFromReceiptPublic(receipt);
   }
-
-
-
-
 
 }
 
