@@ -33,6 +33,7 @@ import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.jso
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 import { useAgentIdentityClientFor } from './AIAgentIdentityClientsProvider';
 import { useAgentENSClient } from './AIAgentENSClientProvider';
+import { useAgentENSClientFor } from './AIAgentENSClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;

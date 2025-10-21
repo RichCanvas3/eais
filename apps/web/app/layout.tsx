@@ -5,6 +5,7 @@ import { OrgIdentityClientProvider } from '@/components/OrgIdentityClientProvide
 import {  AIAgentIdentityClientProvider } from '@/components/AIAgentIdentityClientProvider';
 import { AIAgentIdentityClientsProvider } from '@/components/AIAgentIdentityClientsProvider';
 import { AIAgentENSClientProvider } from '@/components/AIAgentENSClientProvider';
+import { AIAgentENSClientsProvider } from '@/components/AIAgentENSClientsProvider';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -17,14 +18,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             rpcUrl={process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string}
           >
             <AIAgentENSClientProvider>
-              <OrgIdentityClientProvider>
-              
-              <AIAgentIdentityClientProvider>
-              <AIAgentIdentityClientsProvider>
-                {children}
-                </AIAgentIdentityClientsProvider>
-              </AIAgentIdentityClientProvider>
-              </OrgIdentityClientProvider>
+              <AIAgentENSClientsProvider>
+                <OrgIdentityClientProvider>
+                
+                <AIAgentIdentityClientProvider>
+                <AIAgentIdentityClientsProvider>
+                  {children}
+                  </AIAgentIdentityClientsProvider>
+                </AIAgentIdentityClientProvider>
+                </OrgIdentityClientProvider>
+              </AIAgentENSClientsProvider>
             </AIAgentENSClientProvider>
             </Web3AuthProvider>
         </ThemeRegistry>
