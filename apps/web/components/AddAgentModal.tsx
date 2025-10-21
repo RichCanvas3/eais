@@ -1274,26 +1274,22 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     setOrgUrlError(null);
 
                     if (orgOwnerIsContract) {
-
-                      // Build AA client using connected EOA (controller) like other parts of the app
-                      const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-                      
-                      // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
-                      const agentAdapter = (agentIdentityClient as any).adapter;
-                      const ethersProvider = agentAdapter.getProvider();
-                      
-                      // Convert ethers.js provider to viem-compatible provider
-                      const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+                      // Use private key from environment for org operations
+                      const orgPrivateKey = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`;
+                      if (!orgPrivateKey) {
+                        throw new Error('NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY not found');
+                      }
+                      const orgAccount = privateKeyToAccount(orgPrivateKey);
                       
                       const walletClient = createWalletClient({ 
-                        chain: resolvedChain as any, 
-                        transport: custom(viemCompatibleProvider as any), 
-                        account: eoaAddress as Address 
+                        chain: sepolia, // Always use L1 for org operations
+                        transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string), 
+                        account: orgAccount 
                       });
-                      try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
                       console.info("++++++++++++++ orgOwnerAddress", orgOwnerAddress);
-
+                      const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
+                      
                       const smartAccountClient = await toMetaMaskSmartAccount({
                         address: orgOwnerAddress as `0x${string}`,
                         client: publicClient,
@@ -1301,15 +1297,31 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                         signatory: { walletClient },
                       });
 
-                      const BUNDLER_URL = effectiveBundlerUrl;
-                      await adapterSetAgentNameUri({
-                        agentENSClient: getENSClientForChain(),
-                        bundlerUrl: BUNDLER_URL,
-                        chain: resolvedChain,
-                        agentAccountClient: smartAccountClient,
-                        agentName,
-                        agentUri: agentUrlEdit.trim(),
-                      });
+                      // Use ensService to set org URL
+                      const orgName = cleanOrg(org);
+                      const orgFullName = `${orgName}.eth`;
+                      const node = namehash(orgFullName);
+                      
+                      // Get resolver address for the org
+                      const resolverAddress = await publicClient.readContract({
+                        address: process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`,
+                        abi: [{ name: 'resolver', type: 'function', stateMutability: 'view', inputs: [{ type: 'bytes32' }], outputs: [{ type: 'address' }] }],
+                        functionName: 'resolver',
+                        args: [node]
+                      }) as `0x${string}`;
+                      
+                      if (!resolverAddress || resolverAddress === '0x0000000000000000000000000000000000000000') {
+                        throw new Error('No resolver set for org domain');
+                      }
+                      
+                      await ensService.setTextWithAA(
+                        smartAccountClient,
+                        resolverAddress,
+                        node,
+                        'url',
+                        orgUrlEdit.trim(),
+                        sepolia
+                      );
 
                      } 
                     setOrgUrlText(orgUrlEdit.trim());
@@ -1319,7 +1331,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     setOrgUrlSaving(false);
                   }
                 }}
-              >Save URL</Button>
+              >Save Org URL</Button>
             </Stack>
           )}
           
