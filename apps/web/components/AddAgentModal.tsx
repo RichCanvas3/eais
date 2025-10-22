@@ -426,6 +426,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         setAgentExists(true);
         setAgentAvailable(false);
         
+        // Update ownership state to reflect that the current user now owns the agent name
+        if (eoaAddress) {
+          setEnsAgentOwnerEoa(eoaAddress);
+          console.log("Setting ensAgentOwnerEoa to:", eoaAddress);
+        }
+        
         // Refresh the agent URL and other related data
         try {
           console.log("Refreshing agent URL for:", agentName);
@@ -1407,6 +1413,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                   </Typography>
                   
               {/* Only show URL editing if the agent name is owned by the current user */}
+              {console.log("URL editing check - ensAgentOwnerEoa:", ensAgentOwnerEoa, "eoaAddress:", eoaAddress, "match:", ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase())}
               {ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase() ? (
                   <Stack direction="row" spacing={1} alignItems="center">
                   <TextField 
