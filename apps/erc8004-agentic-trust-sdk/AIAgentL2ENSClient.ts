@@ -132,4 +132,40 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
   getNamespaceClient(): any {
     return this.namespaceClient;
   }
+
+  /**
+   * Override prepareAddAgentNameToOrgCalls to use namespace.ninja SDK for L2
+   */
+  async prepareAddAgentNameToOrgCalls(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;          // e.g., 'my-agent'
+    agentAddress: `0x${string}`; // AA address for the agent name
+    agentUrl?: string | null    // optional URL
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] }> {
+    
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(params.orgName);
+    const label = clean(params.agentName).replace(/\s+/g, '-');
+    const fullSubname = `${label}.${parent}.eth`;
+    
+    // Use the namespace.ninja SDK to create the subname
+    const mintParams = await this.createSubname({
+      fullSubname,
+      parentName: `${parent}.eth`,
+      label,
+      addressToUse: params.agentAddress,
+      description: '', // We can add description support later if needed
+      chainId: (this as any).chain.id,
+      isBaseSepolia: true
+    });
+    
+    // Return the mint transaction parameters as calls
+    return {
+      calls: [{
+        to: mintParams.to as `0x${string}`,
+        data: mintParams.data as `0x${string}`,
+        value: mintParams.value || 0n
+      }]
+    };
+  }
 }

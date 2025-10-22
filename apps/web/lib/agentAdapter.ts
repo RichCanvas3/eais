@@ -3,6 +3,7 @@ import { createBundlerClient, createPaymasterClient } from 'viem/account-abstrac
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { AIAgentENSClient, AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
+import { fetchInternalImage } from "next/dist/server/image-optimizer";
 
 const registryAbi = IdentityRegistryABI as any;
 
@@ -208,6 +209,7 @@ export async function getAgentInfoByName(params: {
   return null;
 }
 
+
 export async function deploySmartAccountIfNeeded(params: {
   bundlerUrl: string,
   chain: Chain,
@@ -239,10 +241,22 @@ export async function sendSponsoredUserOperation(params: {
     paymasterContext: { mode: 'SPONSORED' } 
   } as any);
   const { fast: fee } = await (pimlicoClient as any).getUserOperationGasPrice();
+  
+  // Use hardcoded gas values to avoid estimation issues
+  /*
+  const gasConfig = {
+    callGasLimit: 1000000n,
+    verificationGasLimit: 1000000n,
+    preVerificationGas: 1000000n,
+    maxFeePerGas: 1000000000n, // 1 gwei
+    maxPriorityFeePerGas: 1000000000n // 1 gwei
+  };
+  */
+  
   const userOpHash = await (bundlerClient as any).sendUserOperation({ 
     account: accountClient, 
     calls,
-    ...fee 
+    ...fee
   });
   return userOpHash as `0x${string}`;
 }
@@ -261,9 +275,25 @@ export async function addAgentNameToOrg(params: {
   const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
 
   // 1. Add agent name to org within ENS
+  console.log('********************* prepareAddAgentNameToOrgCalls');
+  console.log('********************* orgName', orgName);
+  console.log('********************* agentName', agentName);
+  console.log('********************* agentAccount', agentAccount);
+  
+  // Clean orgName: remove .eth suffix
+  const cleanOrgName = orgName.replace(/\.eth$/i, '');
+  
+  // Clean agentName: remove leading orgName + . and .eth suffix
+  const cleanAgentName = agentName
+    .replace(new RegExp(`^${cleanOrgName}\\.`, 'i'), '') // Remove leading orgName.
+    .replace(/\.eth$/i, ''); // Remove .eth suffix
+  
+  console.log('********************* cleanOrgName', cleanOrgName);
+  console.log('********************* cleanAgentName', cleanAgentName);
+  
   const { calls : orgCalls } = await agentENSClient.prepareAddAgentNameToOrgCalls({
-    orgName,
-    agentName,
+    orgName: cleanOrgName,
+    agentName: cleanAgentName,
     agentAddress: agentAccount
   });
 
@@ -275,11 +305,14 @@ export async function addAgentNameToOrg(params: {
     calls: orgCalls
   });
   const { receipt: orgReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash1 });
+  console.log('********************* orgReceipt', orgReceipt);
+
 
   // 2. Set agent name info within ENS
+  console.log('********************* prepareSetAgentNameInfoCalls');
   const { calls: agentCalls } = await agentENSClient.prepareSetAgentNameInfoCalls({
-    orgName,
-    agentName,
+    orgName: cleanOrgName,
+    agentName: cleanAgentName,
     agentAddress: agentAccount,
     agentUrl: agentUrl
   });
@@ -292,6 +325,8 @@ export async function addAgentNameToOrg(params: {
   });
 
   const { receipt: agentReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash2 });
+  console.log('********************* agentReceipt', agentReceipt);
+
 
   return userOpHash1 as `0x${string}`;
 }

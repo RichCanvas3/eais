@@ -1318,11 +1318,13 @@ class ensService {
         // Create public client for reading contract data
         const publicClient = createPublicClient({
           chain: chain,
-          transport: http(process.env.NEXT_PUBLIC_RPC_URL),
+          transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL),
         });
 
+
+
         // Check if the parent domain is wrapped by checking if ENS Registry owner is NameWrapper
-        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+        const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
         const parentNode = namehash(parentName + '.eth');
         
         const parentOwner = await publicClient.readContract({
@@ -1342,13 +1344,13 @@ class ensService {
         
         // For wrapped ENS records, we need to get the actual owner from NameWrapper
         let actualOwner: string;
-        if (parentOwner.toLowerCase() === ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8').toLowerCase()) {
+        if (parentOwner.toLowerCase() === ((process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8').toLowerCase()) {
           console.log('✅ Parent domain is wrapped, getting NameWrapper owner...');
           
           try {
             const tokenId = BigInt(parentNode);
             actualOwner = await publicClient.readContract({
-              address: ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
+              address: ((process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8') as `0x${string}`,
               abi: NameWrapperABI.abi,
               functionName: 'ownerOf',
               args: [tokenId]
@@ -1374,7 +1376,7 @@ class ensService {
 
                  // Set up contracts
          const nameWrapper = new ethers.Contract(
-           (process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+           (process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8',
            NameWrapperABI.abi,
            signer
          );
@@ -1419,7 +1421,7 @@ class ensService {
         });
 
         const pimlicoClient = createPimlicoClient({
-          transport: http(process.env.NEXT_PUBLIC_BUNDLER_URL),
+          transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string),
         });
 
         const { fast: gasFee } = await pimlicoClient.getUserOperationGasPrice();

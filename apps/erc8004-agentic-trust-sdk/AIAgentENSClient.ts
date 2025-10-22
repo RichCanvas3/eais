@@ -289,17 +289,17 @@ export class AIAgentENSClient {
       // Handle empty response
       if (!value || value === '0x' || value === '') {
         console.info("++++++++++++++++++++ getAgentIdentityByName: empty agent-identity text record");
-        return null;
+        return { agentId: null, account: null };
       }
       
       const decoded = this.decodeAgentIdentity(value as string);
       agentId = decoded?.agentId ?? null;
     } catch (error) {
       console.info("++++++++++++++++++++ getAgentIdentityByName 2: error", error);
-      return null; // Return null if we can't get the text record
+      return { agentId: null, account: null }; // Return null if we can't get the text record
     }
 
-    return agentId;
+    return { agentId, account: null };
   }
 
 
@@ -600,6 +600,11 @@ export class AIAgentENSClient {
     const clean = (s: string) => (s || '').trim().toLowerCase();
     const parent = clean(params.orgName);
     const label = clean(params.agentName).replace(/\s+/g, '-');
+
+    console.info("@@@@@@@@@@@@@@@@@@@ parent: ", parent);
+    console.info("@@@@@@@@@@@@@@@@@@@ label: ", label);
+    console.info("@@@@@@@@@@@@@@@@@@@ agentAddress: ", params.agentAddress);
+    console.info("@@@@@@@@@@@@@@@@@@@ NEXT_PUBLIC_ETH_SEPOLIA_ENS_PUBLIC_RESOLVER: ", process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PUBLIC_RESOLVER);
 
 
     const parentNode = namehash(parent + ".eth");

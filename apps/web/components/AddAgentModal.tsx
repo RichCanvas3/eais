@@ -1,5 +1,6 @@
 'use client';
 import * as React from 'react';
+import { ethers } from 'ethers';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { createAgentAdapter, 
@@ -101,9 +102,14 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   // Conditional hook after all other hooks
   const agentIdentityClient = useAgentIdentityClientFor(selectedChainIdHex) || useAgentIdentityClient();
   
+  // Get all ENS clients at component level
+  const { useAgentENSClients } = require('./AIAgentENSClientsProvider');
+  const allENSClients = useAgentENSClients();
+
   // Helper function to get the appropriate ENS client for the selected chain
   const getENSClientForChain = () => {
-    return agentENSClientForChain || agentENSClient;
+    const client = agentENSClientForChain || agentENSClient;
+    return client;
   };
 
   // Helper function to convert ethers.js provider to viem-compatible provider
@@ -245,10 +251,17 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       try {
         const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
         
-        console.info("@@@@@@@@@@@@@@@@@@@ agentIdentityClient: ", agentIdentityClient);
+        console.info("@@@@@@@@@@@@@@@@@@@ selectedChainIdHex: ", selectedChainIdHex);
+        console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain: ", resolvedChain);
+        console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain.id: ", resolvedChain.id);
+        
+        // Get the correct agentIdentityClient for the selected chain from the clients object
+        const correctAgentIdentityClient = clients[selectedChainIdHex || ''] || agentIdentityClient;
+        console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient: ", correctAgentIdentityClient);
+        console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient chain: ", (correctAgentIdentityClient as any)?.chain);
         
         // Use the selected chain's provider by converting ethers.js provider to viem-compatible format
-        const agentAdapter = (agentIdentityClient as any).adapter;
+        const agentAdapter = (correctAgentIdentityClient as any).adapter;
         const ethersProvider = agentAdapter.getProvider();
         console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider: ", ethersProvider);
         
@@ -336,9 +349,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         const deployed = await agentAccountClient.isDeployed();
         if (!deployed) {
           
-
-  
-          console.info("using hardcoded gas fees for deployment");
           const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
           console.info("fee: ", fee);
 
@@ -367,56 +377,71 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             console.info("error deploying indivAccountClient: ", error);
           }
         }
+        console.log('deployment done ======> prepareAddAgentNameToOrgCalls');
+
+        // ENS Owner AA: parent domain controller
+        const l1RpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+        const l1PublicClient = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
+        const ensPrivateKey = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`;
+        const orgOwnerEOA = privateKeyToAccount(ensPrivateKey);
+
+        console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerAddress: ", orgOwnerAddress);
+        console.info("@@@@@@@@@@@@@@@@@@@ l1RpcUrl: ", l1RpcUrl);
+        console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerEOA: ", orgOwnerEOA);
+        console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain: ", resolvedChain.id);
+        console.info("@@@@@@@@@@@@@@@@@@@ parentName: ", parentName);
+        console.info("@@@@@@@@@@@@@@@@@@@ orgStatus: ", orgStatus);
+        console.info("@@@@@@@@@@@@@@@@@@@ agentAccountClient address: ", await agentAccountClient.getAddress());
+        const agentAccountAddress = await agentAccountClient.getAddress();
         
-        const chainName = isBaseSepolia ? 'base-sepolia' : 'eth-sepolia';
+                    
+        const orgAccountClient = await toMetaMaskSmartAccount({
+          address: orgOwnerAddress as `0x${string}`,
+          client: l1PublicClient,
+          implementation: Implementation.Hybrid,
+          signatory: { account: orgOwnerEOA },
+        } as any);
 
-      // Get mint transaction parameters from ENS client
-      const ensClientForSubname = getENSClientForChain();
-      const mintParams = await (ensClientForSubname as any).createSubname({
-        fullSubname,
-        parentName,
-        label,
-        addressToUse,
-        description,
-        chainId,
-        isBaseSepolia
-      });
-      
-      // Extract transaction parameters
-      const { to, data, value } = mintParams;
+        const agentNameLabel = agentName.trim().split('.')[0];
+        console.info("@@@@@@@@@@@@@@@@@@@ agentNameLabel: ", agentNameLabel);
 
 
-
-        const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
-
-        // Send user operation via bundler with estimated gas
-        const userOperationHash = await bundlerClient.sendUserOperation({
-          account: agentAccountClient,
-          calls: [{
-            to: to as `0x${string}`,
-            data: data as `0x${string}`,
-            value: value,
-          }],
-          ...fee,
+        // Use the adapter to add agent name to org
+        await adapterAddAgentNameToOrg({
+          agentENSClient: getENSClientForChain(),
+          bundlerUrl: effectiveBundlerUrl,
+          chain: resolvedChain,
+          orgAccountClient: orgAccountClient, 
+          orgName: parentName,
+          agentAccountClient,
+          agentName: agentNameLabel,
+          agentUrl: description ?? undefined,
+          agentAccount: addressToUse as `0x${string}`,
         });
-        
-        console.log("UserOp submitted:", userOperationHash);
 
+        console.log("Agent name added to org successfully!");
         
-        // Wait for the transaction to be mined
-        const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
-        console.log("Subname minted successfully! Transaction hash:", receipt.receipt.transactionHash);
+        // Update state to reflect that the agent name now exists
+        console.log("Setting agentExists to true and agentAvailable to false");
+        setAgentExists(true);
+        setAgentAvailable(false);
         
+        // Refresh the agent URL and other related data
+        try {
+          console.log("Refreshing agent URL for:", agentName);
+          const normalized = await getENSClientForChain().getAgentUrlByName(agentName);
+          console.log("Retrieved agent URL:", normalized);
+          setAgentUrlText(normalized);
+          setAgentUrlEdit(normalized ?? '');
+          setAgentUrlIsAuto(false);
+        } catch (e) {
+          console.warn('Failed to refresh agent URL after creation:', e);
+        }
 
-
-
-
-        
-        // Now set up ENS records using the chain-specific ENS client
-        const ensClientForRecords = getENSClientForChain();
-        console.log("Setting up ENS records for subname:", fullSubname);
-        
         /*
+        console.log("Agent name added to org successfully!");
+        
+        
         // Prepare and execute ENS record calls
         try {
           // Set the agent-identity record
@@ -490,8 +515,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           // Don't fail the entire operation if ENS setup fails
         }
         */
-        
-        setAgentAvailable(false); // Mark as no longer available since we created it
       
     } catch (error) {
       console.error('Error creating agent name:', error);
@@ -503,6 +526,25 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
   async function getDefaultAgentAccountClient(agentName: string, publicClient: any, walletClient: any)  {
     try {
+      // Ensure wallet is connected to the correct chain
+      const currentChainId = await walletClient.getChainId();
+      console.info("@@@@@@@@@@@@@@@@@@@ getDefaultAgentAccountClient - currentChainId: ", currentChainId);
+      console.info("@@@@@@@@@@@@@@@@@@@ getDefaultAgentAccountClient - resolvedChain.id: ", resolvedChain.id);
+      console.info("@@@@@@@@@@@@@@@@@@@ getDefaultAgentAccountClient - resolvedChain.name: ", resolvedChain.name);
+      
+      if (currentChainId !== resolvedChain.id) {
+        console.info(`🔄 Wallet is on chain ${currentChainId}, switching to ${resolvedChain.id} (${resolvedChain.name})`);
+        
+        // Try to switch the wallet to the correct chain
+        try {
+          await walletClient.switchChain({ id: resolvedChain.id });
+          console.info(`✅ Successfully switched to chain ${resolvedChain.id}`);
+        } catch (switchError) {
+          console.error(`❌ Failed to switch chain:`, switchError);
+          throw new Error(`Wallet is connected to chain ${currentChainId} but expected chain ${resolvedChain.id}. Please switch to ${resolvedChain.name} manually.`);
+        }
+      }
+
       if (agentName && agentName.trim() !== '') {
         // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
         const { agentId, account } = await getENSClientForChain().getAgentIdentityByName(agentName.trim());
@@ -695,12 +737,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             const agentId = await getENSClientForChain().getAgentIdentityByName(agentName);
             if (agentId) {
               console.info('agent-identity exists:', agentId);
-            } else {
-              console.info('agent-identity text not set');
-            }
-          } catch (e) {
-            console.info('failed to read/parse agent-identity text', e);
+          } else {
+            console.info('agent-identity text not set');
           }
+        } catch (e) {
+          console.info('failed to read/parse agent-identity text', e);
+        }
         
       } catch (e: any) {
         if (!cancelled) setAgentUrlError(e?.message ?? 'Failed to read agent url');
@@ -1134,17 +1176,17 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" sx={{ '& .MuiDialog-paper': { minHeight: '600px' } }}>
       <DialogTitle>
         Create Agent Identity
         <Typography variant="caption" color="text.secondary" display="block">
           Connected EOA: {eoaAddress ?? 'Not connected'}
         </Typography>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ overflow: 'visible' }}>
         <Stack spacing={2}>
           <TextField label="Org" placeholder="airbnb.eth" value={org} onChange={(e) => setOrg(e.target.value)} fullWidth autoFocus />
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5 }}>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5, wordBreak: 'break-all', minHeight: '20px' }}>
             {org ? (
               orgStatusLoading ? 'Org: checking…' : orgStatusError ? `Org: error — ${orgStatusError}` : orgStatus?.exists ? (
                 (() => {
@@ -1209,7 +1251,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
 
                       console.info("++++++++++++++ orgOwnerAddress", orgOwnerAddress);
                       const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
-                      
+
                       const smartAccountClient = await toMetaMaskSmartAccount({
                         address: orgOwnerAddress as `0x${string}`,
                         client: publicClient,
@@ -1349,9 +1391,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
               ) : null
             )}
 
-          </Stack>
+                </Stack>
           
           {/* Agent URL - Available when Agent Name is created (exists) and owned by current user */}
+          {console.log("Agent URL section check - agentName:", agentName, "agentExists:", agentExists, "condition:", agentName && agentExists === true)}
           {agentName && agentExists === true && (
             <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
               <Typography variant="caption" color="info.main" fontWeight="bold">
@@ -1359,13 +1402,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {agentUrlLoading ? 'checking…' : agentUrlError ? `error — ${agentUrlError}` : agentUrlText ? (
-                  <a href={agentUrlText} target="_blank" rel="noopener noreferrer">{agentUrlText}</a>
-                ) : 'not set'}
-              </Typography>
-              
+                      <a href={agentUrlText} target="_blank" rel="noopener noreferrer">{agentUrlText}</a>
+                    ) : 'not set'}
+                  </Typography>
+                  
               {/* Only show URL editing if the agent name is owned by the current user */}
               {ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase() ? (
-                <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} alignItems="center">
                   <TextField 
                     label="Set Agent URL" 
                     placeholder="https://example.com/agent-name" 
@@ -1373,20 +1416,20 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                     onChange={(e) => { setAgentUrlEdit(e.target.value); setAgentUrlIsAuto(false); }} 
                     fullWidth 
                   />
-                  <Button
-                    variant="outlined"
-                    disabled={Boolean(
-                      agentUrlSaving ||
-                      !provider ||
+                    <Button
+                      variant="outlined"
+                      disabled={Boolean(
+                        agentUrlSaving ||
+                        !provider ||
                       !agentName ||
-                      !/^https?:\/\//i.test(agentUrlEdit.trim())
-                    )}
-                    onClick={async () => {
-                      try {
-                        setAgentUrlSaving(true);
-                        setAgentUrlError(null);
+                        !/^https?:\/\//i.test(agentUrlEdit.trim())
+                      )}
+                      onClick={async () => {
+                        try {
+                          setAgentUrlSaving(true);
+                          setAgentUrlError(null);
 
-                        // Build agent metamask AA client
+                          // Build agent metamask AA client
                         const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
                         
                         // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
@@ -1403,28 +1446,28 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                         });
                         try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
-                        // Use the agent AA derived from the name to authorize setText via AA
-                        const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
+                          // Use the agent AA derived from the name to authorize setText via AA
+                          const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
                         const BUNDLER_URL = effectiveBundlerUrl;
-                        await adapterSetAgentNameUri({
+                          await adapterSetAgentNameUri({
                           agentENSClient: getENSClientForChain(),
-                          bundlerUrl: BUNDLER_URL,
+                            bundlerUrl: BUNDLER_URL,
                           chain: resolvedChain,
-                          agentAccountClient,
-                          agentName,
-                          agentUri: agentUrlEdit.trim(),
-                        });
+                            agentAccountClient,
+                            agentName,
+                            agentUri: agentUrlEdit.trim(),
+                          });
 
-                        setAgentUrlText(agentUrlEdit.trim());
-                      } catch (e: any) {
-                        setAgentUrlError(e?.message ?? 'Failed to set agent url');
-                      } finally {
-                        setAgentUrlSaving(false);
-                      }
-                    }}
-                  >Save URL</Button>
-                </Stack>
+                          setAgentUrlText(agentUrlEdit.trim());
+                        } catch (e: any) {
+                          setAgentUrlError(e?.message ?? 'Failed to set agent url');
+                        } finally {
+                          setAgentUrlSaving(false);
+                        }
+                      }}
+                    >Save URL</Button>
+                  </Stack>
               ) : ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase() ? (
                 <Typography variant="caption" color="warning.main">
                   ⚠ Agent name is owned by a different account. You cannot modify the URL.
@@ -1440,7 +1483,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
            !agentUrlLoading && 
            agentIdentityExists !== true && 
            (!ensAgentOwnerEoa || !eoaAddress || ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase()) && (
-            <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
+          <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
           )}
           {agentIdentityExists === true && (
             <Typography variant="body2" color="error">
@@ -1452,7 +1495,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-        <Button onClick={handleSubmit} variant="contained" disableElevation disabled={
+        <Button onClick={handleSubmit} variant="contained" disableElevation disabled={Boolean(
           isSubmitting ||
           !provider ||
           agentIdentityExists === true ||
@@ -1461,7 +1504,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           !agentUrlText ||
           !/^https?:\/\//i.test(agentUrlText) ||
           (ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase())
-        }>Create</Button>
+        )}>Create</Button>
       </DialogActions>
     </Dialog>
   );
