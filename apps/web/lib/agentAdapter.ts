@@ -298,37 +298,65 @@ export async function addAgentNameToOrg(params: {
   });
 
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
-  const userOpHash1 = await sendSponsoredUserOperation({
-    bundlerUrl,
-    chain,
-    accountClient: orgAccountClient,
-    calls: orgCalls
-  });
-  const { receipt: orgReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash1 });
-  console.log('********************* orgReceipt', orgReceipt);
+  
+  
+  if (agentENSClient.isL1()) {
+
+    const userOpHash1 = await sendSponsoredUserOperation({
+      bundlerUrl,
+      chain,
+      accountClient: orgAccountClient,
+      calls: orgCalls
+    });
+    const { receipt: orgReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash1 });
+    console.log('********************* orgReceipt', orgReceipt);
 
 
-  // 2. Set agent name info within ENS
-  console.log('********************* prepareSetAgentNameInfoCalls');
-  const { calls: agentCalls } = await agentENSClient.prepareSetAgentNameInfoCalls({
-    orgName: cleanOrgName,
-    agentName: cleanAgentName,
-    agentAddress: agentAccount,
-    agentUrl: agentUrl
-  });
+    // 2. Set agent name info within ENS
+    console.log('********************* prepareSetAgentNameInfoCalls');
+    const { calls: agentCalls } = await agentENSClient.prepareSetAgentNameInfoCalls({
+      orgName: cleanOrgName,
+      agentName: cleanAgentName,
+      agentAddress: agentAccount,
+      agentUrl: agentUrl
+    });
 
-  const userOpHash2 = await sendSponsoredUserOperation({
-    bundlerUrl,
-    chain,
-    accountClient: agentAccountClient,
-    calls: agentCalls,
-  });
+    const userOpHash2 = await sendSponsoredUserOperation({
+      bundlerUrl,
+      chain,
+      accountClient: agentAccountClient,
+      calls: agentCalls,
+    });
 
-  const { receipt: agentReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash2 });
-  console.log('********************* agentReceipt', agentReceipt);
+    const { receipt: agentReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash2 });
+    console.log('********************* agentReceipt', agentReceipt);
 
 
-  return userOpHash1 as `0x${string}`;
+    return userOpHash1 as `0x${string}`;
+  }
+  else {
+    try {
+      const userOperationHash = await sendSponsoredUserOperation({
+        bundlerUrl,
+        chain,
+        accountClient: agentAccountClient,
+        calls: orgCalls
+      });
+      
+      console.log("UserOp submitted:", userOperationHash);
+      
+      // Wait for the transaction to be mined
+      const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
+      console.log("Subname minted successfully! Transaction hash:", receipt.receipt.transactionHash);
+    }
+    catch (error) {
+      console.error("Error adding l2 agent name to org:", error);
+      return '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+    }
+    return '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+  }
+
+  return '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
 }
 
 export async function createAIAgentIdentity(params: {

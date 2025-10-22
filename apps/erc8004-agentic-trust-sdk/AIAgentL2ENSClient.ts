@@ -2,6 +2,8 @@
  * L2 ENS Client for Base Sepolia
  * Extends AIAgentENSClient with namespace.ninja integration for L2 subname operations
  */
+import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
+
 import { AIAgentENSClient } from './AIAgentENSClient';
 // @ts-ignore - @thenamespace/mint-manager doesn't have type definitions
 import { createMintClient } from '@thenamespace/mint-manager';
@@ -20,6 +22,27 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
   ) {
     super(chain, rpcUrl, adapter, ensRegistryAddress, ensResolverAddress, identityRegistryAddress);
     this.initializeNamespaceClient();
+  }
+
+  /**
+   * Override to ensure L2 client always returns true for isL2()
+   */
+  isL2(): boolean {
+    return true; // This is always an L2 client
+  }
+
+  /**
+   * Override to ensure L2 client always returns false for isL1()
+   */
+  isL1(): boolean {
+    return false; // This is never an L1 client
+  }
+
+  /**
+   * Override to ensure L2 client always returns 'L2'
+   */
+  getChainType(): 'L1' | 'L2' {
+    return 'L2';
   }
 
   private initializeNamespaceClient() {
@@ -74,7 +97,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
   /**
    * Create a subname using namespace.ninja
    */
-  async createSubname(params: {
+  async createSubnameCalls(params: {
     fullSubname: string;
     parentName: string;
     label: string;
@@ -82,11 +105,11 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     description?: string;
     chainId: number;
     isBaseSepolia: boolean;
-  }): Promise<{
+  }): Promise<[{
     to: string;
     data: string;
     value: bigint;
-  }> {
+  }]> {
     if (!this.namespaceClient) {
       throw new Error('Namespace.ninja client not initialized');
     }
@@ -118,12 +141,23 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     };
 
     const mintParams = await this.namespaceClient.getMintTransactionParameters(mintRequest);
-    
-    return {
+
+    const { to, data, value } = {
       to: mintParams.contractAddress,
-      data: mintParams.data,
+      data: encodeFunctionData({
+        abi: mintParams.abi,
+        functionName: mintParams.functionName,
+        args: mintParams.args,
+      }),
       value: mintParams.value || 0n
     };
+    return [{
+      to: to as `0x${string}`,
+      data: data as `0x${string}`,
+      value: value,
+    }]
+    
+
   }
 
   /**
@@ -142,30 +176,70 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     agentAddress: `0x${string}`; // AA address for the agent name
     agentUrl?: string | null    // optional URL
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] }> {
+
+    console.log("AIAgentL2ENSClient.prepareAddAgentNameToOrgCalls");
+    console.log("orgName: ", params.orgName);
+    console.log("agentName: ", params.agentName);
+    console.log("agentAddress: ", params.agentAddress);
     
     const clean = (s: string) => (s || '').trim().toLowerCase();
-    const parent = clean(params.orgName);
+    const parent = clean(params.orgName) + ".eth";
     const label = clean(params.agentName).replace(/\s+/g, '-');
     const fullSubname = `${label}.${parent}.eth`;
-    
-    // Use the namespace.ninja SDK to create the subname
-    const mintParams = await this.createSubname({
-      fullSubname,
-      parentName: `${parent}.eth`,
-      label,
-      addressToUse: params.agentAddress,
-      description: '', // We can add description support later if needed
-      chainId: (this as any).chain.id,
-      isBaseSepolia: true
-    });
+    const agentAddress = params.agentAddress;
+
+    const chainName = 'base-sepolia';
+
+    console.info("parent: ", parent);
+    console.info("label: ", label);
+    console.info("agentAddress: ", agentAddress);
+    console.info("chainName: ", chainName);
+
+    // Prepare mint transaction parameters using namespace.ninja SDK
+    const mintRequest = {
+      parentName: parent, // e.g., "theorg.eth"
+      label: label, // e.g., "atl-test-1"
+      owner: agentAddress,
+      minterAddress: agentAddress,
+      records: {
+        texts: [
+          { key: 'name', value: label },
+          { key: 'description', value: `Agent: ${label}` },
+          { key: 'chain', value: chainName },
+          { key: 'agent-account', value: agentAddress },
+        ],
+        addresses: [
+          { 
+            chain: 60, // Ethereum coin type
+            value: agentAddress 
+          },
+        ],
+      }
+    };
+
+    console.info("mintRequest: ", mintRequest);
+    const mintParams = await this.namespaceClient.getMintTransactionParameters(mintRequest);
+    console.info("mintParams: ", mintParams);
+
+    const { to, data, value } = {
+      to: mintParams.contractAddress,
+      data: encodeFunctionData({
+        abi: mintParams.abi,
+        functionName: mintParams.functionName,
+        args: mintParams.args,
+      }),
+      value: mintParams.value || 0n
+    };
+    const rtnCalls: [{ to: `0x${string}`; data: `0x${string}`; value?: bigint }] = [{
+      to: to as `0x${string}`,
+      data: data as `0x${string}`,
+      value: value,
+    }]
+
+
+
     
     // Return the mint transaction parameters as calls
-    return {
-      calls: [{
-        to: mintParams.to as `0x${string}`,
-        data: mintParams.data as `0x${string}`,
-        value: mintParams.value || 0n
-      }]
-    };
+    return { calls: rtnCalls };
   }
 }

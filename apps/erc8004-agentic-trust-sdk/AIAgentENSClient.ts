@@ -43,6 +43,27 @@ export class AIAgentENSClient {
     return this.ensResolverAddress;
   }
 
+  /**
+   * Check if this client is for L1 (ETH Sepolia)
+   */
+  isL1(): boolean {
+    return this.chain.id === 11155111; // ETH Sepolia
+  }
+
+  /**
+   * Check if this client is for L2 (Base Sepolia)
+   */
+  isL2(): boolean {
+    return this.chain.id === 84532; // Base Sepolia
+  }
+
+  /**
+   * Get the chain type as a string
+   */
+  getChainType(): 'L1' | 'L2' {
+    return this.isL2() ? 'L2' : 'L1';
+  }
+
   encodeCall(
     abi: any[],
     functionName: string,
