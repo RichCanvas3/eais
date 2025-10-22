@@ -30,12 +30,9 @@ export default function Page() {
       ) : (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h3" fontWeight={600} sx={{ mb: 3, color: 'primary.main' }}>
-            Create and Manage your Agent Identity with only your social login
+            Create and Manage your Agent Identity
           </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ mb: 4, maxWidth: '600px', mx: 'auto' }}>
-            Connect with your social account to start creating and managing AI agent identities on the blockchain. 
-            No complex wallet setup required - just your familiar social login.
-          </Typography>
+
           <Button 
             variant="contained" 
             size="large" 
@@ -46,39 +43,63 @@ export default function Page() {
             Get Started with Social Login
           </Button>
           
-          <Grid container spacing={3} sx={{ mt: 6, maxWidth: '800px', mx: 'auto' }}>
-            <Grid item xs={12} md={4}>
+          <Grid container spacing={3} sx={{ mt: 6, maxWidth: '1200px', mx: 'auto' }}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Easy Setup
+                    Social or Wallet Login
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Create agent identities with just your social login - no wallet complexity
+                    Connect with your social account or wallet for seamless agent identity management
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Secure & Decentralized
+                    Multi-chain Agent mgt
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Your agent identities are secured on the blockchain with full ownership
+                    Manage your agents across multiple blockchain networks with unified control
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} sm={6} md={4}>
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Full Control
+                    Strongly Named Agents
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Manage your agents, set URLs, and control all aspects of your identity
+                    Create human-readable agent names with ENS integration for easy identification
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
+                <CardContent>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
+                    Uniquely Addressable and Onchain Verifiable Signature
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Each agent has a unique blockchain address with verifiable cryptographic signatures
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
+                <CardContent>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
+                    Agent Discovery via multi-chain subgraph and naming services
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Discover and connect with agents through cross-chain subgraphs and naming services
                   </Typography>
                 </CardContent>
               </Card>
