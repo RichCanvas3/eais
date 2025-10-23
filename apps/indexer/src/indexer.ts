@@ -4,7 +4,7 @@ import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE,
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
-import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
+
 
 import { 
     ETH_SEPOLIA_IDENTITY_REGISTRY, 
@@ -15,19 +15,9 @@ import {
 
 
 
-const ethSepoliaTransport = http(ETH_SEPOLIA_RPC_HTTP_URL);
-const ethSepoliaPublicClient = createPublicClient({ transport: ethSepoliaTransport });
-
-const baseSepoliaTransport = http(BASE_SEPOLIA_RPC_HTTP_URL);
-const baseSepoliaPublicClient = createPublicClient({ transport: baseSepoliaTransport });
-
 
 const ethSepliaEthersProvider = new ethers.JsonRpcProvider(ETH_SEPOLIA_RPC_HTTP_URL);
 const ethSepoliathersAdapter = new EthersAdapter(ethSepliaEthersProvider); // No signer needed for reads
-
-const baseSepliaEthersProvider = new ethers.JsonRpcProvider(BASE_SEPOLIA_RPC_HTTP_URL);
-const baseSepoliathersAdapter = new EthersAdapter(baseSepliaEthersProvider); // No signer needed for reads
-
 
 console.info("********************* IDENTITY_REGISTRY: ", ETH_SEPOLIA_IDENTITY_REGISTRY);
 const erc8004EthSepoliaClient = new ERC8004Client({
@@ -40,6 +30,10 @@ const erc8004EthSepoliaClient = new ERC8004Client({
   }
 });
 
+
+const baseSepliaEthersProvider = new ethers.JsonRpcProvider(BASE_SEPOLIA_RPC_HTTP_URL);
+const baseSepoliathersAdapter = new EthersAdapter(baseSepliaEthersProvider); // No signer needed for reads
+
 const erc8004BaseSepoliaClient = new ERC8004Client({
   adapter: baseSepoliathersAdapter,
   addresses: {
@@ -49,6 +43,9 @@ const erc8004BaseSepoliaClient = new ERC8004Client({
     chainId: 84532, // Base Sepolia
   }
 });
+
+
+
 
 // ---- helpers ----
 function toDecString(x: bigint | number | string) {

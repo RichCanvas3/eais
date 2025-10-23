@@ -1,5 +1,6 @@
 "use client";
 import { AgentTable } from "@/components/AgentTable";
+import { StatsPanel } from "@/components/StatsPanel";
 import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import * as React from 'react';
@@ -8,6 +9,7 @@ import { AddAgentModal } from '@/components/AddAgentModal';
 export default function Page() {
   const { isLoggedIn, login, logout } = useWeb3Auth();
   const [open, setOpen] = React.useState(false);
+  const [statsOpen, setStatsOpen] = React.useState(false);
   const registryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
   const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
   
@@ -16,9 +18,16 @@ export default function Page() {
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="h5" fontWeight={600}>Agentic Trust Layer - Agent Explorer</Typography>
-          <Button variant="contained" onClick={isLoggedIn ? logout : login} disableElevation size="small">
-            {isLoggedIn ? 'Disconnect' : 'Login'}
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {isLoggedIn && (
+              <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small">
+                View Stats
+              </Button>
+            )}
+            <Button variant="contained" onClick={isLoggedIn ? logout : login} disableElevation size="small">
+              {isLoggedIn ? 'Disconnect' : 'Login'}
+            </Button>
+          </Box>
         </Box>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>Discover, evaluate, and connect with AI agents in the agentic ecosystem.</Typography>
       </Box>
@@ -109,6 +118,7 @@ export default function Page() {
       )}
       
       <AddAgentModal open={open} onClose={() => setOpen(false)} registryAddress={registryAddress} rpcUrl={rpcUrl} />
+      <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
     </Container>
   );
 }
