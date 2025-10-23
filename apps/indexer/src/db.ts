@@ -20,7 +20,8 @@ db.pragma("journal_mode = WAL");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS agents (
-  agentId TEXT PRIMARY KEY,
+  chainId INTEGER NOT NULL,
+  agentId TEXT NOT NULL,
   agentAddress TEXT NOT NULL,
   agentOwner TEXT NOT NULL,
   agentName TEXT NOT NULL,
@@ -36,7 +37,8 @@ CREATE TABLE IF NOT EXISTS agents (
   agentAccountEndpoint TEXT,
   supportedTrust TEXT,
   rawJson TEXT,
-  updatedAtTime INTEGER
+  updatedAtTime INTEGER,
+  PRIMARY KEY (chainId, agentId)
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -70,6 +72,7 @@ CREATE TABLE IF NOT EXISTS agent_metadata (
 `);
 
 // Best-effort migrate: ensure extended columns exist on agents
+try { db.exec("ALTER TABLE agents ADD COLUMN chainId INTEGER DEFAULT 11155111"); } catch {}
 try { db.exec("ALTER TABLE agents ADD COLUMN type TEXT"); } catch {}
 try { db.exec("ALTER TABLE agents ADD COLUMN description TEXT"); } catch {}
 try { db.exec("ALTER TABLE agents ADD COLUMN image TEXT"); } catch {}
@@ -79,6 +82,69 @@ try { db.exec("ALTER TABLE agents ADD COLUMN agentAccountEndpoint TEXT"); } catc
 try { db.exec("ALTER TABLE agents ADD COLUMN supportedTrust TEXT"); } catch {}
 try { db.exec("ALTER TABLE agents ADD COLUMN rawJson TEXT"); } catch {}
 try { db.exec("ALTER TABLE agents ADD COLUMN updatedAtTime INTEGER"); } catch {}
+
+// Migrate existing data to have composite primary key (chainId, agentId)
+try {
+  // Check if we need to migrate to composite primary key
+  const tableInfo = db.prepare("PRAGMA table_info(agents)").all() as any[];
+  const chainIdColumn = tableInfo.find(col => col.name === 'chainId');
+  const agentIdColumn = tableInfo.find(col => col.name === 'agentId');
+  
+  // Check if agentId is currently the primary key (single column)
+  const isSinglePrimaryKey = agentIdColumn && agentIdColumn.pk === 1 && tableInfo.filter(col => col.pk === 1).length === 1;
+  
+  if (chainIdColumn && agentIdColumn && isSinglePrimaryKey) {
+    console.log('Migrating to composite primary key (chainId, agentId)...');
+    
+    // Create new table with composite primary key
+    db.exec(`
+      CREATE TABLE agents_new (
+        chainId INTEGER NOT NULL DEFAULT 11155111,
+        agentId TEXT NOT NULL,
+        agentAddress TEXT NOT NULL,
+        agentOwner TEXT NOT NULL,
+        agentName TEXT NOT NULL,
+        metadataURI TEXT,
+        createdAtBlock INTEGER NOT NULL,
+        createdAtTime INTEGER NOT NULL,
+        type TEXT,
+        description TEXT,
+        image TEXT,
+        a2aEndpoint TEXT,
+        ensEndpoint TEXT,
+        agentAccountEndpoint TEXT,
+        supportedTrust TEXT,
+        rawJson TEXT,
+        updatedAtTime INTEGER,
+        PRIMARY KEY (chainId, agentId)
+      )
+    `);
+    
+    // Copy data from old table to new table
+    db.exec(`
+      INSERT INTO agents_new (
+        chainId, agentId, agentAddress, agentOwner, agentName, metadataURI,
+        createdAtBlock, createdAtTime, type, description, image,
+        a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust,
+        rawJson, updatedAtTime
+      )
+      SELECT 
+        COALESCE(chainId, 11155111), agentId, agentAddress, agentOwner, agentName, metadataURI,
+        createdAtBlock, createdAtTime, type, description, image,
+        a2aEndpoint, ensEndpoint, agentAccountEndpoint, supportedTrust,
+        rawJson, updatedAtTime
+      FROM agents
+    `);
+    
+    // Drop old table and rename new table
+    db.exec("DROP TABLE agents");
+    db.exec("ALTER TABLE agents_new RENAME TO agents");
+    
+    console.log('Successfully migrated to composite primary key (chainId, agentId)');
+  }
+} catch (error) {
+  console.warn('Migration to composite primary key failed:', error);
+}
 
 export function getCheckpoint(): bigint {
   const row = db.prepare("SELECT value FROM checkpoints WHERE key='lastProcessed'").get() as { value?: string } | undefined;

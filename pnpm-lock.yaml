@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@thenamespace/indexer':
+        specifier: ^1.0.2
+        version: 1.0.2
       '@thenamespace/mint-manager':
         specifier: ^1.1.0
         version: 1.1.0
@@ -898,6 +901,9 @@ packages:
 
   '@thenamespace/addresses@1.0.15':
     resolution: {integrity: sha512-rpURSoeJwusv3M2nuLPhZvJvylMhIVrfPcuVk/d9YE+Fwx8DtkLpAI1KsRDKKiNfYnHMmfC/SXLhLqP+aeblcQ==}
+
+  '@thenamespace/indexer@1.0.2':
+    resolution: {integrity: sha512-1bCVLEtVTJq7XU16tV8ruq85a7MGZ/uqK1b2PwsyVwHqStf/QNcic0XL6gbBL8NRdTOYMKL9mYNImGu3BywJbg==}
 
   '@thenamespace/mint-manager@1.1.0':
     resolution: {integrity: sha512-mKPd/5NXEFNkSV6eBQvVT5H5KNYYiJ+vU6ThwuYmb2PBKJRPmxjrSXHv+GaGMnqYcJYPxlVt25XOXHwziTQPpw==}
@@ -3861,6 +3867,17 @@ snapshots:
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
+
+  '@thenamespace/indexer@1.0.2':
+    dependencies:
+      '@types/node': 22.18.12
+      axios: 1.12.2
+      ts-node: 10.9.2(@types/node@22.18.12)(typescript@5.9.3)
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - debug
 
   '@thenamespace/mint-manager@1.1.0':
     dependencies:

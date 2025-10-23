@@ -7,6 +7,7 @@ import { createPublicClient, http, custom, encodeFunctionData, keccak256, string
 import { AIAgentENSClient } from './AIAgentENSClient';
 // @ts-ignore - @thenamespace/mint-manager doesn't have type definitions
 import { createMintClient } from '@thenamespace/mint-manager';
+import { createIndexerClient } from '@thenamespace/indexer';
 import { sepolia, baseSepolia } from 'viem/chains';
 
 export class AIAgentL2ENSClient extends AIAgentENSClient {
@@ -62,19 +63,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     }
   }
 
-  /**
-   * Override getAgentAccountByName to use namespace.ninja for L2 availability checking
-   */
-  async getAgentAccountByName(name: string): Promise<`0x${string}` | null> {
-    // First try the parent class method (standard ENS lookup)
-    try {
-      const result = await super.getAgentAccountByName(name);
-      if (result && result !== '0x0000000000000000000000000000000000000000') {
-        return result;
-      }
-    } catch (error) {
-      console.log('Standard ENS lookup failed, trying namespace.ninja:', error);
-    }
+  async getAgentUrlByName(name: string): Promise<string | null> {
 
     // If standard lookup fails and we have namespace client, try L2 lookup
     if (this.namespaceClient) {
@@ -82,9 +71,47 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
         const chainId = (this as any).chain.id;
         const isAvailable = await this.namespaceClient.isL2SubnameAvailable(name, chainId);
         if (!isAvailable) {
-          // Subname exists but we can't get the address from namespace.ninja
-          // Return a placeholder to indicate it exists
-          return '0x0000000000000000000000000000000000000001' as `0x${string}`;
+          const client = createIndexerClient();
+          const subname = await client.getL2Subname({
+            chainId: baseSepolia.id,
+            nameOrNamehash: namehash(name) as `0x${string}`
+          });
+          if (subname) {
+            if (subname.records?.texts?.url) {
+              const url = subname.records?.texts?.url;
+              return url as string;
+            }
+          }
+          return null;
+        }
+      } catch (error) {
+        console.error('Error checking L2 subname availability:', error);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Override getAgentAccountByName to use namespace.ninja for L2 availability checking
+   */
+  async getAgentAccountByName(name: string): Promise<`0x${string}` | null> {
+
+    // If standard lookup fails and we have namespace client, try L2 lookup
+    if (this.namespaceClient) {
+      try {
+        const chainId = (this as any).chain.id;
+        const isAvailable = await this.namespaceClient.isL2SubnameAvailable(name, chainId);
+        if (!isAvailable) {
+          const client = createIndexerClient();
+          const subname = await client.getL2Subname({
+            chainId: baseSepolia.id,
+            nameOrNamehash: namehash(name) as `0x${string}`
+          });
+          if (subname) {
+            return subname.owner as `0x${string}`;
+          }
+          return null;
         }
       } catch (error) {
         console.error('Error checking L2 subname availability:', error);
@@ -100,6 +127,12 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
   getNamespaceClient(): any {
     return this.namespaceClient;
   }
+
+  /**
+   * Note: getAgentEoaByAgentAccount is not a method of AIAgentENSClient
+   * This method is actually in AIAgentIdentityClient, so we don't need to override it here.
+   * The ownership detection logic is handled in the UI layer (AddAgentModal.tsx)
+   */
 
   /**
    * Override prepareAddAgentNameToOrgCalls to use namespace.ninja SDK for L2

@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const rows = db.prepare(`
-      SELECT agentId, agentAddress, agentOwner, agentName, description, image, a2aEndpoint, ensEndpoint,
+      SELECT chainId, agentId, agentAddress, agentOwner, agentName, description, image, a2aEndpoint, ensEndpoint,
              agentAccountEndpoint, supportedTrust, rawJson, metadataURI, createdAtBlock, createdAtTime
       FROM agents
       ${whereSql}

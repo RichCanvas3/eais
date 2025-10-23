@@ -4,6 +4,7 @@
  */
 import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexToString, type Chain, type PublicClient } from 'viem';
 import { ethers } from 'ethers';
+import { sepolia } from 'viem/chains';
 
 
 import BaseRegistrarABI from  './abis/BaseRegistrarImplementation.json'
@@ -343,6 +344,10 @@ export class AIAgentENSClient {
     // resolver
     let resolverAddr: `0x${string}` | null = null;
     try {
+      console.info("try and get resolver for node")
+      console.info("ensName: ", ensName);
+      console.info("this.ensRegistryAddress: ", this.ensRegistryAddress);
+
       resolverAddr = await this.publicClient?.readContract({
         address: this.ensRegistryAddress as `0x${string}`,
         abi: [{
@@ -355,6 +360,9 @@ export class AIAgentENSClient {
         functionName: 'resolver',
         args: [node]
       }) as `0x${string}` | null;
+
+
+      console.info("resolverAddr: ", resolverAddr);
       // returns 0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5
 
     } catch {}
@@ -364,6 +372,7 @@ export class AIAgentENSClient {
 
     try {
 
+      console.info("try and get addr for node using resolver")
       const addr  = await this.publicClient?.readContract({
         address: resolverAddr,
         abi: PublicResolverABI.abi,
@@ -371,6 +380,7 @@ export class AIAgentENSClient {
         args: [node]
       }).catch(() => null) as string | null;
 
+      console.info("addr: ", addr);
       if (addr && /^0x[a-fA-F0-9]{40}$/.test(addr) && addr !== '0x0000000000000000000000000000000000000000') {
         return addr as `0x${string}`;
       }

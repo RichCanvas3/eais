@@ -623,12 +623,25 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           if (!cancelled) setAgentAccount(orgAccount);
 
           const agentAccount = await getENSClientForChain().getAgentAccountByName(full);
+          console.log('🔍 Agent account lookup result:', { full, agentAccount, isL2: getENSClientForChain().isL2() });
+          
           // Track ENS agent addr and its owner EOA (if any)
           try {
             setEnsAgentAddress(agentAccount ?? null);
             if (agentAccount) {
-              const ownerEoa = await agentIdentityClient.getAgentEoaByAgentAccount(agentAccount as `0x${string}`);
-              setEnsAgentOwnerEoa(ownerEoa);
+              // For L2 chains, handle ownership detection differently
+              const isL2 = getENSClientForChain().isL2();
+              if (isL2 && (agentAccount === '0x0000000000000000000000000000000000000001' || 
+                          agentAccount === '0x0000000000000000000000000000000000000002')) {
+                // For L2 placeholder addresses (when resolver lookup fails), assume current user owns it if they're connected
+                console.log('🔍 L2 placeholder address detected, setting owner to current user:', eoaAddress);
+                setEnsAgentOwnerEoa(eoaAddress);
+              } else {
+                // For real addresses (including L2 addresses resolved from ENS), use standard ownership lookup
+                const ownerEoa = await agentIdentityClient.getAgentEoaByAgentAccount(agentAccount as `0x${string}`);
+                console.log('🔍 Standard ownership lookup result:', ownerEoa);
+                setEnsAgentOwnerEoa(ownerEoa);
+              }
             } else {
               setEnsAgentOwnerEoa(null);
             }
@@ -639,7 +652,9 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           // Check if agent account exists (this determines if the agent name is taken)
           try {
             const agentAccount = await getENSClientForChain().getAgentAccountByName(full);
-            if (!cancelled) setAgentExists(!!agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000');
+            const exists = !!agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000';
+            console.log('🔍 Agent exists check:', { full, agentAccount, exists });
+            if (!cancelled) setAgentExists(exists);
           } catch {
             if (!cancelled) setAgentExists(null);
           }
@@ -1400,7 +1415,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                 </Stack>
           
           {/* Agent URL - Available when Agent Name is created (exists) and owned by current user */}
-          {console.log("Agent URL section check - agentName:", agentName, "agentExists:", agentExists, "condition:", agentName && agentExists === true)}
           {agentName && agentExists === true && (
             <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
               <Typography variant="caption" color="info.main" fontWeight="bold">
@@ -1413,7 +1427,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
                   </Typography>
                   
               {/* Only show URL editing if the agent name is owned by the current user */}
-              {console.log("URL editing check - ensAgentOwnerEoa:", ensAgentOwnerEoa, "eoaAddress:", eoaAddress, "match:", ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase())}
               {ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase() ? (
                   <Stack direction="row" spacing={1} alignItems="center">
                   <TextField 

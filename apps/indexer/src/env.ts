@@ -18,8 +18,12 @@ function must(name: string) {
   return v;
 }
 
-export const IDENTITY_REGISTRY = process.env.IDENTITY_REGISTRY as `0x${string}`;
-export const RPC_HTTP_URL      = must("RPC_HTTP_URL");
+export const ETH_SEPOLIA_IDENTITY_REGISTRY = process.env.ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+export const ETH_SEPOLIA_RPC_HTTP_URL      = must("ETH_SEPOLIA_RPC_HTTP_URL");
+
+export const BASE_SEPOLIA_IDENTITY_REGISTRY = process.env.BASE_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+export const BASE_SEPOLIA_RPC_HTTP_URL      = must("BASE_SEPOLIA_RPC_HTTP_URL");
+
 export const RPC_WS_URL        = process.env.RPC_WS_URL; // optional
 export const CONFIRMATIONS     = Number(process.env.CONFIRMATIONS ?? 12);
 export const DB_PATH           = process.env.DB_PATH ?? "./data/registry.db";

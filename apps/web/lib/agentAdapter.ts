@@ -391,9 +391,10 @@ export async function createAIAgentIdentity(params: {
   console.log('********************* createAIAgentIdentity: userOpHash', userOpHash);
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   const { receipt: aaReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash });
- 
+  console.log('********************* createAIAgentIdentity: aaReceipt', aaReceipt);
   // Use AIAgentIdentityClient to extract agentId from receipt
   const tokenId = params.agentIdentityClient.extractAgentIdFromReceiptPublic(aaReceipt);
+  console.log('********************* createAIAgentIdentity: tokenId', tokenId);
 
   return tokenId;
 }
@@ -442,6 +443,11 @@ export async function setAgentNameUri(params: {
   console.log('-------------------------> setAgentUri: calls', bundlerUrl, chain.id, agentAccountClient.address);
   const { calls: setUriCalls }  = await agentENSClient.prepareSetNameUriCalls(agentName, agentUri);
 
+  console.log(' bundler: ', bundlerUrl);
+  console.log(' chain: ', chain.id);
+  console.log(' agentAccountClient: ', agentAccountClient.address);
+
+  
   const userOpHash = await sendSponsoredUserOperation({
     bundlerUrl,
     chain,

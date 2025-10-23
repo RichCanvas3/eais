@@ -40,6 +40,7 @@ const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
 
 export type Agent = {
+	chainId: number;
 	agentId: string;
 	agentAddress: string;
 	agentName: string;
@@ -1537,6 +1538,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				<Table size="small" sx={{ minWidth: 1200 }}>
                             <TableHead>
 								<TableRow>
+								<TableCell>Chain</TableCell>
 								<TableCell>Account Address</TableCell>
                                     <TableCell>Name</TableCell>
                                     <TableCell>Description</TableCell>
@@ -1553,14 +1555,14 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).length ?? 0) === 0 && (
                             <TableRow>
-                                <TableCell colSpan={eoa ? (discoverMatches ? 8 : 7) : (discoverMatches ? 7 : 6)} align="center">
+                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
                             <TableRow>
-                                <TableCell colSpan={eoa ? (discoverMatches ? 8 : 7) : (discoverMatches ? 7 : 6)} align="center">
+                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -1580,6 +1582,14 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						return 0;
 					})?.map((row) => (
 									<TableRow key={row.agentId} hover>
+										<TableCell>
+											<Chip 
+												label={row.chainId === 11155111 ? 'ETH Sepolia' : row.chainId === 84532 ? 'Base Sepolia' : `Chain ${row.chainId}`}
+												size="small"
+												color={row.chainId === 11155111 ? 'primary' : row.chainId === 84532 ? 'secondary' : 'default'}
+												sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}
+											/>
+										</TableCell>
 										<TableCell>
 											<Stack direction="row" spacing={0.25} alignItems="center">
 												{(() => {

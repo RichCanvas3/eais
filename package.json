@@ -11,6 +11,7 @@
   },
   "packageManager": "pnpm@9.7.0",
   "dependencies": {
+    "@thenamespace/indexer": "^1.0.2",
     "@thenamespace/mint-manager": "^1.1.0"
   }
 }

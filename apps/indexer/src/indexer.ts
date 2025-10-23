@@ -1,37 +1,52 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_HTTP_URL, RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, GRAPHQL_POLL_MS } from "./env";
+import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
 import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
 
-import { IDENTITY_REGISTRY } from "./env";
+import { 
+    ETH_SEPOLIA_IDENTITY_REGISTRY, 
+    BASE_SEPOLIA_IDENTITY_REGISTRY, 
+    ETH_SEPOLIA_RPC_HTTP_URL, 
+    BASE_SEPOLIA_RPC_HTTP_URL } from './env';
 
-const identityRegistryAbi = IdentityRegistryABI as any;
 
-// ---- clients ----
-const transport = RPC_WS_URL ? webSocket(RPC_WS_URL) : http(RPC_HTTP_URL);
-const client = createPublicClient({ transport });
-//const address = IDENTITY_REGISTRY as Address;
-//console.info("............IDENTITY_REGISTRY: ", address)
-//const address = IDENTITY_REGISTRY as Address;
-//console.info("............IDENTITY_REGISTRY: ", address)
 
-//const IDENTITY_REGISTRY = '0xf8fFC3E3F5F1A614EEA52566f3aa3d41d369D0bB'
 
-// ERC8004Client for standardized interactions (read-only for indexer)
-const ethersProvider = new ethers.JsonRpcProvider(RPC_HTTP_URL);
-const ethersAdapter = new EthersAdapter(ethersProvider); // No signer needed for reads
+const ethSepoliaTransport = http(ETH_SEPOLIA_RPC_HTTP_URL);
+const ethSepoliaPublicClient = createPublicClient({ transport: ethSepoliaTransport });
 
-console.info("********************* IDENTITY_REGISTRY: ", IDENTITY_REGISTRY);
-const erc8004Client = new ERC8004Client({
-  adapter: ethersAdapter,
+const baseSepoliaTransport = http(BASE_SEPOLIA_RPC_HTTP_URL);
+const baseSepoliaPublicClient = createPublicClient({ transport: baseSepoliaTransport });
+
+
+const ethSepliaEthersProvider = new ethers.JsonRpcProvider(ETH_SEPOLIA_RPC_HTTP_URL);
+const ethSepoliathersAdapter = new EthersAdapter(ethSepliaEthersProvider); // No signer needed for reads
+
+const baseSepliaEthersProvider = new ethers.JsonRpcProvider(BASE_SEPOLIA_RPC_HTTP_URL);
+const baseSepoliathersAdapter = new EthersAdapter(baseSepliaEthersProvider); // No signer needed for reads
+
+
+console.info("********************* IDENTITY_REGISTRY: ", ETH_SEPOLIA_IDENTITY_REGISTRY);
+const erc8004EthSepoliaClient = new ERC8004Client({
+  adapter: ethSepoliathersAdapter,
   addresses: {
-    identityRegistry: IDENTITY_REGISTRY,
+    identityRegistry: ETH_SEPOLIA_IDENTITY_REGISTRY,
     reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
     validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
-    chainId: 11155111, // Sepolia
+    chainId: 11155111, // Eth Sepolia
+  }
+});
+
+const erc8004BaseSepoliaClient = new ERC8004Client({
+  adapter: baseSepoliathersAdapter,
+  addresses: {
+    identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY,
+    reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
+    validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
+    chainId: 84532, // Base Sepolia
   }
 });
 
@@ -40,9 +55,11 @@ function toDecString(x: bigint | number | string) {
   return typeof x === "bigint" ? x.toString(10) : String(x);
 }
 
-async function tryReadTokenURI(tokenId: bigint): Promise<string | null> {
+
+
+async function tryReadTokenURI(client: ERC8004Client, tokenId: bigint): Promise<string | null> {
   try {
-    const uri = await erc8004Client.identity.getTokenURI(tokenId);
+    const uri = await client.identity.getTokenURI(tokenId);
     return uri ?? null;
   } catch {
     return null;
@@ -87,7 +104,7 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
   return null;
 }
 
-async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigint, tokenURI: string | null) {
+async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigint, tokenURI: string | null, chainId: number) {
   console.info("............upsertFromTransfer: tokenURI: ", tokenURI)
   const agentId = toDecString(tokenId);
   const ownerAddress = to;
@@ -95,6 +112,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
   let agentName = ""; // not modeled in ERC-721; leave empty
 
   console.info(".... ownerAddress", ownerAddress)
+  console.info(".... chainId", chainId)
 
   if (ownerAddress != '0x000000000000000000000000000000000000dEaD') {
     console.info("@@@@@@@@@@@@@@@@@@@@@ upsertFromTransfer: ", agentAddress)
@@ -103,16 +121,18 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
     console.info("............insert into table: agentOwner: ", ownerAddress)
     console.info("............insert into table: agentName: ", agentName)
     console.info("............insert into table: metadataURI: ", tokenURI)
+    console.info("............insert into table: chainId: ", chainId)
     console.info("............insert into table: block: ", blockNumber)
     db.prepare(`
-      INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-      VALUES(@agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
-      ON CONFLICT(agentId) DO UPDATE SET
+      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
+      VALUES(@chainId, @agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
+      ON CONFLICT(chainId, agentId) DO UPDATE SET
         agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
         agentOwner=excluded.agentOwner,
         agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
         metadataURI=COALESCE(excluded.metadataURI, metadataURI)
     `).run({
+      chainId,
       agentId,
       agentAddress,
       agentOwner: ownerAddress,
@@ -142,8 +162,8 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         // Always ensure agentAccountEndpoint reflects current owner `to`
         console.info("............agentAccountEndpoint: ", agentAccountEndpoint)
         if (!agentAccountEndpoint || !/^eip155:/i.test(agentAccountEndpoint)) {
-          console.info("............agentAccountEndpoint: no endpoint found, setting to: ", `eip155:11155111:${to}`)
-          agentAccountEndpoint = `eip155:11155111:${to}`;
+          console.info("............agentAccountEndpoint: no endpoint found, setting to: ", `eip155:${chainId}:${to}`)
+          agentAccountEndpoint = `eip155:${chainId}:${to}`;
         }
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
         console.info("............update into table: agentId: ", agentId)
@@ -205,7 +225,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
   }
 }
 
-// Parse CAIP-10 like eip155:11155111:0x... to 0x address
+// Parse CAIP-10 like eip155:chainId:0x... to 0x address
 function parseCaip10Address(value: string | null | undefined): string | null {
   try {
     if (!value) return null;
@@ -220,7 +240,7 @@ function parseCaip10Address(value: string | null | undefined): string | null {
   return null;
 }
 
-async function upsertFromTokenGraph(item: any) {
+async function upsertFromTokenGraph(item: any, chainId: number) {
   const tokenId = BigInt(item?.id || 0);
   if (tokenId <= 0n) return;
   const agentId = toDecString(tokenId);
@@ -247,14 +267,15 @@ async function upsertFromTokenGraph(item: any) {
 
   console.info("@@@@@@@@@@@@@@@@@@@ upsertFromTokenGraph 1: agentName: ", agentId, agentName)
   db.prepare(`
-    INSERT INTO agents(agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-    VALUES(@agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
-    ON CONFLICT(agentId) DO UPDATE SET
+    INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
+    VALUES(@chainId, @agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
+    ON CONFLICT(chainId, agentId) DO UPDATE SET
       agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
       agentOwner=excluded.agentOwner,
       agentName=CASE WHEN excluded.agentName IS NOT NULL AND length(excluded.agentName) > 0 THEN excluded.agentName ELSE agentName END,
       metadataURI=COALESCE(excluded.metadataURI, metadataURI)
   `).run({
+    chainId,
     agentId,
     agentAddress,
     agentOwner: ownerAddress,
@@ -293,8 +314,8 @@ async function upsertFromTokenGraph(item: any) {
 
   const agentAccountEndpoint = (() => {
     const parsedAccount = parseCaip10Address(item?.agentAccount);
-    if (parsedAccount) return `eip155:11155111:${parsedAccount}`;
-    if (ownerAddress && ownerAddress !== '0x0000000000000000000000000000000000000000') return `eip155:11155111:${ownerAddress}`;
+    if (parsedAccount) return `eip155:${chainId}:${parsedAccount}`;
+    if (ownerAddress && ownerAddress !== '0x0000000000000000000000000000000000000000') return `eip155:${chainId}:${ownerAddress}`;
     return null;
   })();
 
@@ -349,7 +370,10 @@ function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: string)
   });
 }
 
-async function backfill() {
+async function backfill(client: ERC8004Client) {
+
+  const chainId = await client.getChainId();
+
   // GraphQL-driven indexing: fetch latest transfers and upsert
   if (!GRAPHQL_URL) {
     console.warn('GRAPHQL_URL not configured; skipping GraphQL backfill');
@@ -416,12 +440,12 @@ async function backfill() {
     const toAddr = String(tr?.to?.id || '').toLowerCase();
     const blockNum = BigInt(tr?.blockNumber || 0);
     if (tokenId <= 0n || !toAddr) continue;
-    const uri = await tryReadTokenURI(tokenId);
+    const uri = await tryReadTokenURI(client, tokenId);
     console.info("&&&&&&&&&&&& upsertFromTransfer: toAddr: ", toAddr)
     console.info("&&&&&&&&&&&& upsertFromTransfer: tokenId: ", tokenId)
     console.info("&&&&&&&&&&&& upsertFromTransfer: blockNum: ", blockNum)
     console.info("&&&&&&&&&&&& upsertFromTransfer: uri: ", uri)
-    await upsertFromTransfer(toAddr, tokenId, blockNum, uri);
+    await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId); // ETH Sepolia chainId
     setCheckpoint(blockNum);
   }
 
@@ -432,18 +456,21 @@ async function backfill() {
   .sort((a, b) => Number((a.mintedAt || 0)) - Number((b.mintedAt || 0)));
   for (const t of tokensOrdered) {
     console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
-    await upsertFromTokenGraph(t);
+    await upsertFromTokenGraph(t, chainId); // ETH Sepolia chainId
   }
  
 
 }
 
-async function backfillByIds() {
+async function backfillByIds(client: ERC8004Client) {
+
+  const chainId = await client.getChainId();
+  
   // Optional ID-based backfill for sequential tokenIds starting at 1
-  async function idExists(id: bigint): Promise<boolean> {
+  async function idExists(client: ERC8004Client, id: bigint): Promise<boolean> {
     try {
       // Use ownerOf - if it doesn't throw, the token exists
-      await erc8004Client.identity.getOwner(id);
+      await client.identity.getOwner(id);
       return true;
     } catch {
       return false;
@@ -453,13 +480,13 @@ async function backfillByIds() {
   // Exponential + binary search to find max existing tokenId
   let lo = 0n;
   let hi = 1n;
-  while (await idExists(hi)) { lo = hi; hi <<= 1n; }
+  while (await idExists(client, hi)) { lo = hi; hi <<= 1n; }
   let left = lo + 1n;
   let right = hi;
   let max = lo;
   while (left <= right) {
     const mid = (left + right) >> 1n;
-    if (await idExists(mid)) { max = mid; left = mid + 1n; } else { right = mid - 1n; }
+    if (await idExists(client, mid)) { max = mid; left = mid + 1n; } else { right = mid - 1n; }
   }
 
   if (max === 0n) {
@@ -476,16 +503,17 @@ async function backfillByIds() {
   console.log(`ID backfill: scanning 1 → ${max}`);
   for (let id = 1n; id <= max; id++) {
     try {
-      const owner = await erc8004Client.identity.getOwner(id);
-      const uri = await tryReadTokenURI(id);
+
+      const owner = await client.identity.getOwner(id);
+      const uri = await tryReadTokenURI(client, id);
       console.info("............uri: ", uri)
-      await upsertFromTransfer(owner, id, 0n, uri);
+      await upsertFromTransfer(owner, id, 0n, uri, chainId); // Base Sepolia chainId
     } catch {
       // skip gaps or read errors
     }
   }
 }
-
+/*
 function watch() {
   const unsubs = [
     client.watchContractEvent({ address: IDENTITY_REGISTRY as `0x${string}`, abi: identityRegistryAbi, eventName: 'Transfer', onLogs: async (logs) => {
@@ -519,18 +547,21 @@ function watch() {
   ];
   return () => unsubs.forEach((u) => u?.());
 }
+  */
 
 (async () => {
   // Initial run (don’t crash on failure)
   try {
-    await backfill();
+    await backfill(erc8004EthSepoliaClient);
+    //await backfillByIds(erc8004BaseSepoliaClient)
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }
   // Subscribe to on-chain events as a safety net (optional)
-  const unwatch = watch();
+  //const unwatch = watch();
+
   // Poll GraphQL for new transfers beyond checkpoint
-  const interval = setInterval(() => { backfill().catch((e) => console.error('GraphQL backfill error', e)); }, Math.max(5000, GRAPHQL_POLL_MS));
-  console.log("Indexer running (GraphQL + watch). Press Ctrl+C to exit.");
-  process.on('SIGINT', () => { clearInterval(interval); unwatch(); process.exit(0); });
+  //const interval = setInterval(() => { backfill().catch((e) => console.error('GraphQL backfill error', e)); }, Math.max(5000, GRAPHQL_POLL_MS));
+  //console.log("Indexer running (GraphQL + watch). Press Ctrl+C to exit.");
+  //process.on('SIGINT', () => { clearInterval(interval); unwatch(); process.exit(0); });
 })();

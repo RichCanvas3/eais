@@ -48,7 +48,7 @@ export default function Page() {
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Social or Wallet Login
+                    Social Login, or Wallet
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Connect with your social account or wallet for seamless agent identity management
@@ -60,7 +60,7 @@ export default function Page() {
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Multi-chain Agent mgt
+                    Multi-Chain
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Manage your agents across multiple blockchain networks with unified control
@@ -72,7 +72,7 @@ export default function Page() {
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Strongly Named Agents
+                    Strongly Named
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Create human-readable agent names with ENS integration for easy identification
@@ -84,7 +84,7 @@ export default function Page() {
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Uniquely Addressable and Onchain Verifiable Signature
+                    Uniquely Addressable & Onchain Verifiable
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Each agent has a unique blockchain address with verifiable cryptographic signatures
@@ -96,7 +96,7 @@ export default function Page() {
               <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Agent Discovery via multi-chain subgraph and naming services
+                    Agent Discovery - Trust Graph
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Discover and connect with agents through cross-chain subgraphs and naming services
