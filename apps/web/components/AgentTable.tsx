@@ -188,95 +188,6 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 		return /^https?:\/\//i.test(u) || /^ipfs:\/\//i.test(u);
 	}
 
-	/*
-	React.useEffect(() => {
-		try {
-			const rows = data?.rows || [];
-			rows.forEach((row) => {
-				const uri = row.metadataURI;
-				//if (!isValidRegistrationUri(uri)) {
-				//	if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: false }));
-				//	return;
-				//}
-				if (tokenUriValidById[row.agentId] !== undefined) return;
-				const target = (() => {
-					if (!uri) return null;
-					const u = String(uri).trim().replace(/^@+/, '');
-					if (/^ipfs:\/\//i.test(u)) {
-						try {
-							const rest = u.slice('ipfs://'.length);
-							const cid = rest.split('/')[0]?.trim();
-							if (cid) return `${IpfsService.apiBase}/api/web3storage/download/${cid}`;
-						} catch {}
-						return null;
-					}
-					return u;
-				})();
-        if (!target) {
-          if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: null }));
-          return;
-        }
-				fetch(target)
-					.then(async (res) => {
-						// Try JSON; on failure, inspect error message and fallback to text heuristics
-						try {
-							await res.clone().json();
-							return true;
-						} catch (err: any) {
-							const msg = typeof err?.message === 'string' ? err.message : '';
-							// Common browser error message when HTML is returned
-							if (/Unexpected token\s*</i.test(msg) || /not valid JSON/i.test(msg)) return false;
-							try {
-								const text = await res.text();
-								const trimmed = (text || '').trim();
-								if (/^</.test(trimmed)) return false; // looks like HTML/XML
-								// If it looks like JSON text, try to parse
-								if (/^[{\[]/.test(trimmed)) {
-									try { JSON.parse(trimmed); return true; } catch {}
-								}
-							} catch {}
-							return false;
-						}
-					})
-					.then((ok) => {
-						setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
-					})
-					.catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
-						});
-					 } catch {}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [data?.rows]);
-	*/
-
-	/*
-	React.useEffect(() => {
-		try {
-			const rows = data?.rows || [];
-			rows.forEach((row) => {
-				const url = row.a2aEndpoint;
-				if (!url || !/^https?:\/\//i.test(String(url))) return;
-				if (a2aJsonById[row.agentId] !== undefined) return;
-				// Fetch preview JSON
-				fetch(String(url))
-					.then((res) => res.json().catch(() => null))
-					.then((json) => {
-						let preview: string | null = null;
-						if (json && typeof json === 'object' && !Array.isArray(json)) {
-							try {
-								preview = JSON.stringify(json, null, 2);
-								if (preview.length > 800) preview = preview.slice(0, 800) + '\n...';
-							} catch {}
-						}
-						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: preview }));
-					})
-					.catch(() => {
-						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: null }));
-					});
-			});
-		} catch {}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [data?.rows]);
-	*/
 
 	async function openIdentityJson(row: Agent) {
 		try {
@@ -537,7 +448,6 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	};
 
 	// Fetch ENS names when data changes
-	/*
     React.useEffect(() => {
         if (data?.rows) {
             data.rows.forEach(async (row) => {
@@ -560,7 +470,92 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
             });
         }
     }, [data?.rows]);
-	*/
+
+	React.useEffect(() => {
+		try {
+			const rows = data?.rows || [];
+			rows.forEach((row) => {
+				const uri = row.metadataURI;
+				//if (!isValidRegistrationUri(uri)) {
+				//	if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: false }));
+				//	return;
+				//}
+				if (tokenUriValidById[row.agentId] !== undefined) return;
+				const target = (() => {
+					if (!uri) return null;
+					const u = String(uri).trim().replace(/^@+/, '');
+					if (/^ipfs:\/\//i.test(u)) {
+						try {
+							const rest = u.slice('ipfs://'.length);
+							const cid = rest.split('/')[0]?.trim();
+							if (cid) return `${IpfsService.apiBase}/api/web3storage/download/${cid}`;
+						} catch {}
+						return null;
+					}
+					return u;
+				})();
+        if (!target) {
+          if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: null }));
+          return;
+        }
+				fetch(target)
+					.then(async (res) => {
+						// Try JSON; on failure, inspect error message and fallback to text heuristics
+						try {
+							await res.clone().json();
+							return true;
+						} catch (err: any) {
+							const msg = typeof err?.message === 'string' ? err.message : '';
+							// Common browser error message when HTML is returned
+							if (/Unexpected token\s*</i.test(msg) || /not valid JSON/i.test(msg)) return false;
+							try {
+								const text = await res.text();
+								const trimmed = (text || '').trim();
+								if (/^</.test(trimmed)) return false; // looks like HTML/XML
+								// If it looks like JSON text, try to parse
+								if (/^[{\[]/.test(trimmed)) {
+									try { JSON.parse(trimmed); return true; } catch {}
+								}
+							} catch {}
+							return false;
+						}
+					})
+					.then((ok) => {
+						setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
+					})
+					.catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
+						});
+					 } catch {}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data?.rows]);
+
+	React.useEffect(() => {
+		try {
+			const rows = data?.rows || [];
+			rows.forEach((row) => {
+				const url = row.a2aEndpoint;
+				if (!url || !/^https?:\/\//i.test(String(url))) return;
+				if (a2aJsonById[row.agentId] !== undefined) return;
+				// Fetch preview JSON
+				fetch(String(url))
+					.then((res) => res.json().catch(() => null))
+					.then((json) => {
+						let preview: string | null = null;
+						if (json && typeof json === 'object' && !Array.isArray(json)) {
+							try {
+								preview = JSON.stringify(json, null, 2);
+								if (preview.length > 800) preview = preview.slice(0, 800) + '\n...';
+							} catch {}
+						}
+						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: preview }));
+					})
+					.catch(() => {
+						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: null }));
+					});
+			});
+		} catch {}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data?.rows]);
 
 
 	// Check if parent ENS domain is already wrapped

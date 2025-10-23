@@ -11,6 +11,7 @@ export async function GET(req: Request) {
     const name = (searchParams.get('name') || '').trim().toLowerCase();
     const id = (searchParams.get('id') || '').trim();
     const address = (searchParams.get('address') || '').trim().toLowerCase();
+    const chainId = searchParams.get('chainId');
 
     const where: string[] = [];
     const params: any = {};
@@ -25,6 +26,10 @@ export async function GET(req: Request) {
     if (address) {
       where.push('(lower(agentAddress) LIKE @addrLike OR lower(agentOwner) LIKE @addrLike)');
       params.addrLike = `%${address}%`;
+    }
+    if (chainId) {
+      where.push('chainId = @chainIdExact');
+      params.chainIdExact = parseInt(chainId);
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 

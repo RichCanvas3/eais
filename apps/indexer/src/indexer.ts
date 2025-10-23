@@ -192,8 +192,9 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
             supportedTrust = COALESCE(@trust, supportedTrust),
             rawJson = COALESCE(@raw, rawJson),
             updatedAtTime = strftime('%s','now')
-          WHERE agentId = @agentId
+          WHERE chainId = @chainId AND agentId = @agentId
         `).run({
+          chainId,
           agentId,
           type,
           name,
@@ -219,7 +220,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
     console.info("remove from list")
     try {
       const agentId = toDecString(tokenId);
-      db.prepare("DELETE FROM agents WHERE agentId = ?").run(agentId);
+      db.prepare("DELETE FROM agents WHERE chainId = ? AND agentId = ?").run(chainId, agentId);
       recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
     } catch {}
   }
@@ -340,8 +341,9 @@ async function upsertFromTokenGraph(item: any, chainId: number) {
       supportedTrust = COALESCE(@trust, supportedTrust),
       rawJson = COALESCE(@raw, rawJson),
       updatedAtTime = strftime('%s','now')
-    WHERE agentId = @agentId
+    WHERE chainId = @chainId AND agentId = @agentId
   `).run({
+    chainId,
     agentId,
     type,
     name,
@@ -552,8 +554,9 @@ function watch() {
 (async () => {
   // Initial run (don’t crash on failure)
   try {
-    await backfill(erc8004EthSepoliaClient);
-    //await backfillByIds(erc8004BaseSepoliaClient)
+    //await backfill(erc8004EthSepoliaClient);
+    //await backfillByIds(erc8004EthSepoliaClient)
+    await backfillByIds(erc8004BaseSepoliaClient)
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }
