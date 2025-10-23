@@ -2,6 +2,9 @@
 import * as React from 'react';
 import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
 import { useWeb3Auth } from './Web3AuthProvider';
+import { ethers } from 'ethers';
+import { EthersAdapter } from '../../erc8004-src';
+import { sepolia } from 'viem/chains';
 
 
 type Ctx = AIAgentIdentityClient | null;
@@ -32,9 +35,12 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
   const { provider: web3AuthProvider, address } = useWeb3Auth();
   const [client, setClient] = React.useState<AIAgentIdentityClient | null>(null);
 
+ 
   React.useEffect(() => {
     (async () => {
-      // Require a connected wallet before attempting to get a signer
+      
+      // set instance of providers to be L1 just to get it going
+
       if (!web3AuthProvider || !address || client) return;
       const identityRegistryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
       const ensRegistryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}`;
@@ -47,23 +53,22 @@ export function AIAgentIdentityClientProvider({ children }: Props) {
       //const orgAdapter = new EthersAdapter(orgProvider, orgSigner);
 
       // Agent signer from Web3Auth (browser EIP-1193)
+      
       //const browserProvider = new ethers.BrowserProvider(web3AuthProvider as any);
       //const agentSigner = await browserProvider.getSigner();
       //const agentAdapter = new EthersAdapter(browserProvider, agentSigner);
 
-      console.log('********************* AIAgentIdentityClientProvider: ensRegistryAddress', ensRegistryAddress);
-      console.log('********************* AIAgentIdentityClientProvider: identityRegistryAddress', identityRegistryAddress);
-      console.log('********************* AIAgentIdentityClientProvider: rpcUrl', rpcUrl);
-
       // Construct client (constructor matches current AIAgentIdentityClient signature in your repo)
       const instance = new AIAgentIdentityClient(
+        sepolia.id as number,
         rpcUrl,
-        identityRegistryAddress,
-        ensRegistryAddress,
+        identityRegistryAddress
       );
+
       setClient(instance);
     })();
   }, [web3AuthProvider, address, client]);
+
 
   return client ? (
     <AgentIdentityClientContext.Provider value={client}>

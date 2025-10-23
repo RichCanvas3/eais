@@ -144,9 +144,6 @@ export class IdentityClient {
    * @param key - Metadata key
    */
   async getMetadata(agentId: bigint, key: string): Promise<string> {
-    console.info("+++++++++++ getMetadata: adapter", await this.adapter.getChainId(), await this.adapter.getAddress());
-    console.info("@@@@@@@@@@@@@@@@@ getMetadata: contractAddress", this.contractAddress);
-
 
     const bytes = await this.adapter.call(
       this.contractAddress,

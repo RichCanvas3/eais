@@ -209,4 +209,18 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     // Return the mint transaction parameters as calls
     return { calls: rtnCalls };
   }
+
+
+  async prepareSetNameUriCalls(
+    name: string,
+    uri: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+
+
+
+    return { calls };
+
+  } 
 }

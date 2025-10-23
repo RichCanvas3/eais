@@ -31,13 +31,25 @@ import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.jso
 
 
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
-import { useAgentIdentityClientFor } from './AIAgentIdentityClientsProvider';
+import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIdentityClientsProvider';
 import { useAgentENSClient } from './AIAgentENSClientProvider';
 import { useAgentENSClientFor } from './AIAgentENSClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
+
+// Helper function to get the correct block explorer URL based on chain ID
+function getBlockExplorerUrl(chainId: number): string {
+  switch (chainId) {
+    case 11155111: // ETH Sepolia
+      return 'https://sepolia.etherscan.io';
+    case 84532: // Base Sepolia
+      return 'https://sepolia.basescan.org';
+    default:
+      return 'https://sepolia.etherscan.io'; // fallback to ETH Sepolia
+  }
+}
 
 export type Agent = {
 	chainId: number;
@@ -60,7 +72,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [address, setAddress] = React.useState("");
 	const [agentId, setAgentId] = React.useState("");
 	const [isLoading, setIsLoading] = React.useState(false);
-	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number } | null>(null);
+	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number }>({ rows: [], total: 0, page: 1, pageSize: 50 });
 	const [mineOnly, setMineOnly] = React.useState(false);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
     const { provider, address: eoa } = useWeb3Auth();
@@ -179,7 +191,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 
 	// Client hooks
 	const agentENSClient = useAgentENSClient();
-    const agentIdentityClient = useAgentIdentityClientFor(chainIdHex) || useAgentIdentityClient();
+	const agentIdentityClient = useAgentIdentityClient();
+	const agentIdentityClients = useAgentIdentityClients();
 	const orgIdentityClient = useOrgIdentityClient();
 
 	function isValidRegistrationUri(uri?: string | null): boolean {
@@ -354,31 +367,46 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			setInfoError(null);
 			setInfoData(null);
 			const agentId = row.agentId;
-			console.info("+++++++++++++++++++ openAgentInfo: agentId", agentId);
+			const chainId = row.chainId;
+			console.info("+++++++++++++++++++ openAgentInfo: row", row);
+			console.info("+++++++++++++++++++ openAgentInfo: agentId", agentId, "chainId", chainId, "type:", typeof chainId);
 			const agentIdNum = BigInt(agentId);
-			// Read on-chain metadata: string keys, string values
-			const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
+			
+			// Get the correct agent identity client for this chain
+			const chainIdHex = chainId === 84532 ? '0x14a34' : '0xaa36a7'; // Base Sepolia : ETH Sepolia
+			console.info("+++++++++++++++++++ openAgentInfo: chainIdHex", chainIdHex);
+			console.info("+++++++++++++++++++ openAgentInfo: available clients", Object.keys(agentIdentityClients));
+
+
+			const client = agentIdentityClients[chainIdHex];
+			
 			let name: string | null = null;
 			let account: string | null = null;
+			
+			// Try to use the agent name from the row if available
+			if (row.agentName) {
+				name = row.agentName;
+				console.info("+++++++++++++++++++ openAgentInfo: using agentName from row", name);
+			}
+			
 			try {
-				console.info("++++++++++++++++++++++++ openAgentInfo: ");
-				const agentIdentityClient = agentIdentityClientRef.current;
-				if (agentIdentityClient) {
-					console.info("++++++++++++++++++++++++ openAgentInfo: get agent name from agentIdentityClient");
-					name = await agentIdentityClient.getAgentName(agentIdNum);
-					account = await agentIdentityClient.getAgentAccount(agentIdNum);
-				}
-			} catch {}
-			if (!name || !account) {
+				console.info("++++++++++++++++++++++++ openAgentInfo: get agent name from agentIdentityClient for chain", chainId, "chainIdHex", chainIdHex);
+				if (client) {
 
-				const agentIdentityClient = agentIdentityClientRef.current;
-				if (agentIdentityClient) {
-					const nameFallback = await agentIdentityClient.getAgentName(agentIdNum);
-					const accountFallback = await agentIdentityClient.getAgentAccount(agentIdNum);
-					name = name ?? nameFallback;
-					account = account ?? accountFallback;
+					// Only fetch from chain if we don't have it from the row
+					if (!name) {
+						name = await client.getAgentName(agentIdNum);
+					}
+					account = await client.getAgentAccount(agentIdNum);
+				} else {
+					console.warn("No client found for chain", chainId, "chainIdHex", chainIdHex);
 				}
-
+			} catch (e: any) {
+				console.warn("Failed to get agent info from identity client:", e);
+				// If we have the agent name from the database, we can still show that
+				if (!name && row.agentName) {
+					name = row.agentName;
+				}
 			}
 
 			console.info("++++++++++++++++++++ openAgentInfo: name", name, "account", account);
@@ -447,30 +475,32 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 		}
 	};
 
+	
 	// Fetch ENS names when data changes
-    React.useEffect(() => {
-        if (data?.rows) {
-            data.rows.forEach(async (row) => {
-                try {
-                    const agentIdentityClient = agentIdentityClientRef.current;
-                    if (agentIdentityClient) {
-                        const agentIdNum = BigInt(row.agentId);
-                        const name = await agentIdentityClient.getAgentName(agentIdNum);
-                        const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
-                        setMetadataNames(prev => ({ ...prev, [row.agentId]: name ?? null }));
-                        setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
-                        if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
-                            fetchEnsName(acct);
-                        }
-                    }
-                } catch {}
-                if (!agentEnsNames[row.agentAddress]) {
-                    fetchEnsName(row.agentAddress);
-                }
-            });
-        }
-    }, [data?.rows]);
+   React.useEffect(() => {
+       if (data?.rows && Array.isArray(data.rows)) {
+           data.rows.forEach(async (row) => {
+               try {
+                   const agentIdentityClient = agentIdentityClientRef.current;
+                   if (agentIdentityClient) {
+                       const agentIdNum = BigInt(row.agentId);
+                       const name = await agentIdentityClient.getAgentName(agentIdNum);
+                       const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
+                       setMetadataNames(prev => ({ ...prev, [row.agentId]: name ?? null }));
+                       setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
+                       if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
+                           fetchEnsName(acct);
+                       }
+                   }
+               } catch {}
+               if (!agentEnsNames[row.agentAddress]) {
+                   fetchEnsName(row.agentAddress);
+               }
+           });
+       }
+   }, [data]);
 
+   /*
 	React.useEffect(() => {
 		try {
 			const rows = data?.rows || [];
@@ -498,6 +528,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
           if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: null }));
           return;
         }
+
+
 				fetch(target)
 					.then(async (res) => {
 						// Try JSON; on failure, inspect error message and fallback to text heuristics
@@ -526,9 +558,13 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 					.catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
 						});
 					 } catch {}
+					}
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [data?.rows]);
+	*/
 
+	/*
 	React.useEffect(() => {
 		try {
 			const rows = data?.rows || [];
@@ -537,7 +573,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				if (!url || !/^https?:\/\//i.test(String(url))) return;
 				if (a2aJsonById[row.agentId] !== undefined) return;
 				// Fetch preview JSON
-				fetch(String(url))
+				try{
+
+				
+					fetch(String(url))
 					.then((res) => res.json().catch(() => null))
 					.then((json) => {
 						let preview: string | null = null;
@@ -552,11 +591,13 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 					.catch(() => {
 						setA2aJsonById((prev) => ({ ...prev, [row.agentId]: null }));
 					});
+				}
+				catch {}
 			});
 		} catch {}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [data?.rows]);
-
+	*/
 
 	// Check if parent ENS domain is already wrapped
 	const checkParentWrapStatus = async () => {
@@ -804,7 +845,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			console.info("&&&&&&&&&&&& fetchData: url: ", url)
 				const res = await fetch(url);
                 if (!res.ok) {
-                    setData({ page, pageSize: 50, total: 0, rows: [] });
+                    setData({ page: page, pageSize: 50, total: 0, rows: [] });
 					return;
 				}
 				const text = await res.text();
@@ -812,7 +853,14 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				if (text && text.trim().length > 0) {
 					try { json = JSON.parse(text); } catch { json = null; }
 				}
-                setData(json ?? { page, pageSize: 50, total: 0, rows: [] });
+                // Ensure the response has the correct structure
+                const responseData = json ?? { page, pageSize: 50, total: 0, rows: [] };
+                setData({
+                    page: responseData.page ?? page,
+                    pageSize: responseData.pageSize ?? 50,
+                    total: responseData.total ?? 0,
+                    rows: Array.isArray(responseData.rows) ? responseData.rows : []
+                });
 		} finally {
 			setIsLoading(false);
 		}
@@ -833,7 +881,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
             } catch {}
         })();
         async function computeOwnership() {
-            if (!data?.rows || !provider || !eoa) { setOwned({}); return; }
+            if (!Array.isArray(data.rows) || data.rows.length === 0 || !provider || !eoa) { setOwned({}); return; }
 				const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
             const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
             const entries: Record<string, boolean> = {};
@@ -883,7 +931,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
             setOwned(entries);
         }
         computeOwnership();
-    }, [data?.rows, provider, eoa]);
+    }, [data, provider, eoa]);
 
 	function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
@@ -903,7 +951,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 		try {
 			setDiscoverLoading(true);
 			setDiscoverError(null);
-			if (!data?.rows || data.rows.length === 0) {
+			if (!Array.isArray(data.rows) || data.rows.length === 0) {
 				setDiscoverMatches(new Set());
 				setDiscoverTrustScores({});
 				return;
@@ -1424,7 +1472,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 											backgroundColor: 'action.hover'
 										}
 									}}
-									onClick={() => window.open(`https://sepolia.etherscan.io/address/${eoa}`, '_blank')}
+									onClick={() => window.open(`${getBlockExplorerUrl(11155111)}/address/${eoa}`, '_blank')}
 								/>
 							)}
 							<Stack direction="row" spacing={1}>
@@ -1442,7 +1490,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 									onClick={() => {
                                         const address = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
 										if (address) {
-											window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
+											window.open(`${getBlockExplorerUrl(11155111)}/address/${address}`, '_blank');
 										}
 									}}
 								/>
@@ -1460,7 +1508,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 									onClick={() => {
 										const address = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY;
 										if (address) {
-											window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
+											window.open(`${getBlockExplorerUrl(11155111)}/address/${address}`, '_blank');
 										}
 									}}
 								/>
@@ -1545,10 +1593,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 							</TableRow>
 						</TableHead>
 					<TableBody>
-					{!isLoading && (data?.rows?.filter((row) => {
+					{!isLoading && data.rows.filter((row) => {
 						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
 						return inDiscover && (!mineOnly || owned[row.agentId]);
-					}).length ?? 0) === 0 && (
+					}).length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
@@ -1562,7 +1610,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 								</TableCell>
 							</TableRow>
 						)}
-					{data?.rows?.filter((row) => {
+					{data.rows.filter((row) => {
 						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).sort((a, b) => {
@@ -1576,7 +1624,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						// Default: maintain original order
 						return 0;
 					})?.map((row) => (
-									<TableRow key={row.agentId} hover>
+									<TableRow key={`${row.chainId}-${row.agentId}`} hover>
 										<TableCell>
 											<Chip 
 												label={row.chainId === 11155111 ? 'ETH Sepolia' : row.chainId === 84532 ? 'Base Sepolia' : `Chain ${row.chainId}`}
@@ -1597,8 +1645,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 															sx={{ fontFamily: 'ui-monospace, monospace', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
 															onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
 															noWrap 
-															title={`Click to view on Etherscan: ${acct}`}
-															onClick={() => window.open(`https://sepolia.etherscan.io/address/${acct}`, '_blank')}
+															title={`Click to view on ${row.chainId === 84532 ? 'Basescan' : 'Etherscan'}: ${acct}`}
+															onClick={() => window.open(`${getBlockExplorerUrl(row.chainId)}/address/${acct}`, '_blank')}
 														>
 															{display}
 														</Typography>
@@ -1669,12 +1717,12 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 											{process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY ? (
 												<Typography
 													component="a"
-													href={`https://sepolia.etherscan.io/nft/${process.env.NEXT_PUBLIC_IDENTITY_REGISTRY}/${row.agentId}`}
+													href={`${getBlockExplorerUrl(row.chainId)}/nft/${process.env.NEXT_PUBLIC_IDENTITY_REGISTRY}/${row.agentId}`}
 													target="_blank"
 													rel="noopener noreferrer"
 													variant="body2"
 													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-													title={`View NFT #${row.agentId} on Etherscan`}
+													title={`View NFT #${row.agentId} on ${row.chainId === 84532 ? 'Basescan' : 'Etherscan'}`}
 												>
 													{row.agentId}
 												</Typography>
@@ -1895,7 +1943,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
                             {(() => {
                                 const reg = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
                                 if (reg) {
-                                    const href = `https://sepolia.etherscan.io/nft/${reg}/${identityCurrentAgent.agentId}`;
+                                    const href = `${getBlockExplorerUrl(identityCurrentAgent.chainId)}/nft/${reg}/${identityCurrentAgent.agentId}`;
                                     return (
                                         <Typography component="a" href={href} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
                                             {href}
@@ -2369,7 +2417,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 															textDecoration: 'underline'
 														}
 													}}
-													onClick={() => window.open(`https://sepolia.etherscan.io/address/${ensCurrentAgent?.agentAddress}`, '_blank')}
+													onClick={() => window.open(`${getBlockExplorerUrl(ensCurrentAgent?.chainId || 11155111)}/address/${ensCurrentAgent?.agentAddress}`, '_blank')}
 												>
 													{ensCurrentAgent?.agentAddress}
 												</Typography>
@@ -2608,7 +2656,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 															textDecoration: 'underline'
 														}
 													}}
-												onClick={() => window.open(`https://sepolia.etherscan.io/address/${orgOwner}`, '_blank')}
+												onClick={() => window.open(`${getBlockExplorerUrl(11155111)}/address/${orgOwner}`, '_blank')}
 												>
 													{orgOwner}
 												</Typography>

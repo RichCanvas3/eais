@@ -4,7 +4,7 @@
  */
 import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexToString, type Chain, type PublicClient } from 'viem';
 import { ethers } from 'ethers';
-import { sepolia } from 'viem/chains';
+import { sepolia, baseSepolia } from 'viem/chains';
 
 
 import { IdentityClient as BaseIdentityClient } from '../erc8004-src/IdentityClient';
@@ -17,16 +17,42 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
   private publicClient: PublicClient | null = null;
 
   constructor(
+    chainId: number,
     rpcUrl: string,
-    agentAdapter: any,
     identityRegistryAddress: `0x${string}`
   ) {
-    super(agentAdapter, identityRegistryAddress);
+    // this sdk does not make on-chain modifications.  Just reads stuff and prepares calls with correct encodings.
+    super(null as any, identityRegistryAddress);
 
-    this.chain = sepolia;
-    this.publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+    // Configure the correct chain based on chainId
+    this.chain = this.getChainById(chainId);
+    this.publicClient = createPublicClient({ chain: this.chain, transport: http(rpcUrl) });
     this.identityRegistryAddress = identityRegistryAddress;
   }
+
+  private getChainById(chainId: number): Chain {
+    switch (chainId) {
+      case 11155111: // ETH Sepolia
+        return sepolia;
+      case 84532: // Base Sepolia
+        return baseSepolia;
+      default:
+        console.warn(`Unknown chainId ${chainId}, defaulting to ETH Sepolia`);
+        return sepolia;
+    }
+  }
+
+
+  async getMetadata(agentId: bigint, key: string): Promise<string> {
+    const bytes = await this.publicClient?.readContract({
+      address: this.identityRegistryAddress,
+      abi: IdentityRegistryABI,
+      functionName: 'getMetadata',
+      args: [agentId, key]
+    });
+    return hexToString(bytes as `0x${string}`);
+  }
+
 
   encodeCall(
     abi: any[],
