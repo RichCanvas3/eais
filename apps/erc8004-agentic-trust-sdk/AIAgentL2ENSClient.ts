@@ -98,18 +98,22 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
    */
   async getAgentAccountByName(name: string): Promise<`0x${string}` | null> {
 
+    console.info("AIAgentL2ENSClient.getAgentAccountByName: ", name);
     // If standard lookup fails and we have namespace client, try L2 lookup
     if (this.namespaceClient) {
       try {
         const chainId = (this as any).chain.id;
         const isAvailable = await this.namespaceClient.isL2SubnameAvailable(name, chainId);
         if (!isAvailable) {
+          console.info("AIAgentL2ENSClient.getAgentAccountByName: not available");
           const client = createIndexerClient();
           const subname = await client.getL2Subname({
             chainId: baseSepolia.id,
             nameOrNamehash: namehash(name) as `0x${string}`
           });
+          console.info("AIAgentL2ENSClient.getAgentAccountByName: subname: ", subname);
           if (subname) {
+            console.info("AIAgentL2ENSClient.getAgentAccountByName: subname.owner: ", subname.owner);
             return subname.owner as `0x${string}`;
           }
           return null;

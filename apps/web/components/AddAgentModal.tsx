@@ -64,6 +64,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   const [ensAgentOwnerEoa, setEnsAgentOwnerEoa] = React.useState<string | null>(null);
   const [creatingAgentName, setCreatingAgentName] = React.useState(false);
   const [agentIdentityExists, setAgentIdentityExists] = React.useState<boolean | null>(null);
+  const [existingAgentId, setExistingAgentId] = React.useState<string | null>(null);
   const [orgStatus, setOrgStatus] = React.useState<{
     exists: boolean;
     isWrapped: boolean;
@@ -129,24 +130,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     if (label && base) {
       const full = `${label}.${base}.eth`;
       setAgentName(full);
-      let cancelled = false;
-      (async () => {
-        try {
-          setAgentResolving(true);
-          const orgAccount = await orgIdentityClient.getOrgAccountByName(full);
-          if (!cancelled) setAgentAccount(orgAccount);
-        } catch (e: any) {
-          if (!cancelled) setAgentAccount(null);
-        } finally {
-          if (!cancelled) setAgentResolving(false);
-        }
-      })();
-      return () => { cancelled = true; };
+      // Note: Agent account will be resolved by the chain-specific useEffect below
     } else {
       setAgentName('');
       setAgentAccount(null);
     }
-  }, [name, org, orgIdentityClient]);
+  }, [name, org]);
 
   // Fetch org URL when org changes
   React.useEffect(() => {
@@ -223,10 +212,10 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   }, [org]);
 
   // Helper function to get the appropriate ENS client for the selected chain
-  const getENSClientForChain = () => {
+  const getENSClientForChain = React.useCallback(() => {
     const client = agentENSClientForChain || agentENSClient;
     return client;
-  };
+  }, [agentENSClientForChain, agentENSClient]);
 
   // Helper function to convert ethers.js provider to viem-compatible provider
   const createViemCompatibleProvider = (ethersProvider: any) => {
@@ -286,6 +275,29 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     if (selectedChainIdHex === '0x14a34') return baseSepolia;
     return sepolia;
   }, [selectedChainIdHex]);
+
+  // Update agent account when chain changes
+  React.useEffect(() => {
+    if (!agentName || !agentName.trim()) return;
+    
+    let cancelled = false;
+    (async () => {
+      try {
+        setAgentResolving(true);
+        // Use the chain-specific ENS client to get the agent account for the new chain
+        const ensClient = getENSClientForChain();
+        const agentAccount = await ensClient.getAgentAccountByName(agentName);
+        if (!cancelled) setAgentAccount(agentAccount);
+      } catch (e: any) {
+        if (!cancelled) setAgentAccount(null);
+      } finally {
+        if (!cancelled) setAgentResolving(false);
+      }
+    })();
+    
+    return () => { cancelled = true; };
+  }, [selectedChainIdHex, agentName, agentENSClientForChain, agentENSClient]);
+
 
   function cleanAgentLabel(label: string) {
     return label.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
@@ -570,7 +582,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
         // Use the adapter to add agent name to org
         // Use agentUrlEdit if available and valid, otherwise use agentUrlText
         const urlToSet = (agentUrlEdit && /^https?:\/\//i.test(agentUrlEdit)) ? agentUrlEdit : 
-                         (agentUrlText && /^https?:\/\//i.test(agentUrlText)) ? agentUrlText : undefined;
+                         (agentUrlText && /^https?:\/\//i.test(agentUrlText)) ? agentUrlText : '';
         
         await adapterAddAgentNameToOrg({
           agentENSClient: getENSClientForChain(),
@@ -604,7 +616,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           console.log("Retrieved agent URL:", normalized);
           setAgentUrlText(normalized);
           setAgentUrlEdit(normalized ?? '');
-          setAgentUrlIsAuto(false);
         } catch (e) {
           console.warn('Failed to refresh agent URL after creation:', e);
         }
@@ -695,7 +706,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     }
   }
 
-  async function getDefaultAgentAccountClient(agentName: string, publicClient: any, walletClient: any)  {
+  const getDefaultAgentAccountClient = React.useCallback(async (agentName: string, publicClient: any, walletClient: any) => {
     try {
       // Ensure wallet is connected to the correct chain
       const currentChainId = await walletClient.getChainId();
@@ -761,15 +772,82 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
     } as any);
     //try { await logAgent(await agentAccountClient.getAddress()); } catch {}
     
-    return agentAccountClient
+    return agentAccountClient;
+  }, [eoaAddress, resolvedChain]);
 
-
+  // Compute agent AA default address when agent name or chain changes
+  React.useEffect(() => {
+    if (!agentName || !agentName.trim() || !eoaAddress) {
+      setAgentAADefaultAddress(null);
+      return;
+    }
     
-  }
+      let cancelled = false;
+      (async () => {
+      try {
+        // Compute the default agent account address for the current chain
+        const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
+        const walletClient = createWalletClient({
+          chain: resolvedChain,
+          transport: custom(provider),
+          account: eoaAddress as Address 
+        });
+        try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
+        const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
+        const agentAddress = await agentAccountClient.getAddress();
+        
+        if (!cancelled) {
+          setAgentAADefaultAddress(agentAddress);
+          console.log('Computed agent AA default address:', agentAddress, 'for chain:', resolvedChain.name);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to compute agent AA default address:', error);
+          setAgentAADefaultAddress(null);
+        }
+        }
+      })();
+    
+      return () => { cancelled = true; };
+  }, [agentName, selectedChainIdHex, eoaAddress, provider, resolvedChain, effectiveRpcUrl, getDefaultAgentAccountClient]);
 
-
-
+  // Check if agent identity already exists when agent name changes
+	React.useEffect(() => {
+    if (!agentName || !agentName.trim()) {
+        setAgentIdentityExists(null);
+      setExistingAgentId(null);
+      return;
+    }
+    
+    let cancelled = false;
+    (async () => {
+      try {
+        // Check if agent identity exists for this name
+        const { agentId, account } = await getENSClientForChain().getAgentIdentityByName(agentName.trim());
+        
+        if (!cancelled) {
+          if (agentId && agentId > 0n) {
+            setAgentIdentityExists(true);
+            setExistingAgentId(agentId.toString());
+            console.log('Agent identity exists for', agentName, 'with ID:', agentId.toString());
+          } else {
+            setAgentIdentityExists(false);
+            setExistingAgentId(null);
+            console.log('No agent identity found for', agentName);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to check agent identity existence:', error);
+          setAgentIdentityExists(null);
+          setExistingAgentId(null);
+        }
+      }
+    })();
+    
+    return () => { cancelled = true; };
+  }, [agentName, getENSClientForChain]);
 
   // Check org status when org changes
   React.useEffect(() => {
@@ -1356,7 +1434,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
             value={agentUrlEdit} 
             onChange={(e) => {
               setAgentUrlEdit(e.target.value);
-              setAgentUrlIsAuto(false); // Disable auto-population when user manually edits
             }}
             fullWidth
             placeholder="https://example.com/agent-name"
@@ -1439,7 +1516,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           )}
           {agentIdentityExists === true && (
             <Typography variant="body2" color="error">
-              Create disabled: Agent Identity already exists for this agent.
+              Create disabled: Agent Identity already exists for this agent{existingAgentId ? ` (ID: ${existingAgentId})` : ''}.
             </Typography>
           )}
           {error && <Typography variant="body2" color="error">{error}</Typography>}
