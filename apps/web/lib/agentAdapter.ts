@@ -269,7 +269,7 @@ export async function addAgentNameToOrg(params: {
   orgName: string,
   agentAccountClient: any,
   agentName: string,
-  agentUrl?: string,
+  agentUrl: string,
   agentAccount: `0x${string}`
 }): Promise<`0x${string}`> {
   const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
@@ -290,11 +290,13 @@ export async function addAgentNameToOrg(params: {
   
   console.log('********************* cleanOrgName', cleanOrgName);
   console.log('********************* cleanAgentName', cleanAgentName);
+  console.log('********************* agentUrl', agentUrl);
   
   const { calls : orgCalls } = await agentENSClient.prepareAddAgentNameToOrgCalls({
     orgName: cleanOrgName,
     agentName: cleanAgentName,
-    agentAddress: agentAccount
+    agentAddress: agentAccount,
+    agentUrl: agentUrl
   });
 
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);

@@ -76,6 +76,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
             chainId: baseSepolia.id,
             nameOrNamehash: namehash(name) as `0x${string}`
           });
+          console.info("subname for name: ", name, " is: ", subname);
           if (subname) {
             if (subname.records?.texts?.url) {
               const url = subname.records?.texts?.url;
@@ -141,7 +142,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     orgName: string;            // e.g., 'airbnb.eth'
     agentName: string;          // e.g., 'my-agent'
     agentAddress: `0x${string}`; // AA address for the agent name
-    agentUrl?: string | null    // optional URL
+    agentUrl: string    //  URL
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] }> {
 
     console.log("AIAgentL2ENSClient.prepareAddAgentNameToOrgCalls");
@@ -154,6 +155,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     const label = clean(params.agentName).replace(/\s+/g, '-');
     const fullSubname = `${label}.${parent}.eth`;
     const agentAddress = params.agentAddress;
+    const agentUrl = params.agentUrl;
 
     const chainName = 'base-sepolia';
 
@@ -161,6 +163,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     console.info("label: ", label);
     console.info("agentAddress: ", agentAddress);
     console.info("chainName: ", chainName);
+    console.info("agentUrl: ", agentUrl);
 
     // Prepare mint transaction parameters using namespace.ninja SDK
     const mintRequest = {
@@ -171,6 +174,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
       records: {
         texts: [
           { key: 'name', value: label },
+          { key: 'url', value: agentUrl },
           { key: 'description', value: `Agent: ${label}` },
           { key: 'chain', value: chainName },
           { key: 'agent-account', value: agentAddress },

@@ -93,7 +93,7 @@ export function StatsPanel({ open, onClose }: StatsPanelProps) {
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h6" fontWeight={600}>
-          Database Statistics
+          ERC-8004 Agent Statistics
         </Typography>
         <IconButton onClick={onClose} size="small">
           <Close />
@@ -159,19 +159,7 @@ export function StatsPanel({ open, onClose }: StatsPanelProps) {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
-            <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Schedule sx={{ mr: 1, color: 'warning.main' }} />
-                <Typography variant="body2" color="text.secondary">Last 24h</Typography>
-              </Box>
-              <Typography variant="h4" fontWeight={600}>
-                {stats.activity.recent24h.reduce((sum, chain) => sum + chain.recentCount, 0).toLocaleString()}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        
       </Grid>
 
       {/* Chain Breakdown */}

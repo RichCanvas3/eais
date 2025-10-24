@@ -624,7 +624,7 @@ export class AIAgentENSClient {
     orgName: string;            // e.g., 'airbnb.eth'
     agentName: string;                   // e.g., 'my-agent'
     agentAddress: `0x${string}`;     // AA address for the agent name
-    agentUrl?: string | null                   // optional TTL (defaults to 0)
+    agentUrl: string                   // optional TTL (defaults to 0)
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
 
 

@@ -1118,18 +1118,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       }
 
 
-      //const ownerAccount = privateKeyToAccount(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as `0x${string}`);
-      //const identityRegistryOwnerWallet = createWalletClient({
-      //  chain: sepolia,
-      //  transport: http(process.env.NEXT_PUBLIC_RPC_URL),
-      //  account: ownerAccount,
-      //});
-
-      //const { ethers } = await import('ethers');
-      //const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
-      //const agentOwner = new ethers.Wallet(process.env.NEXT_PUBLIC_IR_PRIVATE_KEY as string, ethersProvider);
-
-
       console.log('********************* adapterCreateAIAgentIdentity: tokenUri', tokenUri);
       const agentIdNum = await adapterCreateAIAgentIdentity({
         agentIdentityClient: agentIdentityClient,
