@@ -1941,7 +1941,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
                         <Typography variant="caption" color="text.secondary">
                             NFT URL:&nbsp;
                             {(() => {
-                                const reg = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
+                                // Get chain-specific registry address
+                                const reg = identityCurrentAgent.chainId === 84532 
+                                    ? process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY 
+                                    : process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
                                 if (reg) {
                                     const href = `${getBlockExplorerUrl(identityCurrentAgent.chainId)}/nft/${reg}/${identityCurrentAgent.agentId}`;
                                     return (

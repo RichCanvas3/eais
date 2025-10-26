@@ -568,10 +568,10 @@ function watch() {
 (async () => {
   // Initial run (don’t crash on failure)
   try {
-    await backfill(erc8004EthSepoliaClient);
+    //await backfill(erc8004EthSepoliaClient);
     //await backfillByIds(erc8004EthSepoliaClient)
     //await backfill(erc8004BaseSepoliaClient);
-    //await backfillByIds(erc8004BaseSepoliaClient)
+    await backfillByIds(erc8004BaseSepoliaClient)
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }
