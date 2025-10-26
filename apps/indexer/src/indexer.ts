@@ -1,6 +1,6 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, GRAPHQL_POLL_MS } from "./env";
+import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
@@ -407,7 +407,24 @@ async function backfill(client: ERC8004Client) {
   const fetchJson = async (body: any) => {
     // Normalize URL: some gateways expect <key>/<subgraph> without trailing /graphql
     const endpoint = (GRAPHQL_URL || '').replace(/\/graphql\/?$/i, '');
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', 'accept': 'application/json' }, body: JSON.stringify(body) } as any);
+    
+    // Prepare headers
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      'accept': 'application/json'
+    };
+    
+    // Add authorization header if API key is provided
+    if (GRAPHQL_API_KEY) {
+      headers['Authorization'] = `Bearer ${GRAPHQL_API_KEY}`;
+    }
+    
+    const res = await fetch(endpoint, { 
+      method: 'POST', 
+      headers, 
+      body: JSON.stringify(body) 
+    } as any);
+    
     if (!res.ok) {
       let text = '';
       try { text = await res.text(); } catch {}
@@ -553,7 +570,8 @@ function watch() {
   try {
     await backfill(erc8004EthSepoliaClient);
     //await backfillByIds(erc8004EthSepoliaClient)
-    await backfillByIds(erc8004BaseSepoliaClient)
+    //await backfill(erc8004BaseSepoliaClient);
+    //await backfillByIds(erc8004BaseSepoliaClient)
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }

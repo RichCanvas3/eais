@@ -10,8 +10,6 @@ export default function Page() {
   const { isLoggedIn, login, logout } = useWeb3Auth();
   const [open, setOpen] = React.useState(false);
   const [statsOpen, setStatsOpen] = React.useState(false);
-  const registryAddress = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
-  const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
   
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -117,7 +115,7 @@ export default function Page() {
         </Box>
       )}
       
-      <AddAgentModal open={open} onClose={() => setOpen(false)} registryAddress={registryAddress} rpcUrl={rpcUrl} />
+      <AddAgentModal open={open} onClose={() => setOpen(false)} />
       <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
     </Container>
   );

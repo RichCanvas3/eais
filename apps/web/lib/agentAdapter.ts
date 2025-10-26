@@ -337,6 +337,7 @@ export async function addAgentNameToOrg(params: {
     return userOpHash1 as `0x${string}`;
   }
   else {
+    // L2 ENS Add Agent Name to Org flow
     try {
       const userOperationHash = await sendSponsoredUserOperation({
         bundlerUrl,
@@ -349,7 +350,7 @@ export async function addAgentNameToOrg(params: {
       
       // Wait for the transaction to be mined
       const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
-      console.log("Subname minted successfully! Transaction hash:", receipt.receipt.transactionHash);
+      console.log("Subname minted successfully! Transaction hash:", receipt);
     }
     catch (error) {
       console.error("Error adding l2 agent name to org:", error);

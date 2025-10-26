@@ -34,14 +34,11 @@ import { privateKeyToAccount } from 'viem/accounts';
 type Props = {
   open: boolean;
   onClose: () => void;
-  registryAddress: `0x${string}`;
-  rpcUrl: string;
-  chainIdHex?: string;
 };
 
-export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdHex }: Props) {
+export function AddAgentModal({ open, onClose }: Props) {
   // All useState hooks first
-  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string | undefined>(chainIdHex);
+  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string | undefined>();
   const [org, setOrg] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -112,6 +109,17 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       if (first) setSelectedChainIdHex(first);
     }
   }, [clients, selectedChainIdHex]);
+
+  // Reset selectedChainIdHex to first chain when modal opens
+  React.useEffect(() => {
+    if (open && !selectedChainIdHex) {
+      const first = Object.keys(clients)[0];
+      if (first) {
+        console.log('Setting default chain to first available:', first);
+        setSelectedChainIdHex(first);
+      }
+    }
+  }, [open, clients, selectedChainIdHex]);
 
   // Check agent availability when agent name or domain changes
   React.useEffect(() => {
@@ -256,13 +264,12 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
   };
 
 
-  const adapter = React.useMemo(() => createAgentAdapter({ registryAddress, rpcUrl }), [registryAddress, rpcUrl]);
 
   const effectiveRpcUrl = React.useMemo(() => {
     if (selectedChainIdHex === '0xaa36a7') return process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
     if (selectedChainIdHex === '0x14a34') return process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string;
-    return rpcUrl;
-  }, [selectedChainIdHex, rpcUrl]);
+    return;
+  }, [selectedChainIdHex]);
 
   const effectiveBundlerUrl = React.useMemo(() => {
     if (selectedChainIdHex === '0xaa36a7') return process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
@@ -620,83 +627,6 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           console.warn('Failed to refresh agent URL after creation:', e);
         }
 
-        /*
-        console.log("Agent name added to org successfully!");
-        
-        
-        // Prepare and execute ENS record calls
-        try {
-          // Set the agent-identity record
-          const agentIdentityCalls = await ensClient.prepareSetNameAgentIdentityCalls(
-            fullSubname,
-            0n // We'll need to get the actual agentId from the identity registry
-          );
-          
-          // Set the URL record if we have one
-          if (agentUrlEdit && agentUrlEdit.trim()) {
-            const uriCalls = await ensClient.prepareSetNameUriCalls({
-              name: fullSubname,
-              uri: agentUrlEdit.trim(),
-            });
-            
-            // Execute URI calls
-            for (const call of uriCalls) {
-              const userOpHash = await bundlerClient.sendUserOperation({
-                account: agentAccountClient,
-                calls: [{
-                  to: call.to as `0x${string}`,
-                  data: call.data as `0x${string}`,
-                  value: call.value || 0n,
-                }],
-                ...fee,
-              });
-              await bundlerClient.waitForUserOperationReceipt({ hash: userOpHash });
-            }
-          }
-          
-          // Execute agent-identity calls
-          for (const call of agentIdentityCalls) {
-            const userOpHash = await bundlerClient.sendUserOperation({
-              account: agentAccountClient,
-              calls: [{
-                to: call.to as `0x${string}`,
-                data: call.data as `0x${string}`,
-                value: call.value || 0n,
-              }],
-              ...fee,
-            });
-            await bundlerClient.waitForUserOperationReceipt({ hash: userOpHash });
-          }
-          
-          // For L1 chains, also add the agent name to the org
-          if (!isBaseSepolia) {
-            console.log("Adding agent name to org (L1 only)");
-            const orgCalls = await ensClient.prepareAddAgentNameToOrgCalls({
-              orgName: parentName,
-              agentName: fullSubname,
-              agentAccount: addressToUse,
-            });
-            
-            for (const call of orgCalls) {
-              const userOpHash = await bundlerClient.sendUserOperation({
-                account: agentAccountClient,
-                calls: [{
-                  to: call.to as `0x${string}`,
-                  data: call.data as `0x${string}`,
-                  value: call.value || 0n,
-                }],
-                ...fee,
-              });
-              await bundlerClient.waitForUserOperationReceipt({ hash: userOpHash });
-            }
-          }
-          
-          console.log("ENS records set up successfully!");
-        } catch (ensError) {
-          console.error("Error setting up ENS records:", ensError);
-          // Don't fail the entire operation if ENS setup fails
-        }
-        */
       
     } catch (error) {
       console.error('Error creating agent name:', error);
@@ -1035,14 +965,7 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
       console.log('********************* agentNameLower', agentNameLower);
 
       // 0) Early exit if agent already exists for this agentNameLower
-      try {
-        const existing = await adapter.resolveByDomain(agentNameLower);
-        if (existing && existing.agentAddress) {
-          setIsSubmitting(false);
-          setError('Agent already exists for this name ' + agentNameLower);
-          return;
-        }
-      } catch {}
+      // Note: This check is now handled by the agentIdentityExists state
 
       // 1) Create Agent AA (Hybrid) similar to indiv account abstraction
       const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
@@ -1173,10 +1096,13 @@ export function AddAgentModal({ open, onClose, registryAddress, rpcUrl, chainIdH
           endpoints,
           registrations: (async () => {
             try {
-              const count = await adapter.getAgentCount();
-              const nextId = Number((count ?? 0n) + 1n);
-              if (nextId > 0 && registryAddress) {
-                return [{ agentId: nextId, agentRegistry: `eip155:${resolvedChain.id}:${registryAddress}` }];
+              // Get the registry address from the resolved chain
+              const identityRegistry = resolvedChain.id === 84532 ? 
+                process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY : 
+                process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
+              if (identityRegistry) {
+                // Note: agentId will be determined when the identity is created on-chain
+                return [{ agentRegistry: `eip155:${resolvedChain.id}:${identityRegistry}` }];
               }
             } catch {}
             return [];

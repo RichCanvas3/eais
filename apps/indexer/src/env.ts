@@ -32,4 +32,5 @@ export const LOGS_CHUNK_SIZE   = BigInt(process.env.LOGS_CHUNK_SIZE ?? 10);
 export const BACKFILL_MODE     = (process.env.BACKFILL_MODE ?? 'logs') as 'logs' | 'ids';
 export const IDENTITY_API_URL      = process.env.IDENTITY_API_URL  ?? 'http://localhost:4000';
 export const GRAPHQL_URL       = process.env.GRAPHQL_URL || '';
+export const GRAPHQL_API_KEY   = process.env.GRAPHQL_API_KEY || '';
 export const GRAPHQL_POLL_MS   = Number(process.env.GRAPHQL_POLL_MS ?? 120000);
