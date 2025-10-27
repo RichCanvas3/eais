@@ -5,7 +5,7 @@ import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitl
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { sepolia } from 'viem/chains';
+import { sepolia, baseSepolia } from 'viem/chains';
 import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatBuilder } from '@metamask/delegation-toolkit';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
@@ -144,6 +144,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
 	const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
 	const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
+	const [metadataNamesIsENS, setMetadataNamesIsENS] = React.useState<Record<string, boolean>>({});
 
 	// ENS modal state
 	const [ensOpen, setEnsOpen] = React.useState(false);
@@ -210,8 +211,16 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			setIdentityJsonError(null);
 			setIdentityJsonData(null);
 			setIdentityTokenUri(null);
-			// Build a robust fetch path to avoid mixed-content/CORS issues
-			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+			
+			// Get chain-specific configuration based on the agent's chainId
+			const agentChainId = row.chainId;
+			const rpcUrl = agentChainId === 84532 ? 
+				process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string :
+				process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+			const identityRegistry = agentChainId === 84532 ?
+				process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY as string :
+				process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
+			
 			const { ethers } = await import('ethers');
 			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
 			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
@@ -220,10 +229,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const erc8004Client = new ERC8004Client({
 				adapter,
                 addresses: {
-                    identityRegistry: process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string,
+                    identityRegistry,
 					reputationRegistry: '0x0000000000000000000000000000000000000000',
 					validationRegistry: '0x0000000000000000000000000000000000000000',
-					chainId: 11155111,
+					chainId: agentChainId,
 				}
 			});
 			let fetched: any | null = null;
@@ -313,22 +322,30 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			}
 			// Build agent account client for AA
 			if (!provider || !eoa) throw new Error('Not connected');
-			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+			
+			// Get chain-specific configuration based on the agent's chainId
+			const agentChainId = identityCurrentAgent.chainId;
+			const rpcUrl = agentChainId === 84532 ? 
+				process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string :
+				process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+			const chain = agentChainId === 84532 ? baseSepolia : sepolia;
+			const bundlerUrl = agentChainId === 84532 ?
+				process.env.NEXT_PUBLIC_BASE_SEPOLIA_BUNDLER_URL as string :
+				process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+			
+			const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+			const walletClient = createWalletClient({ chain: chain as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 			const agentAccountClient = await toMetaMaskSmartAccount({
 				address: identityCurrentAgent.agentAddress as `0x${string}`,
 				client: publicClient,
 				implementation: Implementation.Hybrid,
 				signatory: { walletClient },
 			} as any);
-			// Send setUri via bundler
-			const bundlerUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 
 			await adapterSetAgentIdentityRegistrationUri({
 				agentIdentityClient: agentIdentityClient as any,
 				bundlerUrl,
-				chain: sepolia as any,
+				chain: chain as any,
 				agentAccountClient,
 				agentId: BigInt(identityCurrentAgent.agentId),
 				registrationUri: url,
@@ -477,28 +494,57 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 
 	
 	// Fetch ENS names when data changes
-   React.useEffect(() => {
-       if (data?.rows && Array.isArray(data.rows)) {
-           data.rows.forEach(async (row) => {
-               try {
-                   const agentIdentityClient = agentIdentityClientRef.current;
-                   if (agentIdentityClient) {
-                       const agentIdNum = BigInt(row.agentId);
-                       const name = await agentIdentityClient.getAgentName(agentIdNum);
-                       const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
-                       setMetadataNames(prev => ({ ...prev, [row.agentId]: name ?? null }));
-                       setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
-                       if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
-                           fetchEnsName(acct);
-                       }
-                   }
-               } catch {}
-               if (!agentEnsNames[row.agentAddress]) {
-                   fetchEnsName(row.agentAddress);
-               }
-           });
-       }
-   }, [data]);
+  React.useEffect(() => {
+      if (data?.rows && Array.isArray(data.rows)) {
+          data.rows.forEach(async (row) => {
+              try {
+				console.info("............AgentTable: fetchEnsName: row: ", row);
+				
+				// Get the correct agent identity client based on the row's chainId
+				const chainIdHex = row.chainId === 84532 ? '0x14a34' : '0xaa36a7'; // Base Sepolia : ETH Sepolia
+				console.info("............AgentTable: fetchEnsName: chainId:", row.chainId, "chainIdHex:", chainIdHex);
+				
+                  const agentIdentityClient = agentIdentityClients[chainIdHex];
+                  if (agentIdentityClient) {
+                      const agentIdNum = BigInt(row.agentId);
+                      
+                      // Fetch account address
+                      console.info("............AgentTable: fetching account for agentId:", agentIdNum, "on chain:", row.chainId);
+                      const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
+                      console.info("............AgentTable: fetched account:", acct);
+                      setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
+                      
+                      // Fetch name if database has null/empty name
+                      if (!row.agentName || row.agentName.trim() === '') {
+                          console.info("............AgentTable: database name is null/empty, fetching from chain for agentId:", agentIdNum);
+                          const name = await agentIdentityClient.getAgentName(agentIdNum);
+                          console.info("............AgentTable: fetched name:", name);
+                          if (name) {
+                              setMetadataNames(prev => ({ ...prev, [row.agentId]: name }));
+                              // Check if it's a valid ENS name (contains .eth or .orgtrust.eth)
+                              const isENS = name.includes('.eth') || name.includes('.orgtrust.eth');
+                              setMetadataNamesIsENS(prev => ({ ...prev, [row.agentId]: isENS }));
+                              console.info("............AgentTable: name is ENS:", isENS);
+                          }
+                      }
+                      
+                      // Fetch ENS name for the account address if not already fetched
+                      if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
+                          fetchEnsName(acct);
+                      }
+                  } else {
+                      console.warn("............AgentTable: No client found for chain:", row.chainId, "chainIdHex:", chainIdHex);
+                  }
+              } catch (e) {
+                  console.warn("............AgentTable: Error fetching agent name/account:", e);
+              }
+              // Fetch ENS name for agent address if not already fetched
+              if (!agentEnsNames[row.agentAddress]) {
+                  fetchEnsName(row.agentAddress);
+              }
+          });
+      }
+  }, [data]);
 
    /*
 	React.useEffect(() => {
@@ -828,7 +874,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	}
 
 
-		async function fetchData(page = 1, overrides?: { name?: string; address?: string; agentId?: string }) {
+		async function fetchData(page = 1, overrides?: { name?: string; address?: string; agentId?: string; chainId?: number }) {
 		setIsLoading(true);
 		console.info("&&&&&&&&&&&& fetchData: page: ", page)
 		console.info("&&&&&&&&&&&& fetchData: overrides: ", overrides)
@@ -836,9 +882,12 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const nameFilter = overrides?.name ?? domain;
 			const addressFilter = overrides?.address ?? address;
 			const idFilter = overrides?.agentId ?? agentId;
+			const chainIdFilter = overrides?.chainId;
+			
 			if (nameFilter) url.searchParams.set("name", nameFilter);
 			if (addressFilter) url.searchParams.set("address", addressFilter);
-			if (idFilter) url.searchParams.set("agentId", idFilter);
+			if (idFilter) url.searchParams.set("id", idFilter);
+			if (chainIdFilter) url.searchParams.set("chainId", String(chainIdFilter));
         url.searchParams.set("page", String(page));
         url.searchParams.set("pageSize", "50");
 		try {
@@ -1658,9 +1707,13 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
                             {(() => {
                                 const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
                                 const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+                                // Use fetched name if database name is empty, otherwise use database name
+                                const dbName = row.agentName || '';
+                                const fetchedName = metadataNames[row.agentId] || null;
+                                const displayName = dbName || fetchedName || null;
                                 const a2aPreview = a2aJsonById[row.agentId];
-                                const tooltip = a2aPreview ? `${row.agentName || ens || ''}\n\n${a2aPreview}` : (row.agentName || ens || '—');
-                                const nameText = row.agentName || ens || '—';
+                                const tooltip = a2aPreview ? `${displayName || ens || ''}\n\n${a2aPreview}` : (displayName || ens || '—');
+                                const nameText = displayName || ens || '—';
                                 if (ens) {
                                     return (
                                         <Typography

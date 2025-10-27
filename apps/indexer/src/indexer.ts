@@ -1,6 +1,6 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
+import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
@@ -19,7 +19,7 @@ import {
 const ethSepliaEthersProvider = new ethers.JsonRpcProvider(ETH_SEPOLIA_RPC_HTTP_URL);
 const ethSepoliathersAdapter = new EthersAdapter(ethSepliaEthersProvider); // No signer needed for reads
 
-console.info("********************* IDENTITY_REGISTRY: ", ETH_SEPOLIA_IDENTITY_REGISTRY);
+
 const erc8004EthSepoliaClient = new ERC8004Client({
   adapter: ethSepoliathersAdapter,
   addresses: {
@@ -43,6 +43,7 @@ const erc8004BaseSepoliaClient = new ERC8004Client({
     chainId: 84532, // Base Sepolia
   }
 });
+
 
 
 
@@ -373,12 +374,29 @@ async function backfill(client: ERC8004Client) {
 
   const chainId = await client.getChainId();
 
+  // Get chain-specific GraphQL URL
+  let graphqlUrl = '';
+  if (chainId === 11155111) {
+    // ETH Sepolia
+    graphqlUrl = ETH_SEPOLIA_GRAPHQL_URL;
+  } else if (chainId === 84532) {
+    // Base Sepolia
+    graphqlUrl = BASE_SEPOLIA_GRAPHQL_URL;
+  } 
+
+
+  console.info("............backfill: chainId: ", chainId)
+  console.info("............backfill: graphqlUrl: ", graphqlUrl)
+
+
   // GraphQL-driven indexing: fetch latest transfers and upsert
-  if (!GRAPHQL_URL) {
-    console.warn('GRAPHQL_URL not configured; skipping GraphQL backfill');
+  if (!graphqlUrl) {
+    console.warn(`GRAPHQL_URL not configured for chain ${chainId}; skipping GraphQL backfill`);
     return;
   }
+
   const last = getCheckpoint();
+  /*
   const query = `query TokensAndTransfers($first: Int!) {
     tokens(first: $first, orderBy: mintedAt, orderDirection: desc) {
       id
@@ -401,12 +419,13 @@ async function backfill(client: ERC8004Client) {
       timestamp
     }
   }`;
+  */
 
-  console.info("............backfill: query: ", GRAPHQL_URL)
+  console.info("............backfill: query: ", graphqlUrl, "for chain:", chainId)
 
   const fetchJson = async (body: any) => {
     // Normalize URL: some gateways expect <key>/<subgraph> without trailing /graphql
-    const endpoint = (GRAPHQL_URL || '').replace(/\/graphql\/?$/i, '');
+    const endpoint = (graphqlUrl || '').replace(/\/graphql\/?$/i, '');
     
     // Prepare headers
     const headers: Record<string, string> = {
@@ -433,13 +452,47 @@ async function backfill(client: ERC8004Client) {
     return await res.json();
   };
 
-  console.info("............backfill: GRAPHQL_URL: ", fetchJson)
 
-  const pageSize = 100;
-  const resp = await fetchJson({ query, variables: { first: pageSize } });
-  // Handle tokens (metadata) and transfers (ownership)
+
+
+  const pageSize = 1000; // Increased page size to fetch more historical data
+  console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
   
+  // Fetch transfers - fetch in ascending order by timestamp to get historical data
+  const historicalQuery = `query TokensAndTransfers($first: Int!) {
+    tokens(first: $first, orderBy: mintedAt, orderDirection: desc) {
+      id
+      uri
+      agentName
+      description
+      image
+      a2aEndpoint
+      ensName
+      agentAccount
+      metadataJson
+      mintedAt
+    }
+    transfers(first: $first, orderBy: timestamp, orderDirection: asc) {
+      id
+      token { id }
+      from { id }
+      to { id }
+      blockNumber
+      timestamp
+    }
+  }`;
+  
+  const resp = await fetchJson({ query: historicalQuery, variables: { first: pageSize } });
+  
+  // Handle tokens (metadata) and transfers (ownership)
   const transferItems = (resp?.data?.transfers as any[]) || [];
+
+  console.info("............backfill: transferItems: ", transferItems)
+  
+  console.info(
+    "............backfill: Fetched", 
+    transferItems.length, 
+    "transfers (first tokenId:", transferItems[0]?.token?.id, "last tokenId:", transferItems[transferItems.length - 1]?.token?.id, ")");
 
   // Upsert latest tokens metadata first (oldest-first by mintedAt)
 
@@ -461,11 +514,12 @@ async function backfill(client: ERC8004Client) {
     console.info("&&&&&&&&&&&& upsertFromTransfer: tokenId: ", tokenId)
     console.info("&&&&&&&&&&&& upsertFromTransfer: blockNum: ", blockNum)
     console.info("&&&&&&&&&&&& upsertFromTransfer: uri: ", uri)
-    await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId); // ETH Sepolia chainId
+    await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId); 
     setCheckpoint(blockNum);
   }
 
 
+  /*
   const tokenItems = (resp?.data?.tokens as any[]) || [];
   const tokensOrdered = tokenItems
   .slice()
@@ -474,6 +528,7 @@ async function backfill(client: ERC8004Client) {
     console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
     await upsertFromTokenGraph(t, chainId); // ETH Sepolia chainId
   }
+    */
  
 
 }
@@ -566,12 +621,27 @@ function watch() {
   */
 
 (async () => {
-  // Initial run (don’t crash on failure)
+  // Check if database has any data - if not, reset checkpoint to 0
+  try {
+    const agentCount = db.prepare('SELECT COUNT(*) as count FROM agents').get() as { count: number };
+    const eventCount = db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number };
+    
+    if (agentCount.count === 0 && eventCount.count === 0) {
+      console.log('Database is empty - resetting checkpoint to 0');
+      setCheckpoint(0n);
+      // Clear any stale checkpoint data
+      db.prepare("DELETE FROM checkpoints WHERE key='lastProcessed'").run();
+    }
+  } catch (error) {
+    console.warn('Error checking database state:', error);
+  }
+
+  // Initial run (don't crash on failure)
   try {
     //await backfill(erc8004EthSepoliaClient);
     //await backfillByIds(erc8004EthSepoliaClient)
-    //await backfill(erc8004BaseSepoliaClient);
-    await backfillByIds(erc8004BaseSepoliaClient)
+    await backfill(erc8004BaseSepoliaClient);
+    //await backfillByIds(erc8004BaseSepoliaClient)
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }

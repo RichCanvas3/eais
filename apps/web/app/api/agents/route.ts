@@ -48,6 +48,7 @@ export async function GET(req: Request) {
       ${whereSql}
     `).get(params) as { c: number };
 
+
     return NextResponse.json({ rows, total: total.c, page, pageSize });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Failed' }, { status: 500 });
