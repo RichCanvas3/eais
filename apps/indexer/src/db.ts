@@ -146,11 +146,13 @@ try {
   console.warn('Migration to composite primary key failed:', error);
 }
 
-export function getCheckpoint(): bigint {
-  const row = db.prepare("SELECT value FROM checkpoints WHERE key='lastProcessed'").get() as { value?: string } | undefined;
+export function getCheckpoint(chainId?: number): bigint {
+  const key = chainId ? `lastProcessed_${chainId}` : 'lastProcessed';
+  const row = db.prepare("SELECT value FROM checkpoints WHERE key=?").get(key) as { value?: string } | undefined;
   return row?.value ? BigInt(row.value) : 0n;
 }
 
-export function setCheckpoint(bn: bigint) {
-  db.prepare("INSERT INTO checkpoints(key, value) VALUES('lastProcessed', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(bn));
+export function setCheckpoint(bn: bigint, chainId?: number) {
+  const key = chainId ? `lastProcessed_${chainId}` : 'lastProcessed';
+  db.prepare("INSERT INTO checkpoints(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(key, String(bn));
 }

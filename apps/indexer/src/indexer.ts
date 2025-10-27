@@ -1,6 +1,6 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, GRAPHQL_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
+import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
@@ -83,6 +83,53 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
   if (!fetchFn) return null;
   try {
     console.info("............fetchIpfsJson: tokenURI: ", tokenURI)
+    
+    // Handle inline data URIs (data:application/json,...)
+    if (tokenURI.startsWith('data:application/json')) {
+      try {
+        const commaIndex = tokenURI.indexOf(',');
+        if (commaIndex === -1) {
+          console.warn("............fetchIpfsJson: Invalid data URI format");
+          return null;
+        }
+        
+        const jsonData = tokenURI.substring(commaIndex + 1);
+        let parsed;
+        
+        // Check if it's marked as base64 encoded
+        if (tokenURI.startsWith('data:application/json;base64,')) {
+          try {
+            // Try base64 decode first
+            const jsonString = Buffer.from(jsonData, 'base64').toString('utf-8');
+            parsed = JSON.parse(jsonString);
+          } catch (e) {
+            // If base64 fails, try parsing as plain JSON (some URIs are mislabeled)
+            console.info("............fetchIpfsJson: base64 decode failed, trying plain JSON");
+            try {
+              parsed = JSON.parse(jsonData);
+            } catch (e2) {
+              const decodedJson = decodeURIComponent(jsonData);
+              parsed = JSON.parse(decodedJson);
+            }
+          }
+        } else {
+          // Plain JSON - try parsing directly first, then URL decode if needed
+          try {
+            parsed = JSON.parse(jsonData);
+          } catch (e) {
+            const decodedJson = decodeURIComponent(jsonData);
+            parsed = JSON.parse(decodedJson);
+          }
+        }
+        
+        console.info("............fetchIpfsJson: parsed inline data:", parsed);
+        return parsed;
+      } catch (e) {
+        console.warn("............fetchIpfsJson: Failed to parse inline data URI:", e);
+        return null;
+      }
+    }
+    
     const cid = extractCid(tokenURI);
     if (cid) {
       console.info("............fetchIpfsJson: cid: ", cid)
@@ -112,6 +159,26 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
   console.info(".... ownerAddress", ownerAddress)
   console.info(".... chainId", chainId)
 
+  // Fetch metadata from tokenURI BEFORE database insert to populate all fields
+  let preFetchedMetadata: any = null;
+  if (tokenURI) {
+    try {
+      console.info("............upsertFromTransfer: fetching metadata from tokenURI before insert");
+      const metadata = await fetchIpfsJson(tokenURI);
+      if (metadata && typeof metadata === 'object') {
+        console.info("............upsertFromTransfer: metadata fetched:", metadata);
+        preFetchedMetadata = metadata;
+        
+        if (typeof metadata.name === 'string' && metadata.name.trim()) {
+          agentName = metadata.name.trim();
+          console.info("............upsertFromTransfer: found agentName:", agentName);
+        }
+      }
+    } catch (e) {
+      console.warn("............upsertFromTransfer: Failed to fetch metadata before insert:", e);
+    }
+  }
+
   if (ownerAddress != '0x000000000000000000000000000000000000dEaD') {
     console.info("@@@@@@@@@@@@@@@@@@@@@ upsertFromTransfer: ", agentAddress)
     console.info("............insert into table: agentId: ", agentId)
@@ -140,7 +207,8 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
     });
 
 
-    const metadata = await fetchIpfsJson(tokenURI);
+    // Use pre-fetched metadata if available, otherwise fetch now
+    const metadata = preFetchedMetadata || await fetchIpfsJson(tokenURI);
     if (metadata) {
       try {
         const meta = metadata as any;
@@ -175,17 +243,32 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         db.prepare(`
           UPDATE agents SET
             type = COALESCE(type, @type),
-            agentName = COALESCE(NULLIF(TRIM(@name), ''), agentName),
+            agentName = CASE 
+              WHEN @name IS NOT NULL AND @name != '' THEN @name 
+              ELSE agentName 
+            END,
             agentAddress = CASE
               WHEN (agentAddress IS NULL OR agentAddress = '0x0000000000000000000000000000000000000000')
                    AND (@agentAddress IS NOT NULL AND @agentAddress != '0x0000000000000000000000000000000000000000')
               THEN @agentAddress
               ELSE agentAddress
             END,
-            description = COALESCE(@description, description),
-            image = COALESCE(@image, image),
-            a2aEndpoint = COALESCE(@a2a, a2aEndpoint),
-            ensEndpoint = COALESCE(@ens, ensEndpoint),
+            description = CASE 
+              WHEN @description IS NOT NULL AND @description != '' THEN @description 
+              ELSE description 
+            END,
+            image = CASE 
+              WHEN @image IS NOT NULL AND @image != '' THEN @image 
+              ELSE image 
+            END,
+            a2aEndpoint = CASE 
+              WHEN @a2a IS NOT NULL AND @a2a != '' THEN @a2a 
+              ELSE a2aEndpoint 
+            END,
+            ensEndpoint = CASE 
+              WHEN @ens IS NOT NULL AND @ens != '' THEN @ens 
+              ELSE ensEndpoint 
+            END,
             agentAccountEndpoint = COALESCE(@account, agentAccountEndpoint),
             supportedTrust = COALESCE(@trust, supportedTrust),
             rawJson = COALESCE(@raw, rawJson),
@@ -263,6 +346,26 @@ async function upsertFromTokenGraph(item: any, chainId: number) {
       }
     } catch {}
   }
+  
+  // Also fetch URI metadata if metadataJson is empty to get complete data
+  let uriMetadata: any | null = null;
+  if (metadataURI && (!item?.metadataJson || (typeof item.metadataJson === 'string' && item.metadataJson.trim() === ''))) {
+    try {
+      console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: metadataJson is empty, fetching from metadataURI:", metadataURI);
+      uriMetadata = await fetchIpfsJson(metadataURI);
+      if (uriMetadata && typeof uriMetadata === 'object') {
+        console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: fetched URI metadata:", uriMetadata);
+        
+        // Update agentName from URI metadata if it's missing
+        if ((!agentName || agentName.trim() === '') && typeof uriMetadata.name === 'string' && uriMetadata.name.trim()) {
+          agentName = uriMetadata.name.trim();
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: updated agentName from URI:", agentName);
+        }
+      }
+    } catch (uriError) {
+      console.warn("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: Failed to fetch URI metadata:", uriError);
+    }
+  }
 
   console.info("@@@@@@@@@@@@@@@@@@@ upsertFromTokenGraph 1: agentName: ", agentId, agentName)
   db.prepare(`
@@ -323,7 +426,48 @@ async function upsertFromTokenGraph(item: any, chainId: number) {
     if (item?.metadataJson && typeof item.metadataJson === 'string') raw = item.metadataJson;
     else if (item?.metadataJson && typeof item.metadataJson === 'object') raw = JSON.stringify(item.metadataJson);
     else if (inferred) raw = JSON.stringify(inferred);
-    else raw = JSON.stringify({ agentName: name, description, image, a2aEndpoint, ensEndpoint, agentAccount: agentAccountEndpoint });
+    else {
+      // Use uriMetadata if we fetched it earlier
+      if (uriMetadata && typeof uriMetadata === 'object') {
+        console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: using previously fetched URI metadata");
+        raw = JSON.stringify(uriMetadata);
+        
+        // Update fields from URI metadata (override empty values from GraphQL)
+        if (typeof uriMetadata.name === 'string' && uriMetadata.name.trim()) {
+          name = uriMetadata.name.trim();
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: updated name from URI:", name);
+        }
+        if (typeof uriMetadata.description === 'string' && uriMetadata.description.trim()) {
+          description = uriMetadata.description;
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: updated description from URI:", description);
+        }
+        if (uriMetadata.image != null) {
+          image = String(uriMetadata.image);
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: updated image from URI:", image);
+        }
+        
+        // Extract endpoints using the same logic as upsertFromTransfer
+        const endpoints = Array.isArray(uriMetadata.endpoints) ? uriMetadata.endpoints : [];
+        const findEndpoint = (n: string) => {
+          const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
+          return e && typeof e.endpoint === 'string' ? e.endpoint : null;
+        };
+        
+        const uriA2aEndpoint = findEndpoint('A2A');
+        if (uriA2aEndpoint) {
+          a2aEndpoint = uriA2aEndpoint;
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: updated a2aEndpoint from URI:", a2aEndpoint);
+        }
+        
+        const uriEnsEndpoint = findEndpoint('ENS');
+        if (uriEnsEndpoint) {
+          ensEndpoint = uriEnsEndpoint;
+          console.info("^^^^^^^^^^^^^^^^^^^^^ upsertFromTokenGraph: updated ensEndpoint from URI:", ensEndpoint);
+        }
+      } else {
+        raw = JSON.stringify({ agentName: name, description, image, a2aEndpoint, ensEndpoint, agentAccount: agentAccountEndpoint });
+      }
+    }
   } catch {}
 
   // Write extended fields into agents
@@ -395,31 +539,8 @@ async function backfill(client: ERC8004Client) {
     return;
   }
 
-  const last = getCheckpoint();
-  /*
-  const query = `query TokensAndTransfers($first: Int!) {
-    tokens(first: $first, orderBy: mintedAt, orderDirection: desc) {
-      id
-      uri
-      agentName
-      description
-      image
-      a2aEndpoint
-      ensName
-      agentAccount
-      metadataJson
-      mintedAt
-    }
-    transfers(first: $first, orderBy: timestamp, orderDirection: desc) {
-      id
-      token { id }
-      from { id }
-      to { id }
-      blockNumber
-      timestamp
-    }
-  }`;
-  */
+  const last = getCheckpoint(chainId);
+
 
   console.info("............backfill: query: ", graphqlUrl, "for chain:", chainId)
 
@@ -515,11 +636,11 @@ async function backfill(client: ERC8004Client) {
     console.info("&&&&&&&&&&&& upsertFromTransfer: blockNum: ", blockNum)
     console.info("&&&&&&&&&&&& upsertFromTransfer: uri: ", uri)
     await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId); 
-    setCheckpoint(blockNum);
+    setCheckpoint(blockNum, chainId);
   }
 
 
-  /*
+
   const tokenItems = (resp?.data?.tokens as any[]) || [];
   const tokensOrdered = tokenItems
   .slice()
@@ -528,7 +649,7 @@ async function backfill(client: ERC8004Client) {
     console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
     await upsertFromTokenGraph(t, chainId); // ETH Sepolia chainId
   }
-    */
+
  
 
 }
@@ -627,10 +748,11 @@ function watch() {
     const eventCount = db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number };
     
     if (agentCount.count === 0 && eventCount.count === 0) {
-      console.log('Database is empty - resetting checkpoint to 0');
-      setCheckpoint(0n);
+      console.log('Database is empty - resetting checkpoints to 0 for all chains');
+      setCheckpoint(0n, 11155111); // ETH Sepolia
+      setCheckpoint(0n, 84532); // Base Sepolia
       // Clear any stale checkpoint data
-      db.prepare("DELETE FROM checkpoints WHERE key='lastProcessed'").run();
+      db.prepare("DELETE FROM checkpoints WHERE key LIKE 'lastProcessed%'").run();
     }
   } catch (error) {
     console.warn('Error checking database state:', error);
@@ -638,7 +760,7 @@ function watch() {
 
   // Initial run (don't crash on failure)
   try {
-    //await backfill(erc8004EthSepoliaClient);
+    await backfill(erc8004EthSepoliaClient);
     //await backfillByIds(erc8004EthSepoliaClient)
     await backfill(erc8004BaseSepoliaClient);
     //await backfillByIds(erc8004BaseSepoliaClient)

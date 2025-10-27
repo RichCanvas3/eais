@@ -113,7 +113,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [infoOpen, setInfoOpen] = React.useState(false);
 	const [infoLoading, setInfoLoading] = React.useState(false);
 	const [infoError, setInfoError] = React.useState<string | null>(null);
-	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null } | null>(null);
+	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null; tokenUri?: string | null } | null>(null);
 
 	// Agent Card modal state
 	const [cardOpen, setCardOpen] = React.useState(false);
@@ -199,7 +199,20 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	function isValidRegistrationUri(uri?: string | null): boolean {
 		if (!uri) return false;
 		const u = String(uri).trim().replace(/^@+/, '');
-		return /^https?:\/\//i.test(u) || /^ipfs:\/\//i.test(u);
+		// Check if it starts with valid URI schemes
+		if (/^data:application\/json/i.test(u) || /^https?:\/\//i.test(u) || /^ipfs:\/\//i.test(u)) {
+			return true;
+		}
+		// Check if it's a valid JSON string
+		if (u.startsWith('{') && u.endsWith('}')) {
+			try {
+				JSON.parse(u);
+				return true;
+			} catch {
+				return false;
+			}
+		}
+		return false;
 	}
 
 
@@ -212,57 +225,117 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			setIdentityJsonData(null);
 			setIdentityTokenUri(null);
 			
-			// Get chain-specific configuration based on the agent's chainId
-			const agentChainId = row.chainId;
-			const rpcUrl = agentChainId === 84532 ? 
-				process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string :
-				process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-			const identityRegistry = agentChainId === 84532 ?
-				process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY as string :
-				process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
-			
-			const { ethers } = await import('ethers');
-			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
-			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
-			const { ERC8004Client } = await import('../../erc8004-src');
-			const adapter = new EthersAdapter(ethersProvider);
-			const erc8004Client = new ERC8004Client({
-				adapter,
-                addresses: {
-                    identityRegistry,
-					reputationRegistry: '0x0000000000000000000000000000000000000000',
-					validationRegistry: '0x0000000000000000000000000000000000000000',
-					chainId: agentChainId,
-				}
-			});
 			let fetched: any | null = null;
-			try {
-				const uri = await erc8004Client.identity.getTokenURI(BigInt(row.agentId));
-				setIdentityTokenUri(uri ?? null);
-				if (uri) {
-					const u = String(uri).trim();
-					if (/^ipfs:\/\//i.test(u)) {
-						// Resolve via identity-service download
-						try {
-							const cid = u.slice('ipfs://'.length).split('/')[0]?.trim();
-							if (cid) {
-								const res = await fetch(`${IpfsService.apiBase}/api/web3storage/download/${cid}`);
-								fetched = await res.json().catch(() => null);
+			
+			// Check if metadataURI is an inline data URI (contains the JSON data directly)
+			if (row.metadataURI && row.metadataURI.startsWith('data:application/json')) {
+				try {
+					console.info("............openIdentityJson: metadataURI is inline data:", row.metadataURI);
+					const commaIndex = row.metadataURI.indexOf(',');
+					if (commaIndex !== -1) {
+						const jsonData = row.metadataURI.substring(commaIndex + 1);
+						let parsed;
+						
+						// Check if it's base64 encoded or plain JSON
+						if (row.metadataURI.startsWith('data:application/json;base64,')) {
+							try {
+								// Try base64 decode first
+								const jsonString = Buffer.from(jsonData, 'base64').toString('utf-8');
+								parsed = JSON.parse(jsonString);
+							} catch (e) {
+								// If base64 fails, try parsing as plain JSON
+								console.info("............openIdentityJson: base64 decode failed, trying plain JSON");
+								try {
+									parsed = JSON.parse(jsonData);
+								} catch (e2) {
+									const decodedJson = decodeURIComponent(jsonData);
+									parsed = JSON.parse(decodedJson);
+								}
 							}
-						} catch {}
-					} else if (/^https?:\/\//i.test(u)) {
-						// Proxy through Next API to avoid mixed-content
-						try {
-							const res = await fetch(`/api/proxy?url=${encodeURIComponent(u)}`);
-							fetched = await res.json().catch(() => null);
-						} catch {}
+						} else {
+							// Plain JSON - try parsing directly first, then URL decode if needed
+							try {
+								parsed = JSON.parse(jsonData);
+							} catch (e) {
+								const decodedJson = decodeURIComponent(jsonData);
+								parsed = JSON.parse(decodedJson);
+							}
+						}
+						
+						fetched = parsed;
+						setIdentityTokenUri(row.metadataURI);
+						console.info("............openIdentityJson: parsed inline data:", fetched);
 					}
+				} catch (e) {
+					console.warn("............openIdentityJson: Failed to parse inline data URI:", e);
 				}
-			} catch {}
-			// Fallback to SDK helper if direct fetch failed
-			if (!fetched) {
-				try { fetched = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId)); } catch {}
 			}
+			// Check if metadataURI is a plain JSON string
+			else if (row.metadataURI && row.metadataURI.trim().startsWith('{') && row.metadataURI.trim().endsWith('}')) {
+				try {
+					console.info("............openIdentityJson: metadataURI is plain JSON:", row.metadataURI);
+					fetched = JSON.parse(row.metadataURI);
+					setIdentityTokenUri(row.metadataURI);
+					console.info("............openIdentityJson: parsed plain JSON:", fetched);
+				} catch (e) {
+					console.warn("............openIdentityJson: Failed to parse plain JSON:", e);
+				}
+			}
+			
+			// If we didn't get data from inline URI, fetch from storage
+			if (!fetched) {
+				// Get chain-specific configuration based on the agent's chainId
+				const agentChainId = row.chainId;
+				const rpcUrl = agentChainId === 84532 ? 
+					process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string :
+					process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+				const identityRegistry = agentChainId === 84532 ?
+					process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY as string :
+					process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
+				
+				const { ethers } = await import('ethers');
+				const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
+				const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
+				const { ERC8004Client } = await import('../../erc8004-src');
+				const adapter = new EthersAdapter(ethersProvider);
+				const erc8004Client = new ERC8004Client({
+					adapter,
+					addresses: {
+						identityRegistry,
+						reputationRegistry: '0x0000000000000000000000000000000000000000',
+						validationRegistry: '0x0000000000000000000000000000000000000000',
+						chainId: agentChainId,
+					}
+				});
+				try {
+					const uri = await erc8004Client.identity.getTokenURI(BigInt(row.agentId));
+					setIdentityTokenUri(uri ?? null);
+					if (uri) {
+						const u = String(uri).trim();
+						if (/^ipfs:\/\//i.test(u)) {
+							// Resolve via identity-service download
+							try {
+								const cid = u.slice('ipfs://'.length).split('/')[0]?.trim();
+								if (cid) {
+									const res = await fetch(`${IpfsService.apiBase}/api/web3storage/download/${cid}`);
+									fetched = await res.json().catch(() => null);
+								}
+							} catch {}
+						} else if (/^https?:\/\//i.test(u)) {
+							// Proxy through Next API to avoid mixed-content
+							try {
+								const res = await fetch(`/api/proxy?url=${encodeURIComponent(u)}`);
+								fetched = await res.json().catch(() => null);
+							} catch {}
+						}
+					}
+				} catch {}
+				// Fallback to SDK helper if direct fetch failed
+				if (!fetched) {
+					try { fetched = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId)); } catch {}
+				}
+			}
+			
 			if (fetched) setIdentityJsonData(fetched);
 			try {
 				setIdentityJsonText(JSON.stringify(fetched, null, 2));
@@ -399,11 +472,18 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			
 			let name: string | null = null;
 			let account: string | null = null;
+			let tokenUri: string | null = null;
 			
 			// Try to use the agent name from the row if available
 			if (row.agentName) {
 				name = row.agentName;
 				console.info("+++++++++++++++++++ openAgentInfo: using agentName from row", name);
+			}
+			
+			// Get the token URI from the database row
+			if (row.metadataURI) {
+				tokenUri = row.metadataURI;
+				console.info("+++++++++++++++++++ openAgentInfo: using tokenUri from row", tokenUri);
 			}
 			
 			try {
@@ -415,6 +495,16 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						name = await client.getAgentName(agentIdNum);
 					}
 					account = await client.getAgentAccount(agentIdNum);
+					
+					// Fetch token URI from chain if not available from database
+					if (!tokenUri) {
+						try {
+							tokenUri = await (client as any).getTokenURI(agentIdNum);
+							console.info("+++++++++++++++++++ openAgentInfo: fetched tokenUri from chain", tokenUri);
+						} catch (e) {
+							console.warn("Failed to fetch token URI from chain:", e);
+						}
+					}
 				} else {
 					console.warn("No client found for chain", chainId, "chainIdHex", chainIdHex);
 				}
@@ -426,9 +516,9 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				}
 			}
 
-			console.info("++++++++++++++++++++ openAgentInfo: name", name, "account", account);
+			console.info("++++++++++++++++++++ openAgentInfo: name", name, "account", account, "tokenUri", tokenUri);
 
-			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null });
+			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null, tokenUri: tokenUri || null });
 		} catch (e: any) {
 			setInfoError(e?.message || 'Failed to load agent info');
 		} finally {
@@ -498,33 +588,25 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
       if (data?.rows && Array.isArray(data.rows)) {
           data.rows.forEach(async (row) => {
               try {
-				console.info("............AgentTable: fetchEnsName: row: ", row);
-				
+
 				// Get the correct agent identity client based on the row's chainId
 				const chainIdHex = row.chainId === 84532 ? '0x14a34' : '0xaa36a7'; // Base Sepolia : ETH Sepolia
-				console.info("............AgentTable: fetchEnsName: chainId:", row.chainId, "chainIdHex:", chainIdHex);
-				
+
                   const agentIdentityClient = agentIdentityClients[chainIdHex];
                   if (agentIdentityClient) {
                       const agentIdNum = BigInt(row.agentId);
                       
                       // Fetch account address
-                      console.info("............AgentTable: fetching account for agentId:", agentIdNum, "on chain:", row.chainId);
                       const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
-                      console.info("............AgentTable: fetched account:", acct);
                       setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
                       
                       // Fetch name if database has null/empty name
                       if (!row.agentName || row.agentName.trim() === '') {
-                          console.info("............AgentTable: database name is null/empty, fetching from chain for agentId:", agentIdNum);
-                          const name = await agentIdentityClient.getAgentName(agentIdNum);
-                          console.info("............AgentTable: fetched name:", name);
+							const name = await agentIdentityClient.getAgentName(agentIdNum);
                           if (name) {
                               setMetadataNames(prev => ({ ...prev, [row.agentId]: name }));
-                              // Check if it's a valid ENS name (contains .eth or .orgtrust.eth)
-                              const isENS = name.includes('.eth') || name.includes('.orgtrust.eth');
+                              const isENS = name.endsWith('.eth');
                               setMetadataNamesIsENS(prev => ({ ...prev, [row.agentId]: isENS }));
-                              console.info("............AgentTable: name is ENS:", isENS);
                           }
                       }
                       
@@ -1767,21 +1849,32 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 
 									<TableCell>
 										<Stack direction="row" spacing={1} alignItems="center">
-											{process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY ? (
-												<Typography
-													component="a"
-													href={`${getBlockExplorerUrl(row.chainId)}/nft/${process.env.NEXT_PUBLIC_IDENTITY_REGISTRY}/${row.agentId}`}
-													target="_blank"
-													rel="noopener noreferrer"
-													variant="body2"
-													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-													title={`View NFT #${row.agentId} on ${row.chainId === 84532 ? 'Basescan' : 'Etherscan'}`}
-												>
-													{row.agentId}
-												</Typography>
-											) : (
-												<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
-											)}
+											{(() => {
+												// Get chain-specific registry address
+												const registryAddress = row.chainId === 84532
+													? process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY
+													: process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
+												
+												if (registryAddress) {
+													return (
+														<Typography
+															component="a"
+															href={`${getBlockExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
+															target="_blank"
+															rel="noopener noreferrer"
+															variant="body2"
+															sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+															title={`View NFT #${row.agentId} on ${row.chainId === 84532 ? 'Basescan' : 'Etherscan'}`}
+														>
+															{row.agentId}
+														</Typography>
+													);
+												} else {
+													return (
+														<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
+													);
+												}
+											})()}
 											{owned[row.agentId] && (
 												<Tooltip title="Burn Identity (send to 0x000…dEaD)">
 													<span>
@@ -2135,6 +2228,9 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						<Typography variant="body2"><strong>Agent ID:</strong> {infoData.agentId ?? '—'}</Typography>
 						<Typography variant="body2"><strong>Agent Name:</strong> {infoData.agentName ?? '—'}</Typography>
 						<Typography variant="body2"><strong>Agent Account:</strong> {infoData.agentAccount ?? '—'}</Typography>
+						<Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+							<strong>Token URI:</strong> {infoData.tokenUri ?? '—'}
+						</Typography>
 					</Stack>
 				) : (
 					<Typography variant="body2" color="text.secondary">No info</Typography>
