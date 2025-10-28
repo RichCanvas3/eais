@@ -10,7 +10,7 @@ import { createMintClient } from '@thenamespace/mint-manager';
 import { createIndexerClient } from '@thenamespace/indexer';
 import { sepolia, baseSepolia, optimismSepolia } from 'viem/chains';
 
-export class AIAgentL2ENSClient extends AIAgentENSClient {
+export class AIAgentL2ENSNamespaceClient extends AIAgentENSClient {
   private namespaceClient: any = null;
 
   constructor(
