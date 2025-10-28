@@ -595,6 +595,7 @@ async function backfill(client: ERC8004Client) {
   console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
   
   // Fetch transfers - fetch in ascending order by timestamp to get historical data
+  /*
   const historicalQuery = `query TokensAndTransfers($first: Int!) {
     tokens(first: $first, orderBy: mintedAt, orderDirection: desc) {
       id
@@ -617,28 +618,33 @@ async function backfill(client: ERC8004Client) {
       timestamp
     }
   }`;
+  */
+
+  const historicalQuery = `query TokensAndTransfers($first: Int!) {
+    transfers(first: $first, orderBy: timestamp, orderDirection: asc) {
+      id
+      token { id }
+      from { id }
+      to { id }
+      blockNumber
+      timestamp
+    }
+  }`;
   
   const resp = await fetchJson({ query: historicalQuery, variables: { first: pageSize } });
   
   // Handle tokens (metadata) and transfers (ownership)
   const transferItems = (resp?.data?.transfers as any[]) || [];
 
-  console.info("............backfill: transferItems: ", transferItems)
-  
-  console.info(
-    "............backfill: Fetched", 
-    transferItems.length, 
-    "transfers (first tokenId:", transferItems[0]?.token?.id, "last tokenId:", transferItems[transferItems.length - 1]?.token?.id, ")");
-
   // Upsert latest tokens metadata first (oldest-first by mintedAt)
-
-
 
   // Apply transfers newer than checkpoint
   const transfersOrdered = transferItems
     .filter((t) => Number(t?.blockNumber || 0) > Number(last))
     .slice()
     .sort((a, b) => Number(a.blockNumber) - Number(b.blockNumber));
+
+  console.info("............  process transfers: ")
   for (const tr of transfersOrdered) {
     
     const tokenId = BigInt(tr?.token?.id || '0');
@@ -660,6 +666,8 @@ async function backfill(client: ERC8004Client) {
   const tokensOrdered = tokenItems
   .slice()
   .sort((a, b) => Number((a.mintedAt || 0)) - Number((b.mintedAt || 0)));
+
+  console.info("............  process tokens: ", tokensOrdered)
   for (const t of tokensOrdered) {
     console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
     await upsertFromTokenGraph(t, chainId); // ETH Sepolia chainId
@@ -777,6 +785,9 @@ function watch() {
   // Initial run (don't crash on failure)
   try {
     await backfill(erc8004EthSepoliaClient);
+    await backfill(erc8004BaseSepoliaClient);
+    
+    /*
     //await backfillByIds(erc8004EthSepoliaClient)
     await backfill(erc8004BaseSepoliaClient);
     //await backfillByIds(erc8004BaseSepoliaClient)
@@ -784,6 +795,7 @@ function watch() {
       await backfill(erc8004OpSepoliaClient);
       //await backfillByIds(erc8004OpSepoliaClient)
     }
+      */
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }

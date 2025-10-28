@@ -368,9 +368,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const { url } = await IpfsService.uploadJson({ data: merged, filename: `agent-${identityCurrentAgent.agentId}-registration.json` });
 			console.log('********************* updateIdentityRegistration: url', url);
 			
-			// Resolve agent ENS name
-			const agentIdentityClient = agentIdentityClientRef.current || null;
-			if (!agentIdentityClient) throw new Error('Identity client unavailable');
+			// Resolve agent ENS name - get the correct client for this agent's chain
+			const chainIdHex = getChainIdHex(identityCurrentAgent.chainId) || '0xaa36a7';
+			const agentIdentityClient = agentIdentityClients[chainIdHex] || null;
+			if (!agentIdentityClient) throw new Error(`Identity client unavailable for chain ${identityCurrentAgent.chainId}`);
 
 			console.log('********************* updateIdentityRegistration: agentId', identityCurrentAgent.agentId);
 			const agentName = await agentIdentityClient.getAgentName(BigInt(identityCurrentAgent.agentId));
