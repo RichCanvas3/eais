@@ -380,87 +380,88 @@ export function AddAgentModal({ open, onClose }: Props) {
 
     // Use the provider and address from component level (already available)
     const web3AuthProvider = provider;
-    const address = eoaAddress;
-
-    // Use ensAgentAddress if available, otherwise fall back to agentAccount, or compute it
     let addressToUse = ensAgentAddress || agentAccount;
 
     let agentAccountClient: any = null;
     
-    // If we don't have an address, compute it using getDefaultAgentAccountClient
-    if (!addressToUse) {
-      try {
-        const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-        
-        console.info("@@@@@@@@@@@@@@@@@@@ selectedChainIdHex: ", selectedChainIdHex);
-        console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain: ", resolvedChain);
-        console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain.id: ", resolvedChain.id);
-        
-        // Get the correct agentIdentityClient for the selected chain from the clients object
-        const correctAgentIdentityClient = clients[selectedChainIdHex || ''] || agentIdentityClient;
-        console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient: ", correctAgentIdentityClient);
-        console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient chain: ", (correctAgentIdentityClient as any)?.chain);
-        
+
+    try {
+      const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
+      
+      console.info("@@@@@@@@@@@@@@@@@@@ selectedChainIdHex: ", selectedChainIdHex);
+      console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain: ", resolvedChain);
+      console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain.id: ", resolvedChain.id);
+      
+      // Get the correct agentIdentityClient for the selected chain from the clients object
+      const correctAgentIdentityClient = clients[selectedChainIdHex || ''] || agentIdentityClient;
+      console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient: ", correctAgentIdentityClient);
+      console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient chain: ", (correctAgentIdentityClient as any)?.chain);
+      
 
 
 
 
-        const eip1193 = web3AuthProvider as any;
+      const eip1193 = web3AuthProvider as any;
 
-        const chainIdHex = selectedChainIdHex || '0xaa36a7';
-        const rpcUrl = effectiveRpcUrl;
+      const chainIdHex = selectedChainIdHex || '0xaa36a7';
+      const rpcUrl = effectiveRpcUrl;
 
-        // Add and switch to the chain
-        await eip1193.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: chainIdHex,
-            chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls: [rpcUrl]
-          }]
-        });
-        await eip1193.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: chainIdHex }]
-        });
+      // Add and switch to the chain
+      await eip1193.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: chainIdHex,
+          chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: [rpcUrl]
+        }]
+      });
+      await eip1193.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: chainIdHex }]
+      });
 
-        const ethersProvider = new ethers.BrowserProvider(eip1193);
-        //const sgner = await provider.getSigner();
-        //const agentAdapter = sgner ? new EthersAdapter(provider, sgner) : new EthersAdapter(provider, undefined as any);
+      // Add delay to allow wallet to adapt to chain switch
+      console.log('********************* 1111111111111111 Waiting for wallet to adapt to chain switch...');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+      console.log('********************* Chain switch adaptation complete');
 
-        // Use the selected chain's provider by converting ethers.js provider to viem-compatible format
-        //const ethersProvider = agentAdapter.getProvider();
-        console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider: ", ethersProvider);
+      const ethersProvider = new ethers.BrowserProvider(eip1193);
+      //const sgner = await provider.getSigner();
+      //const agentAdapter = sgner ? new EthersAdapter(provider, sgner) : new EthersAdapter(provider, undefined as any);
+
+      // Use the selected chain's provider by converting ethers.js provider to viem-compatible format
+      //const ethersProvider = agentAdapter.getProvider();
+      console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider: ", ethersProvider);
 
 
-        
-        // Debug the ethers provider to see what methods are available
-        console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider methods:", Object.getOwnPropertyNames(ethersProvider));
-        console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(ethersProvider)));
-        
-        // Convert ethers.js provider to viem-compatible provider
-        const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
-        
-        console.info("@@@@@@@@@@@@@@@@@@@ eoaAddress: ", eoaAddress);
-        const walletClient = createWalletClient({ 
-          chain: resolvedChain as any, 
-          transport: custom(viemCompatibleProvider as any), 
-          account: eoaAddress as Address 
-        });
-        console.info("@@@@@@@@@@@@@@@@@@@ walletClient: ", walletClient);
-        try { (walletClient as any).account = eoaAddress as Address; } catch {}
-        
-        console.info(".................... getDefaultAgentAccountClient 5: ", agentName.toLowerCase());
-        agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
-        addressToUse = await agentAccountClient.getAddress();
-        console.info('Computed agent address for agent name creation:', addressToUse);
-      } catch (error) {
-        console.error('Failed to compute agent address:', error);
-        setAgentError('Failed to compute agent address for agent name creation');
-        return;
-      }
+      
+      // Debug the ethers provider to see what methods are available
+      console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider methods:", Object.getOwnPropertyNames(ethersProvider));
+      console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(ethersProvider)));
+      
+      // Convert ethers.js provider to viem-compatible provider
+      const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
+      
+      console.info("@@@@@@@@@@@@@@@@@@@ eoaAddress: ", eoaAddress);
+      const walletClient = createWalletClient({ 
+        chain: resolvedChain as any, 
+        transport: custom(viemCompatibleProvider as any), 
+        account: eoaAddress as Address 
+      });
+      console.info("@@@@@@@@@@@@@@@@@@@ walletClient: ", walletClient);
+      try { (walletClient as any).account = eoaAddress as Address; } catch {}
+      
+      console.info(".................... getDefaultAgentAccountClient 5: ", agentName.toLowerCase());
+      agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
+      addressToUse = await agentAccountClient.getAddress();
+      console.info('Computed agent address for agent name creation:', addressToUse);
+    } catch (error) {
+      console.error('Failed to compute agent address:', error);
+      setAgentError('Failed to compute agent address for agent name creation');
+      return;
     }
+
     
     if (!addressToUse) return;
     
@@ -476,7 +477,6 @@ export function AddAgentModal({ open, onClose }: Props) {
         throw new Error('Invalid subname format');
       }
       
-      const label = parts[0]; // e.g., "atl-test-1"
       const parentName = parts.slice(1).join('.'); // e.g., "theorg.eth"
       
       const chainId = resolvedChain.id;
@@ -488,7 +488,7 @@ export function AddAgentModal({ open, onClose }: Props) {
 
 
 
-        
+        /*
         // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
         const agentAdapter = (agentIdentityClient as any).adapter;
         //const ethersProvider = agentAdapter.getProvider();
@@ -518,6 +518,11 @@ export function AddAgentModal({ open, onClose }: Props) {
           params: [{ chainId: chainIdHex }]
         });
 
+        // Add delay to allow wallet to adapt to chain switch
+        console.log('********************* 2222222222222222 Waiting for wallet to adapt to chain switch...');
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        console.log('********************* Chain switch adaptation complete');
+
         const ethersProvider = new ethers.BrowserProvider(eip1193);
 
 
@@ -532,6 +537,7 @@ export function AddAgentModal({ open, onClose }: Props) {
           account: eoaAddress as Address 
         });
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
+        */
 
         const bundlerUrl = effectiveBundlerUrl;
           if (!bundlerUrl) throw new Error('Missing BUNDLER_URL for deployment');
@@ -592,7 +598,7 @@ export function AddAgentModal({ open, onClose }: Props) {
         console.info("@@@@@@@@@@@@@@@@@@@ parentName: ", parentName);
         console.info("@@@@@@@@@@@@@@@@@@@ orgStatus: ", orgStatus);
         console.info("@@@@@@@@@@@@@@@@@@@ agentAccountClient address: ", await agentAccountClient.getAddress());
-        const agentAccountAddress = await agentAccountClient.getAddress();
+
         
                     
         const orgAccountClient = await toMetaMaskSmartAccount({
@@ -1025,6 +1031,11 @@ export function AddAgentModal({ open, onClose }: Props) {
           params: [{ chainId: chainIdHex }]
         });
 
+        // Add delay to allow wallet to adapt to chain switch
+        console.log('********************* 3333333333333333 Waiting for wallet to adapt to chain switch...');
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        console.log('********************* Chain switch adaptation complete');
+
         const ethersProvider = new ethers.BrowserProvider(eip1193);
 
 
@@ -1162,6 +1173,7 @@ export function AddAgentModal({ open, onClose }: Props) {
       setIsSubmitting(false);
       onClose();
       
+      /*
       try {
         // After on-chain metadata is set, also set ENS text: agent-identity per ENSIP
         console.info("set ensip agent registry")
@@ -1236,6 +1248,7 @@ export function AddAgentModal({ open, onClose }: Props) {
       } catch (e) {
         console.info('failed to set agent-identity text', e);
       }
+      */
     } catch (err: any) {
       setIsSubmitting(false);
       setError(err?.message ?? 'Failed to submit');
