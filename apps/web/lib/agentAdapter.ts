@@ -292,13 +292,40 @@ export async function addAgentNameToOrg(params: {
   console.log('********************* cleanAgentName', cleanAgentName);
   console.log('********************* agentUrl', agentUrl);
   
+/*
+  const { privateKeyToAccount } = await import('viem/accounts');
+  const { createWalletClient, http } = await import('viem');
+  const ensPrivateKey = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`;
+
+  const eoaAccount = privateKeyToAccount(ensPrivateKey);
+
+  const eoaWalletClient = createWalletClient({
+    account: eoaAccount,
+    chain: chain,
+    transport: http(chain.rpcUrls.default.http[0])
+  });
+  
+  // Create public client for transaction waiting
+  const { createPublicClient } = await import('viem');
+  const publicClient = createPublicClient({
+    chain: chain,
+    transport: http(chain.rpcUrls.default.http[0])
+  });
+  
   const { calls : orgCalls } = await agentENSClient.prepareAddAgentNameToOrgCalls({
     orgName: cleanOrgName,
     agentName: cleanAgentName,
-    agentAddress: agentAccount,
+    agentAddress: eoaAccount.address,
     agentUrl: agentUrl
   });
+  */
 
+  const { calls : orgCalls } = await agentENSClient.prepareAddAgentNameToOrgCalls({
+    orgName: cleanOrgName,
+    agentName: cleanAgentName,
+    agentAddress: agentAccountClient.address,
+    agentUrl: agentUrl
+  });
   const bundlerClient = createBundlerClient({ transport: http(bundlerUrl), paymaster: true as any, chain: chain as any, paymasterContext: { mode: 'SPONSORED' } } as any);
   
   
@@ -339,18 +366,79 @@ export async function addAgentNameToOrg(params: {
   else {
     // L2 ENS Add Agent Name to Org flow
     try {
+      console.log('********************* orgCalls', orgCalls);
+      
+      /*
+      try {
+
+        
+        for (const call of orgCalls) {
+
+          const txHash = await eoaWalletClient.sendTransaction({
+            to: call.to,
+            data: call.data,
+            value: (call as any).value || 0n,
+            gas: 1000000n, // Set a reasonable gas limit
+          });
+          
+          console.log('********************* TEST: EOA transaction hash:', txHash);
+          
+          // Wait for transaction confirmation
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+          console.log('********************* TEST: EOA transaction receipt:', receipt);
+        }
+
+        
+        console.log('********************* TEST: All EOA transactions completed successfully');
+        return '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+        
+      } catch (eoaError) {
+        console.error('********************* TEST: EOA wallet operation failed:', eoaError);
+        console.log('********************* TEST: Falling back to UserOperation...');
+      }
+      */
+
+      console.log('********************* send sponsored user operation to add agent name to org');
       const userOperationHash = await sendSponsoredUserOperation({
         bundlerUrl,
         chain,
         accountClient: agentAccountClient,
         calls: orgCalls
       });
+
+
       
       console.log("UserOp submitted:", userOperationHash);
       
       // Wait for the transaction to be mined
       const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
       console.log("Subname minted successfully! Transaction hash:", receipt);
+
+
+      const { calls : infoCalls } = await agentENSClient.prepareAddAgentInfoCalls({
+        orgName: cleanOrgName,
+        agentName: cleanAgentName,
+        agentAddress: agentAccountClient.address,
+        agentUrl: agentUrl
+      });
+
+      for (const call of infoCalls) {
+        console.log('********************* send sponsored user operation to add agent info');
+        const userOperationHash2 = await sendSponsoredUserOperation({
+          bundlerUrl,
+          chain,
+          accountClient: agentAccountClient,
+          calls: [call]
+        });
+
+        const receipt2 = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash2 });
+        console.log("Subname minted successfully! Transaction hash:", receipt2);
+      }
+
+      
+
+      
+
     }
     catch (error) {
       console.error("Error adding l2 agent name to org:", error);

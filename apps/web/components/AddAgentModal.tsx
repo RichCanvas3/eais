@@ -25,7 +25,7 @@ import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIdentityClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 import { EthersAdapter } from '../../erc8004-src';
-import { getChainConfigByHex, getIdentityRegistry, getExplorerUrl, getViemChain } from '../config/chains';
+import { getChainConfigByHex, getIdentityRegistry, getExplorerUrl, getViemChain, getNetworkType } from '../config/chains';
 
 
 
@@ -39,7 +39,7 @@ type Props = {
 
 export function AddAgentModal({ open, onClose }: Props) {
   // All useState hooks first
-  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string | undefined>();
+  const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string>('0xaa36a7');
   const [org, setOrg] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -95,13 +95,29 @@ export function AddAgentModal({ open, onClose }: Props) {
   const { provider, address: eoaAddress } = useWeb3Auth();
   const clients = useAgentIdentityClients();
   const agentENSClient = useAgentENSClient();
-  const agentENSClientForChain = useAgentENSClientFor(selectedChainIdHex);
   const orgIdentityClient = useOrgIdentityClient();
 
-  // Always call both hooks to maintain hook order
-  const agentIdentityClientForChain = useAgentIdentityClientFor(selectedChainIdHex);
+  // Always call both hooks to maintain hook order - use consistent parameters
+  const agentIdentityClientForChain = useAgentIdentityClientFor(selectedChainIdHex || '0xaa36a7');
   const agentIdentityClientDefault = useAgentIdentityClient();
   const agentIdentityClient = agentIdentityClientForChain || agentIdentityClientDefault;
+  
+  // Use consistent parameter for ENS client - this ensures correct chain configuration
+  const agentENSClientForChain = useAgentENSClientFor(selectedChainIdHex || '0xaa36a7');
+  
+  // Debug logging to see which chain the ENS client is configured for
+  React.useEffect(() => {
+    console.log('🔍 ENS Client debug effect triggered');
+    console.log('🔍 agentENSClientForChain:', !!agentENSClientForChain);
+    console.log('🔍 selectedChainIdHex:', selectedChainIdHex);
+    
+    if (agentENSClientForChain) {
+      console.log('🔍 ENS Client configured for chain:', selectedChainIdHex || '0xaa36a7');
+      console.log('🔍 ENS Client available:', !!agentENSClientForChain);
+    } else {
+      console.log('🔍 No ENS client available');
+    }
+  }, [agentENSClientForChain, selectedChainIdHex]);
 
   // All useEffect hooks after useContext hooks
   React.useEffect(() => {
@@ -209,6 +225,7 @@ export function AddAgentModal({ open, onClose }: Props) {
   }, [name, orgUrlText, agentUrlIsAuto, agentName]);
 
   // Reset agent URL auto-population when org changes
+  /*
   React.useEffect(() => {
     const base = cleanOrg(org);
     if (!base) {
@@ -219,6 +236,7 @@ export function AddAgentModal({ open, onClose }: Props) {
     // Reset to auto-population mode when org changes
     setAgentUrlIsAuto(true);
   }, [org]);
+  */
 
   // Helper function to get the appropriate ENS client for the selected chain
   const getENSClientForChain = React.useCallback(() => {
@@ -267,15 +285,13 @@ export function AddAgentModal({ open, onClose }: Props) {
 
 
   const effectiveRpcUrl = React.useMemo(() => {
-    if (selectedChainIdHex === '0xaa36a7') return process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-    if (selectedChainIdHex === '0x14a34') return process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string;
-    return;
+    const chainConfig = getChainConfigByHex(selectedChainIdHex || '0xaa36a7');
+    return chainConfig?.rpcUrl || process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
   }, [selectedChainIdHex]);
 
   const effectiveBundlerUrl = React.useMemo(() => {
-    if (selectedChainIdHex === '0xaa36a7') return process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
-    if (selectedChainIdHex === '0x14a34') return process.env.NEXT_PUBLIC_BASE_SEPOLIA_BUNDLER_URL as string;
-    return process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+    const chainConfig = getChainConfigByHex(selectedChainIdHex || '0xaa36a7');
+    return chainConfig?.bundlerUrl || process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
   }, [selectedChainIdHex]);
 
   const resolvedChain = React.useMemo(() => {
@@ -328,24 +344,26 @@ export function AddAgentModal({ open, onClose }: Props) {
     try {
       const fullAgentName = agentName;
       const chainId = resolvedChain.id;
-      const isBaseSepolia = selectedChainIdHex === '0x14a34';
+      const networkType = getNetworkType(chainId);
+      const isL2 = networkType === 'L2';
       const ensClient = getENSClientForChain();
       
-      console.info(`Checking availability for: ${fullAgentName} (${isBaseSepolia ? 'L2' : 'L1'})`);
-      console.info(`Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isBaseSepolia: ${isBaseSepolia}`);
+      console.info(`Checking availability for: ${fullAgentName} (${isL2 ? 'L2' : 'L1'})`);
+      console.info(`Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isL2: ${isL2}`);
       
       let isAvailable = false;
 
       // Check if agent is available using ENS client
       try {
         // Check if agent account exists (this is what matters for availability)
+        console.info(".................... getAgentAccountByName: ", fullAgentName);
         const existingAgentAccount = await ensClient.getAgentAccountByName(fullAgentName);
         isAvailable = !existingAgentAccount || existingAgentAccount === '0x0000000000000000000000000000000000000000';
       } catch {
         isAvailable = true; // Assume available if check fails
       }
       
-      console.info(`${isBaseSepolia ? 'L2' : 'L1'} availability result:`, isAvailable);
+      console.info(`${isL2 ? 'L2' : 'L1'} availability result:`, isAvailable);
       setAgentAvailable(isAvailable);
       console.info(`Agent ${fullAgentName} availability:`, isAvailable);
     } catch (error) {
@@ -397,7 +415,7 @@ export function AddAgentModal({ open, onClose }: Props) {
           method: "wallet_addEthereumChain",
           params: [{
             chainId: chainIdHex,
-            chainName: chainIdHex === '0x14a34' ? "Base Sepolia" : "ETH Sepolia",
+            chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
             rpcUrls: [rpcUrl]
           }]
@@ -433,6 +451,7 @@ export function AddAgentModal({ open, onClose }: Props) {
         console.info("@@@@@@@@@@@@@@@@@@@ walletClient: ", walletClient);
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
         
+        console.info(".................... getDefaultAgentAccountClient 5: ", agentName.toLowerCase());
         agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
         addressToUse = await agentAccountClient.getAddress();
         console.info('Computed agent address for agent name creation:', addressToUse);
@@ -461,9 +480,10 @@ export function AddAgentModal({ open, onClose }: Props) {
       const parentName = parts.slice(1).join('.'); // e.g., "theorg.eth"
       
       const chainId = resolvedChain.id;
-      const isBaseSepolia = selectedChainIdHex === '0x14a34';
+      const networkType = getNetworkType(chainId);
+      const isL2 = networkType === 'L2';
       
-      console.info(`Creating subname - Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isBaseSepolia: ${isBaseSepolia}`);
+      console.info(`Creating subname - Selected chain: ${selectedChainIdHex}, resolvedChain.id: ${chainId}, isL2: ${isL2}`);
       
 
 
@@ -488,7 +508,7 @@ export function AddAgentModal({ open, onClose }: Props) {
           method: "wallet_addEthereumChain",
           params: [{
             chainId: chainIdHex,
-            chainName: chainIdHex === '0x14a34' ? "Base Sepolia" : "ETH Sepolia",
+            chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
             rpcUrls: [rpcUrl]
           }]
@@ -706,6 +726,7 @@ export function AddAgentModal({ open, onClose }: Props) {
   }, [eoaAddress, resolvedChain]);
 
   // Compute agent AA default address when agent name or chain changes
+  /*
   React.useEffect(() => {
     if (!agentName || !agentName.trim() || !eoaAddress) {
       setAgentAADefaultAddress(null);
@@ -724,6 +745,7 @@ export function AddAgentModal({ open, onClose }: Props) {
         });
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
+        console.info(".................... getDefaultAgentAccountClient 1: ", agentName.toLowerCase());
         const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
         const agentAddress = await agentAccountClient.getAddress();
         
@@ -741,7 +763,8 @@ export function AddAgentModal({ open, onClose }: Props) {
     
       return () => { cancelled = true; };
   }, [agentName, selectedChainIdHex, eoaAddress, provider, resolvedChain, effectiveRpcUrl, getDefaultAgentAccountClient]);
-
+  */
+ 
   // Check if agent identity already exists when agent name changes
 	React.useEffect(() => {
     if (!agentName || !agentName.trim()) {
@@ -992,7 +1015,7 @@ export function AddAgentModal({ open, onClose }: Props) {
           method: "wallet_addEthereumChain",
           params: [{
             chainId: chainIdHex,
-            chainName: chainIdHex === '0x14a34' ? "Base Sepolia" : "ETH Sepolia",
+            chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
             rpcUrls: [rpcUrl]
           }]
@@ -1018,6 +1041,7 @@ export function AddAgentModal({ open, onClose }: Props) {
       try { (walletClient as any).account = eoaAddress as Address; } catch {}
       
       const signatory = { walletClient } as any;
+      console.info(".................... getDefaultAgentAccountClient 2: ", agentNameLower);
       const agentAccountClient = await getDefaultAgentAccountClient(agentNameLower, publicClient, walletClient);
         
       const agentAddress = await agentAccountClient.getAddress();
@@ -1161,7 +1185,7 @@ export function AddAgentModal({ open, onClose }: Props) {
             method: "wallet_addEthereumChain",
             params: [{
               chainId: chainIdHex,
-              chainName: chainIdHex === '0x14a34' ? "Base Sepolia" : "ETH Sepolia",
+              chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
               nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
               rpcUrls: [rpcUrl]
             }]
@@ -1185,6 +1209,7 @@ export function AddAgentModal({ open, onClose }: Props) {
           try { (walletClient as any).account = eoaAddress as Address; } catch {}
 
           // Use the agent AA derived from the name to authorize setText via AA
+          console.info(".................... getDefaultAgentAccountClient 3: ", agentNameLower);
           const agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
 
           const BUNDLER_URL = effectiveBundlerUrl;
@@ -1344,9 +1369,10 @@ export function AddAgentModal({ open, onClose }: Props) {
           {/* Agent Chain Selection */}
           <Stack direction="row" spacing={2} alignItems="center">
             <Typography variant="body2">Agent Chain</Typography>
-            <select value={selectedChainIdHex || ''} onChange={(e) => setSelectedChainIdHex(e.target.value || undefined)}>
+            <select value={selectedChainIdHex} onChange={(e) => setSelectedChainIdHex(e.target.value || '0xaa36a7')}>
               {Object.keys(clients).map((cid) => {
-                const label = cid === '0xaa36a7' ? 'ETH Sepolia' : cid === '0x14a34' ? 'Base Sepolia' : cid;
+                const chainConfig = getChainConfigByHex(cid);
+                const label = chainConfig?.chainName || cid;
                 return (
                   <option key={cid} value={cid}>{label}</option>
                 );

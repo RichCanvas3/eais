@@ -122,6 +122,15 @@ export class AIAgentENSClient {
 
   } 
 
+  async prepareAddAgentInfoCalls(params: {
+    orgName: string;            // e.g., 'airbnb.eth'
+    agentName: string;          // e.g., 'my-agent'
+    agentAddress: `0x${string}`; // AA address for the agent name
+    agentUrl: string    //  URL
+  }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] }> {
+    return { calls: [] };
+  }
+
   async encodeSetNameAgentIdentity(name: string, agentIdentity: BigInt): Promise<`0x${string}`>  {
 
     // Build ERC-7930 (approx) binary: [v1=01][ns=eip155=01][chainId(4 bytes)][address(20 bytes)] + [len(1)][agentId bytes]

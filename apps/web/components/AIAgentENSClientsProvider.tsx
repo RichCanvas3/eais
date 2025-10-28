@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { EthersAdapter } from '../../erc8004-src';
 import { AIAgentENSClient } from '../../erc8004-agentic-trust-sdk';
-import { AIAgentL2ENSClient } from '../../erc8004-agentic-trust-sdk/AIAgentL2ENSClient';
+import { AIAgentL2ENSDurenClient as AIAgentL2ENSClient } from '../../erc8004-agentic-trust-sdk/AIAgentL2ENSDurenClient';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { CHAIN_CONFIGS, getChainConfigByHex, getNetworkType } from '../config/chains';
 
@@ -19,12 +19,23 @@ export function useAgentENSClientFor(chainIdHex?: string): AIAgentENSClient | nu
   const clients = useAgentENSClients();
   // Lazy import to avoid circular deps
   const { useAgentENSClient } = require('./AIAgentENSClientProvider') as typeof import('./AIAgentENSClientProvider');
-  if (chainIdHex && clients[chainIdHex]) return clients[chainIdHex];
+  
+  if (chainIdHex && clients[chainIdHex]) {
+    console.log(`🔍 Switching to ENS client for chain: ${chainIdHex}`);
+    return clients[chainIdHex];
+  }
+  
   const first = Object.keys(clients)[0];
-  if (first) return clients[first];
+  if (first) {
+    console.log(`🔍 Using first available ENS client: ${first}`);
+    return clients[first];
+  }
+  
   try {
+    console.log('🔍 Using fallback ENS client');
     return useAgentENSClient?.() ?? null;
   } catch {
+    console.log('🔍 No ENS client available');
     return null;
   }
 }
@@ -55,8 +66,33 @@ function getConfiguredChains(): ENSChainConfig[] {
     };
     
     const envPrefix = getEnvPrefix(config.chainId);
-    const ensRegistry = process.env[`NEXT_PUBLIC_${envPrefix}_ENS_REGISTRY`] as `0x${string}` | undefined;
-    const ensResolver = process.env[`NEXT_PUBLIC_${envPrefix}_ENS_RESOLVER`] as `0x${string}` | undefined;
+    
+    // Use explicit environment variable access for each chain
+    let ensRegistry: `0x${string}` | undefined;
+    let ensResolver: `0x${string}` | undefined;
+    
+    switch (config.chainId) {
+      case 11155111: // ETH_SEPOLIA
+        ensRegistry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
+        ensResolver = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
+        break;
+      case 84532: // BASE_SEPOLIA
+        ensRegistry = process.env.NEXT_PUBLIC_BASE_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
+        ensResolver = process.env.NEXT_PUBLIC_BASE_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
+        break;
+      case 11155420: // OP_SEPOLIA
+        ensRegistry = process.env.NEXT_PUBLIC_OP_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
+        ensResolver = process.env.NEXT_PUBLIC_OP_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
+        break;
+      default:
+        console.warn(`🔍 Unknown chain ID: ${config.chainId}`);
+        ensRegistry = undefined;
+        ensResolver = undefined;
+    }
+    
+    console.log(`🔍 Chain ${config.chainId} (${envPrefix}):`);
+    console.log(`🔍   ENS Registry: ${ensRegistry || 'MISSING'}`);
+    console.log(`🔍   ENS Resolver: ${ensResolver || 'MISSING'}`);
     
     if (ensRegistry && ensResolver) {
       chains.push({
@@ -77,14 +113,29 @@ function getConfiguredChains(): ENSChainConfig[] {
 type Props = { children: React.ReactNode };
 
 export function AIAgentENSClientsProvider({ children }: Props) {
+  console.log('🔍 AIAgentENSClientsProvider component mounted');
   const { provider: web3AuthProvider, address } = useWeb3Auth();
   const [clients, setClients] = React.useState<ENSClientsByChain>({});
 
   React.useEffect(() => {
+    console.log('🔍 AIAgentENSClientsProvider useEffect triggered');
+    console.log('🔍 web3AuthProvider:', !!web3AuthProvider);
+    console.log('🔍 address:', address);
+    console.log('🔍 web3AuthProvider type:', typeof web3AuthProvider);
+    
     (async () => {
-      if (!web3AuthProvider || !address) return;
+      if (!web3AuthProvider || !address) {
+        console.log('🔍 Skipping ENS client creation - missing provider or address');
+        return;
+      }
+      
+      console.log('🔍 Starting ENS client creation...');
       const chains = getConfiguredChains();
-      if (!chains.length) return;
+      console.log('🔍 Configured chains:', chains.length);
+      if (!chains.length) {
+        console.log('🔍 No chains configured');
+        return;
+      }
 
       const { ethers } = require('ethers') as typeof import('ethers');
       const result: ENSClientsByChain = {};
@@ -92,9 +143,9 @@ export function AIAgentENSClientsProvider({ children }: Props) {
       const eip1193 = web3AuthProvider as any;
 
       for (const cfg of chains) {
-        console.log(`🔍 Processing ENS chain ${cfg.chainIdHex} (${cfg.rpcUrl})`);
+        console.log(`🔍 Creating ENS client for chain ${cfg.chainIdHex} (${cfg.chain.name})`);
 
-        // Add and switch to the chain
+        // Add and switch to the chain for signing operations
         await eip1193.request({
           method: "wallet_addEthereumChain",
           params: [{
@@ -109,18 +160,34 @@ export function AIAgentENSClientsProvider({ children }: Props) {
           params: [{ chainId: cfg.chainIdHex }]
         });
 
-        const ensProvider = new ethers.BrowserProvider(eip1193);
-        const ensSigner = await ensProvider.getSigner();
-        const ensAdapter = ensSigner ? new EthersAdapter(ensProvider, ensSigner) : new EthersAdapter(ensProvider, undefined as any);
-
-        console.log("🔍 ENS agentAdapter: ", ensAdapter);
+        // Wait a bit to ensure chain switch is complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Use L2 client for L2 networks, standard client for L1 networks
+        // Create wallet provider for signing operations
+        const walletProvider = new ethers.BrowserProvider(eip1193);
+        const walletSigner = await walletProvider.getSigner();
+        const walletAdapter = walletSigner ? new EthersAdapter(walletProvider, walletSigner) : new EthersAdapter(walletProvider, undefined as any);
+
+        // Create direct RPC provider for reading operations
+        const readProvider = new ethers.JsonRpcProvider(cfg.rpcUrl);
+        
+        // Create a hybrid adapter that uses wallet for signing and direct RPC for reading
+        const hybridAdapter = {
+          // Use wallet adapter for signing operations
+          signMessage: walletAdapter.signMessage?.bind(walletAdapter),
+          // Use direct RPC provider for reading operations
+          provider: readProvider,
+          getAddress: () => Promise.resolve(address)
+        };
+
+        console.log(`🔍 Created hybrid ENS adapter for ${cfg.chain.name} (${cfg.chainIdHex})`);
+        
+        // Create the appropriate ENS client for this chain
         const client = cfg.networkType === 'L2' 
           ? new AIAgentL2ENSClient(
               cfg.chain,
               cfg.rpcUrl,
-              ensAdapter,
+              hybridAdapter as any,
               cfg.ensRegistryAddress,
               cfg.ensResolverAddress,
               cfg.identityRegistryAddress
@@ -128,15 +195,18 @@ export function AIAgentENSClientsProvider({ children }: Props) {
           : new AIAgentENSClient(
               cfg.chain,
               cfg.rpcUrl,
-              ensAdapter,
+              hybridAdapter as any,
               cfg.ensRegistryAddress,
               cfg.ensResolverAddress,
               cfg.identityRegistryAddress
             );
+        
         result[cfg.chainIdHex] = client;
+        console.log(`✅ ENS client created for ${cfg.chain.name} (${cfg.chainIdHex})`);
       }
 
       setClients(result);
+      console.log('🔍 ENS clients created successfully:', Object.keys(result));
     })();
   }, [web3AuthProvider, address]);
 

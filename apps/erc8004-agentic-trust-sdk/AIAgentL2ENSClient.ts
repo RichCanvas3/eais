@@ -87,7 +87,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
           return null;
         }
       } catch (error) {
-        console.error('Error checking L2 subname availability:', error);
+        console.error('Error checking L2 subname availability 1:', error);
       }
     }
 
@@ -120,7 +120,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
           return null;
         }
       } catch (error) {
-        console.error('Error checking L2 subname availability:', error);
+        console.error('Error checking L2 subname availability 2:', error);
       }
     }
 
