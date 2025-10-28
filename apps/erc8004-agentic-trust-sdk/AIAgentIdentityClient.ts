@@ -4,7 +4,7 @@
  */
 import { createPublicClient, http, namehash, labelhash, encodeFunctionData, hexToString, type Chain, type PublicClient } from 'viem';
 import { ethers } from 'ethers';
-import { sepolia, baseSepolia } from 'viem/chains';
+import { sepolia, baseSepolia, optimismSepolia } from 'viem/chains';
 
 
 import { IdentityClient as BaseIdentityClient } from '../erc8004-src/IdentityClient';
@@ -36,6 +36,8 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
         return sepolia;
       case 84532: // Base Sepolia
         return baseSepolia;
+      case 11155420: // Optimism Sepolia
+        return optimismSepolia;
       default:
         console.warn(`Unknown chainId ${chainId}, defaulting to ETH Sepolia`);
         return sepolia;

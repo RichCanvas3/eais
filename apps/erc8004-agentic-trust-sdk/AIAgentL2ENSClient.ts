@@ -1,5 +1,5 @@
 /**
- * L2 ENS Client for Base Sepolia
+ * L2 ENS Client for Base Sepolia and Optimism Sepolia
  * Extends AIAgentENSClient with namespace.ninja integration for L2 subname operations
  */
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
@@ -8,7 +8,7 @@ import { AIAgentENSClient } from './AIAgentENSClient';
 // @ts-ignore - @thenamespace/mint-manager doesn't have type definitions
 import { createMintClient } from '@thenamespace/mint-manager';
 import { createIndexerClient } from '@thenamespace/indexer';
-import { sepolia, baseSepolia } from 'viem/chains';
+import { sepolia, baseSepolia, optimismSepolia } from 'viem/chains';
 
 export class AIAgentL2ENSClient extends AIAgentENSClient {
   private namespaceClient: any = null;
@@ -53,6 +53,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
         cursomRpcUrls: {
           [sepolia.id]: process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/demo',
           [baseSepolia.id]: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://base-sepolia.g.alchemy.com/v2/demo',
+          [optimismSepolia.id]: process.env.NEXT_PUBLIC_OP_SEPOLIA_RPC_URL || 'https://op-sepolia.g.alchemy.com/v2/demo',
         }
       });
       
@@ -73,7 +74,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
         if (!isAvailable) {
           const client = createIndexerClient();
           const subname = await client.getL2Subname({
-            chainId: baseSepolia.id,
+            chainId: (this as any).chain.id,
             nameOrNamehash: namehash(name) as `0x${string}`
           });
           console.info("subname for name: ", name, " is: ", subname);
@@ -108,7 +109,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
           console.info("AIAgentL2ENSClient.getAgentAccountByName: not available");
           const client = createIndexerClient();
           const subname = await client.getL2Subname({
-            chainId: baseSepolia.id,
+            chainId: (this as any).chain.id,
             nameOrNamehash: namehash(name) as `0x${string}`
           });
           console.info("AIAgentL2ENSClient.getAgentAccountByName: subname: ", subname);
@@ -161,7 +162,7 @@ export class AIAgentL2ENSClient extends AIAgentENSClient {
     const agentAddress = params.agentAddress;
     const agentUrl = params.agentUrl;
 
-    const chainName = 'base-sepolia';
+    const chainName = (this as any).chain.name.toLowerCase().replace(/\s+/g, '-');
 
     console.info("parent: ", parent);
     console.info("label: ", label);

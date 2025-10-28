@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex } from 'viem';
 import { sepolia } from 'viem/chains';
+import { getChainConfig } from '../config/chains';
 import { toMetaMaskSmartAccount, Implementation } from '@metamask/delegation-toolkit';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';

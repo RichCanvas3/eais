@@ -24,6 +24,9 @@ export const ETH_SEPOLIA_RPC_HTTP_URL      = must("ETH_SEPOLIA_RPC_HTTP_URL");
 export const BASE_SEPOLIA_IDENTITY_REGISTRY = process.env.BASE_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
 export const BASE_SEPOLIA_RPC_HTTP_URL      = must("BASE_SEPOLIA_RPC_HTTP_URL");
 
+export const OP_SEPOLIA_IDENTITY_REGISTRY = process.env.OP_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+export const OP_SEPOLIA_RPC_HTTP_URL      = process.env.OP_SEPOLIA_RPC_HTTP_URL || '';
+
 export const RPC_WS_URL        = process.env.RPC_WS_URL; // optional
 export const CONFIRMATIONS     = Number(process.env.CONFIRMATIONS ?? 12);
 export const DB_PATH           = process.env.DB_PATH ?? "./data/registry.db";
@@ -33,5 +36,6 @@ export const BACKFILL_MODE     = (process.env.BACKFILL_MODE ?? 'logs') as 'logs'
 export const IDENTITY_API_URL      = process.env.IDENTITY_API_URL  ?? 'http://localhost:4000';
 export const ETH_SEPOLIA_GRAPHQL_URL       = process.env.ETH_SEPOLIA_GRAPHQL_URL || '';
 export const BASE_SEPOLIA_GRAPHQL_URL       = process.env.BASE_SEPOLIA_GRAPHQL_URL || '';
+export const OP_SEPOLIA_GRAPHQL_URL       = process.env.OP_SEPOLIA_GRAPHQL_URL || '';
 export const GRAPHQL_API_KEY   = process.env.GRAPHQL_API_KEY || '';
 export const GRAPHQL_POLL_MS   = Number(process.env.GRAPHQL_POLL_MS ?? 120000);

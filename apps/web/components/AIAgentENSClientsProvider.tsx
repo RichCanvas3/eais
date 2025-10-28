@@ -4,7 +4,7 @@ import { EthersAdapter } from '../../erc8004-src';
 import { AIAgentENSClient } from '../../erc8004-agentic-trust-sdk';
 import { AIAgentL2ENSClient } from '../../erc8004-agentic-trust-sdk/AIAgentL2ENSClient';
 import { useWeb3Auth } from './Web3AuthProvider';
-import { sepolia, baseSepolia } from 'viem/chains';
+import { CHAIN_CONFIGS, getChainConfigByHex, getNetworkType } from '../config/chains';
 
 type ENSClientsByChain = Record<string, AIAgentENSClient>;
 
@@ -29,50 +29,46 @@ export function useAgentENSClientFor(chainIdHex?: string): AIAgentENSClient | nu
   }
 }
 
-type ChainConfig = {
+type ENSChainConfig = {
   chainIdHex: string;
   rpcUrl: string;
   ensRegistryAddress: `0x${string}`;
   ensResolverAddress: `0x${string}`;
   identityRegistryAddress: `0x${string}`;
   chain: any; // viem chain object
+  networkType: 'L1' | 'L2';
 };
 
-function getConfiguredChains(): ChainConfig[] {
-  const chains: ChainConfig[] = [];
+function getConfiguredChains(): ENSChainConfig[] {
+  const chains: ENSChainConfig[] = [];
 
-  const ethSepoliaRpc = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string | undefined;
-  const ethSepoliaChainId = process.env.NEXT_PUBLIC_ETH_SEPOLIA_CHAIN_ID_HEX as string | undefined;
-  const ethSepoliaIdentity = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}` | undefined;
-  const ethSepoliaEns = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
-  const ethSepoliaResolver = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
-
-  if (ethSepoliaRpc && ethSepoliaChainId && ethSepoliaIdentity && ethSepoliaEns && ethSepoliaResolver) {
-    chains.push({ 
-      chainIdHex: ethSepoliaChainId, 
-      rpcUrl: ethSepoliaRpc, 
-      identityRegistryAddress: ethSepoliaIdentity, 
-      ensRegistryAddress: ethSepoliaEns,
-      ensResolverAddress: ethSepoliaResolver,
-      chain: sepolia
-    });
-  }
-
-  // Explicit support for Base Sepolia alongside ETH Sepolia
-  const baseSepoliaRpc = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string | undefined;
-  const baseSepoliaChainId = process.env.NEXT_PUBLIC_BASE_SEPOLIA_CHAIN_ID_HEX as string | undefined; // e.g., 0x14a34
-  const baseSepoliaIdentity = process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY as `0x${string}` | undefined;
-  const baseSepoliaEns = process.env.NEXT_PUBLIC_BASE_SEPOLIA_ENS_REGISTRY as `0x${string}` | undefined;
-  const baseSepoliaResolver = process.env.NEXT_PUBLIC_BASE_SEPOLIA_ENS_RESOLVER as `0x${string}` | undefined;
-  if (baseSepoliaRpc && baseSepoliaChainId && baseSepoliaIdentity && baseSepoliaEns && baseSepoliaResolver) {
-    chains.push({ 
-      chainIdHex: baseSepoliaChainId, 
-      rpcUrl: baseSepoliaRpc, 
-      identityRegistryAddress: baseSepoliaIdentity, 
-      ensRegistryAddress: baseSepoliaEns,
-      ensResolverAddress: baseSepoliaResolver,
-      chain: baseSepolia
-    });
+  // Use centralized chain configuration
+  for (const config of CHAIN_CONFIGS) {
+    // Map chain IDs to environment variable prefixes
+    const getEnvPrefix = (chainId: number): string => {
+      switch (chainId) {
+        case 11155111: return 'ETH_SEPOLIA';
+        case 84532: return 'BASE_SEPOLIA';
+        case 11155420: return 'OP_SEPOLIA';
+        default: return 'UNKNOWN';
+      }
+    };
+    
+    const envPrefix = getEnvPrefix(config.chainId);
+    const ensRegistry = process.env[`NEXT_PUBLIC_${envPrefix}_ENS_REGISTRY`] as `0x${string}` | undefined;
+    const ensResolver = process.env[`NEXT_PUBLIC_${envPrefix}_ENS_RESOLVER`] as `0x${string}` | undefined;
+    
+    if (ensRegistry && ensResolver) {
+      chains.push({
+        chainIdHex: config.chainIdHex,
+        rpcUrl: config.rpcUrl,
+        identityRegistryAddress: config.identityRegistryAddress,
+        ensRegistryAddress: ensRegistry,
+        ensResolverAddress: ensResolver,
+        chain: config.viemChain,
+        networkType: config.networkType
+      });
+    }
   }
 
   return chains;
@@ -103,7 +99,7 @@ export function AIAgentENSClientsProvider({ children }: Props) {
           method: "wallet_addEthereumChain",
           params: [{
             chainId: cfg.chainIdHex,
-            chainName: cfg.chainIdHex === '0x14a34' ? "Base Sepolia" : "ETH Sepolia",
+            chainName: getChainConfigByHex(cfg.chainIdHex)?.chainName || "ETH Sepolia",
             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
             rpcUrls: [cfg.rpcUrl]
           }]
@@ -119,8 +115,8 @@ export function AIAgentENSClientsProvider({ children }: Props) {
 
         console.log("🔍 ENS agentAdapter: ", ensAdapter);
         
-        // Use L2 client for Base Sepolia, standard client for others
-        const client = cfg.chainIdHex === '0x14a34' 
+        // Use L2 client for L2 networks, standard client for L1 networks
+        const client = cfg.networkType === 'L2' 
           ? new AIAgentL2ENSClient(
               cfg.chain,
               cfg.rpcUrl,

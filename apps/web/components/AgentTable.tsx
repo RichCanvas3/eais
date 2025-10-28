@@ -35,21 +35,10 @@ import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIde
 import { useAgentENSClient } from './AIAgentENSClientProvider';
 import { useAgentENSClientFor } from './AIAgentENSClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
+import { getExplorerUrl, getExplorerName, getIdentityRegistry, getBundlerUrl, getRpcUrl, getChainConfig, getChainIdHex, getViemChain, getNetworkType } from '../config/chains';
 
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
-
-// Helper function to get the correct block explorer URL based on chain ID
-function getBlockExplorerUrl(chainId: number): string {
-  switch (chainId) {
-    case 11155111: // ETH Sepolia
-      return 'https://sepolia.etherscan.io';
-    case 84532: // Base Sepolia
-      return 'https://sepolia.basescan.org';
-    default:
-      return 'https://sepolia.etherscan.io'; // fallback to ETH Sepolia
-  }
-}
 
 export type Agent = {
 	chainId: number;
@@ -286,12 +275,13 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			if (!fetched) {
 				// Get chain-specific configuration based on the agent's chainId
 				const agentChainId = row.chainId;
-				const rpcUrl = agentChainId === 84532 ? 
-					process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string :
-					process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-				const identityRegistry = agentChainId === 84532 ?
-					process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY as string :
-					process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
+				const rpcUrl = getRpcUrl(agentChainId);
+				const identityRegistry = getIdentityRegistry(agentChainId);
+				
+				if (!rpcUrl || !identityRegistry) {
+					console.warn(`Missing configuration for chain ${agentChainId}`);
+					return;
+				}
 				
 				const { ethers } = await import('ethers');
 				const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
@@ -396,15 +386,15 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			// Build agent account client for AA
 			if (!provider || !eoa) throw new Error('Not connected');
 			
-			// Get chain-specific configuration based on the agent's chainId
-			const agentChainId = identityCurrentAgent.chainId;
-			const rpcUrl = agentChainId === 84532 ? 
-				process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL as string :
-				process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-			const chain = agentChainId === 84532 ? baseSepolia : sepolia;
-			const bundlerUrl = agentChainId === 84532 ?
-				process.env.NEXT_PUBLIC_BASE_SEPOLIA_BUNDLER_URL as string :
-				process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
+		// Get chain-specific configuration based on the agent's chainId
+		const agentChainId = identityCurrentAgent.chainId;
+		const rpcUrl = getRpcUrl(agentChainId);
+		const chain = getViemChain(agentChainId);
+		const bundlerUrl = getBundlerUrl(agentChainId);
+		
+		if (!rpcUrl || !chain || !bundlerUrl) {
+			throw new Error(`Missing configuration for chain ${agentChainId}`);
+		}
 			
 			const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 			const walletClient = createWalletClient({ chain: chain as any, transport: custom(provider as any), account: eoa as `0x${string}` });
@@ -463,7 +453,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const agentIdNum = BigInt(agentId);
 			
 			// Get the correct agent identity client for this chain
-			const chainIdHex = chainId === 84532 ? '0x14a34' : '0xaa36a7'; // Base Sepolia : ETH Sepolia
+			const chainIdHex = getChainIdHex(chainId) || '0xaa36a7'; // Default to ETH Sepolia if not found
 			console.info("+++++++++++++++++++ openAgentInfo: chainIdHex", chainIdHex);
 			console.info("+++++++++++++++++++ openAgentInfo: available clients", Object.keys(agentIdentityClients));
 
@@ -590,7 +580,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
               try {
 
 				// Get the correct agent identity client based on the row's chainId
-				const chainIdHex = row.chainId === 84532 ? '0x14a34' : '0xaa36a7'; // Base Sepolia : ETH Sepolia
+				const chainIdHex = getChainIdHex(row.chainId) || '0xaa36a7'; // Default to ETH Sepolia if not found
 
                   const agentIdentityClient = agentIdentityClients[chainIdHex];
                   if (agentIdentityClient) {
@@ -1603,7 +1593,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 											backgroundColor: 'action.hover'
 										}
 									}}
-									onClick={() => window.open(`${getBlockExplorerUrl(11155111)}/address/${eoa}`, '_blank')}
+									onClick={() => window.open(`${getExplorerUrl(11155111)}/address/${eoa}`, '_blank')}
 								/>
 							)}
 							<Stack direction="row" spacing={1}>
@@ -1621,7 +1611,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 									onClick={() => {
                                         const address = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
 										if (address) {
-											window.open(`${getBlockExplorerUrl(11155111)}/address/${address}`, '_blank');
+											window.open(`${getExplorerUrl(11155111)}/address/${address}`, '_blank');
 										}
 									}}
 								/>
@@ -1639,7 +1629,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 									onClick={() => {
 										const address = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY;
 										if (address) {
-											window.open(`${getBlockExplorerUrl(11155111)}/address/${address}`, '_blank');
+											window.open(`${getExplorerUrl(11155111)}/address/${address}`, '_blank');
 										}
 									}}
 								/>
@@ -1758,9 +1748,9 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 									<TableRow key={`${row.chainId}-${row.agentId}`} hover>
 										<TableCell>
 											<Chip 
-												label={row.chainId === 11155111 ? 'ETH Sepolia' : row.chainId === 84532 ? 'Base Sepolia' : `Chain ${row.chainId}`}
+												label={getChainConfig(row.chainId)?.chainName || `Chain ${row.chainId}`}
 												size="small"
-												color={row.chainId === 11155111 ? 'primary' : row.chainId === 84532 ? 'secondary' : 'default'}
+												color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
 												sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}
 											/>
 										</TableCell>
@@ -1776,8 +1766,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 															sx={{ fontFamily: 'ui-monospace, monospace', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
 															onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
 															noWrap 
-															title={`Click to view on ${row.chainId === 84532 ? 'Basescan' : 'Etherscan'}: ${acct}`}
-															onClick={() => window.open(`${getBlockExplorerUrl(row.chainId)}/address/${acct}`, '_blank')}
+															title={`Click to view on ${getExplorerName(row.chainId)}: ${acct}`}
+															onClick={() => window.open(`${getExplorerUrl(row.chainId)}/address/${acct}`, '_blank')}
 														>
 															{display}
 														</Typography>
@@ -1851,20 +1841,18 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 										<Stack direction="row" spacing={1} alignItems="center">
 											{(() => {
 												// Get chain-specific registry address
-												const registryAddress = row.chainId === 84532
-													? process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY
-													: process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
+												const registryAddress = getIdentityRegistry(row.chainId);
 												
 												if (registryAddress) {
 													return (
 														<Typography
 															component="a"
-															href={`${getBlockExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
+															href={`${getExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
 															target="_blank"
 															rel="noopener noreferrer"
 															variant="body2"
 															sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-															title={`View NFT #${row.agentId} on ${row.chainId === 84532 ? 'Basescan' : 'Etherscan'}`}
+															title={`View NFT #${row.agentId} on ${getExplorerName(row.chainId)}`}
 														>
 															{row.agentId}
 														</Typography>
@@ -2088,11 +2076,9 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
                             NFT URL:&nbsp;
                             {(() => {
                                 // Get chain-specific registry address
-                                const reg = identityCurrentAgent.chainId === 84532 
-                                    ? process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY 
-                                    : process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
+                                const reg = getIdentityRegistry(identityCurrentAgent.chainId);
                                 if (reg) {
-                                    const href = `${getBlockExplorerUrl(identityCurrentAgent.chainId)}/nft/${reg}/${identityCurrentAgent.agentId}`;
+                                    const href = `${getExplorerUrl(identityCurrentAgent.chainId)}/nft/${reg}/${identityCurrentAgent.agentId}`;
                                     return (
                                         <Typography component="a" href={href} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
                                             {href}
@@ -2569,7 +2555,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 															textDecoration: 'underline'
 														}
 													}}
-													onClick={() => window.open(`${getBlockExplorerUrl(ensCurrentAgent?.chainId || 11155111)}/address/${ensCurrentAgent?.agentAddress}`, '_blank')}
+													onClick={() => window.open(`${getExplorerUrl(ensCurrentAgent?.chainId || 11155111)}/address/${ensCurrentAgent?.agentAddress}`, '_blank')}
 												>
 													{ensCurrentAgent?.agentAddress}
 												</Typography>
@@ -2808,7 +2794,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 															textDecoration: 'underline'
 														}
 													}}
-												onClick={() => window.open(`${getBlockExplorerUrl(11155111)}/address/${orgOwner}`, '_blank')}
+												onClick={() => window.open(`${getExplorerUrl(11155111)}/address/${orgOwner}`, '_blank')}
 												>
 													{orgOwner}
 												</Typography>
@@ -2829,8 +2815,6 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			<AddAgentModal
 				open={addAgentOpen}
 				onClose={() => setAddAgentOpen(false)}
-				registryAddress={process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`}
-				rpcUrl={process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string}
 			/>
 
 			{/* DID:Web Modal */}

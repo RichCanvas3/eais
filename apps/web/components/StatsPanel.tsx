@@ -2,6 +2,23 @@
 import * as React from 'react';
 import { Box, Paper, Typography, Grid, Card, CardContent, Chip, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, IconButton } from '@mui/material';
 import { TrendingUp, Storage, Language, Schedule, Close } from '@mui/icons-material';
+import { getChainConfig, getNetworkType } from '../config/chains';
+
+// Helper function to get chip color based on chain configuration
+function getChipColor(chainId: number): 'primary' | 'secondary' | 'default' {
+  const config = getChainConfig(chainId);
+  const networkType = getNetworkType(chainId);
+  
+  if (!config) return 'default';
+  
+  // L1 networks get primary color
+  if (networkType === 'L1') return 'primary';
+  
+  // L2 networks get secondary color
+  if (networkType === 'L2') return 'secondary';
+  
+  return 'default';
+}
 
 interface StatsData {
   summary: {
@@ -180,7 +197,7 @@ export function StatsPanel({ open, onClose }: StatsPanelProps) {
                     <Chip 
                       label={`${chain.agentCount} agents`} 
                       size="small" 
-                      color={chain.chainId === 11155111 ? 'primary' : chain.chainId === 84532 ? 'secondary' : 'default'}
+                      color={getChipColor(chain.chainId)}
                     />
                   </Box>
                   
@@ -228,7 +245,7 @@ export function StatsPanel({ open, onClose }: StatsPanelProps) {
                       <Chip 
                         label={agent.chainName} 
                         size="small" 
-                        color={agent.chainId === 11155111 ? 'primary' : agent.chainId === 84532 ? 'secondary' : 'default'}
+                        color={getChipColor(agent.chainId)}
                         sx={{ fontSize: '0.7rem' }}
                       />
                     </Box>

@@ -11,6 +11,7 @@ export async function GET() {
         CASE 
           WHEN chainId = 11155111 THEN 'ETH Sepolia'
           WHEN chainId = 84532 THEN 'Base Sepolia'
+          WHEN chainId = 11155420 THEN 'OP Sepolia'
           ELSE 'Chain ' || chainId
         END as chainName
       FROM agents 
@@ -32,6 +33,7 @@ export async function GET() {
         CASE 
           WHEN chainId = 11155111 THEN 'ETH Sepolia'
           WHEN chainId = 84532 THEN 'Base Sepolia'
+          WHEN chainId = 11155420 THEN 'OP Sepolia'
           ELSE 'Chain ' || chainId
         END as chainName
       FROM agents 
@@ -48,6 +50,7 @@ export async function GET() {
         CASE 
           WHEN chainId = 11155111 THEN 'ETH Sepolia'
           WHEN chainId = 84532 THEN 'Base Sepolia'
+          WHEN chainId = 11155420 THEN 'OP Sepolia'
           ELSE 'Chain ' || chainId
         END as chainName
       FROM agents 
@@ -63,6 +66,7 @@ export async function GET() {
         CASE 
           WHEN chainId = 11155111 THEN 'ETH Sepolia'
           WHEN chainId = 84532 THEN 'Base Sepolia'
+          WHEN chainId = 11155420 THEN 'OP Sepolia'
           ELSE 'Chain ' || chainId
         END as chainName
       FROM agents 
@@ -81,6 +85,7 @@ export async function GET() {
         CASE 
           WHEN chainId = 11155111 THEN 'ETH Sepolia'
           WHEN chainId = 84532 THEN 'Base Sepolia'
+          WHEN chainId = 11155420 THEN 'OP Sepolia'
           ELSE 'Chain ' || chainId
         END as chainName
       FROM agents 

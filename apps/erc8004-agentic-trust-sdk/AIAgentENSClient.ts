@@ -46,16 +46,22 @@ export class AIAgentENSClient {
 
   /**
    * Check if this client is for L1 (ETH Sepolia)
+   * Base implementation - can be overridden by subclasses
    */
   isL1(): boolean {
-    return this.chain.id === 11155111; // ETH Sepolia
+    // Default implementation: assume L1 unless overridden
+    // Subclasses like AIAgentL2ENSClient will override this
+    return !this.isL2();
   }
 
   /**
-   * Check if this client is for L2 (Base Sepolia)
+   * Check if this client is for L2 (Base Sepolia, Optimism Sepolia, etc.)
+   * Base implementation - can be overridden by subclasses
    */
   isL2(): boolean {
-    return this.chain.id === 84532; // Base Sepolia
+    // Default implementation: assume L1 unless overridden
+    // Subclasses like AIAgentL2ENSClient will override this
+    return false;
   }
 
   /**

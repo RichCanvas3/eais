@@ -1,6 +1,6 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
+import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, OP_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client } from '../../erc8004-src';
 import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
@@ -9,8 +9,10 @@ import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
 import { 
     ETH_SEPOLIA_IDENTITY_REGISTRY, 
     BASE_SEPOLIA_IDENTITY_REGISTRY, 
+    OP_SEPOLIA_IDENTITY_REGISTRY,
     ETH_SEPOLIA_RPC_HTTP_URL, 
-    BASE_SEPOLIA_RPC_HTTP_URL } from './env';
+    BASE_SEPOLIA_RPC_HTTP_URL,
+    OP_SEPOLIA_RPC_HTTP_URL } from './env';
 
 
 
@@ -40,12 +42,22 @@ const erc8004BaseSepoliaClient = new ERC8004Client({
     identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY,
     reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
     validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
-    chainId: 84532, // Base Sepolia
+    chainId: 84532, // Base Sepolia (L2)
   }
 });
 
+const opSepliaEthersProvider = OP_SEPOLIA_RPC_HTTP_URL ? new ethers.JsonRpcProvider(OP_SEPOLIA_RPC_HTTP_URL) : null;
+const opSepoliathersAdapter = opSepliaEthersProvider ? new EthersAdapter(opSepliaEthersProvider) : null;
 
-
+const erc8004OpSepoliaClient = opSepoliathersAdapter && OP_SEPOLIA_IDENTITY_REGISTRY ? new ERC8004Client({
+  adapter: opSepoliathersAdapter,
+  addresses: {
+    identityRegistry: OP_SEPOLIA_IDENTITY_REGISTRY,
+    reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
+    validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
+    chainId: 11155420, // Optimism Sepolia (L2)
+  }
+}) : null;
 
 
 // ---- helpers ----
@@ -524,8 +536,11 @@ async function backfill(client: ERC8004Client) {
     // ETH Sepolia
     graphqlUrl = ETH_SEPOLIA_GRAPHQL_URL;
   } else if (chainId === 84532) {
-    // Base Sepolia
+    // Base Sepolia (L2)
     graphqlUrl = BASE_SEPOLIA_GRAPHQL_URL;
+  } else if (chainId === 11155420) {
+    // Optimism Sepolia (L2)
+    graphqlUrl = OP_SEPOLIA_GRAPHQL_URL;
   } 
 
 
@@ -699,7 +714,7 @@ async function backfillByIds(client: ERC8004Client) {
       const owner = await client.identity.getOwner(id);
       const uri = await tryReadTokenURI(client, id);
       console.info("............uri: ", uri)
-      await upsertFromTransfer(owner, id, 0n, uri, chainId); // Base Sepolia chainId
+      await upsertFromTransfer(owner, id, 0n, uri, chainId); // L2 chainId (Base Sepolia or Optimism Sepolia)
     } catch {
       // skip gaps or read errors
     }
@@ -750,7 +765,8 @@ function watch() {
     if (agentCount.count === 0 && eventCount.count === 0) {
       console.log('Database is empty - resetting checkpoints to 0 for all chains');
       setCheckpoint(0n, 11155111); // ETH Sepolia
-      setCheckpoint(0n, 84532); // Base Sepolia
+      setCheckpoint(0n, 84532); // Base Sepolia (L2)
+      setCheckpoint(0n, 11155420); // Optimism Sepolia (L2)
       // Clear any stale checkpoint data
       db.prepare("DELETE FROM checkpoints WHERE key LIKE 'lastProcessed%'").run();
     }
@@ -764,6 +780,10 @@ function watch() {
     //await backfillByIds(erc8004EthSepoliaClient)
     await backfill(erc8004BaseSepoliaClient);
     //await backfillByIds(erc8004BaseSepoliaClient)
+    if (erc8004OpSepoliaClient) {
+      await backfill(erc8004OpSepoliaClient);
+      //await backfillByIds(erc8004OpSepoliaClient)
+    }
   } catch (e) {
     console.error('Initial GraphQL backfill failed:', e);
   }

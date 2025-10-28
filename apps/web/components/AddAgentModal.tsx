@@ -25,6 +25,7 @@ import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIdentityClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
 import { EthersAdapter } from '../../erc8004-src';
+import { getChainConfigByHex, getIdentityRegistry, getExplorerUrl, getViemChain } from '../config/chains';
 
 
 
@@ -278,9 +279,8 @@ export function AddAgentModal({ open, onClose }: Props) {
   }, [selectedChainIdHex]);
 
   const resolvedChain = React.useMemo(() => {
-    if (selectedChainIdHex === '0xaa36a7') return sepolia;
-    if (selectedChainIdHex === '0x14a34') return baseSepolia;
-    return sepolia;
+    const chainConfig = getChainConfigByHex(selectedChainIdHex || '0xaa36a7');
+    return chainConfig?.viemChain || sepolia;
   }, [selectedChainIdHex]);
 
   // Update agent account when chain changes
@@ -1086,7 +1086,11 @@ export function AddAgentModal({ open, onClose }: Props) {
         const endpoints: any[] = [];
         if (a2aEndpoint) endpoints.push({ name: 'A2A', endpoint: a2aEndpoint, version: '0.3.0' });
         if (agentNameLower) endpoints.push({ name: 'ENS', endpoint: agentNameLower, version: 'v1' });
-        endpoints.push({ name: 'agentAccount', endpoint: `eip155:11155111:${agentAddress}`, version: 'v1' });
+        
+        // Get chain ID from the selected chain configuration
+        const chainConfig = getChainConfigByHex(selectedChainIdHex || '0xaa36a7');
+        const chainId = chainConfig?.chainId || 11155111; // Default to ETH Sepolia
+        endpoints.push({ name: 'agentAccount', endpoint: `eip155:${chainId}:${agentAddress}`, version: 'v1' });
 
         const metadata = {
           type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
@@ -1096,13 +1100,11 @@ export function AddAgentModal({ open, onClose }: Props) {
           endpoints,
           registrations: (async () => {
             try {
-              // Get the registry address from the resolved chain
-              const identityRegistry = resolvedChain.id === 84532 ? 
-                process.env.NEXT_PUBLIC_BASE_SEPOLIA_IDENTITY_REGISTRY : 
-                process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY;
+              // Get the registry address from the chain configuration
+              const identityRegistry = getIdentityRegistry(chainId);
               if (identityRegistry) {
                 // Note: agentId will be determined when the identity is created on-chain
-                return [{ agentRegistry: `eip155:${resolvedChain.id}:${identityRegistry}` }];
+                return [{ agentRegistry: `eip155:${chainId}:${identityRegistry}` }];
               }
             } catch {}
             return [];
@@ -1372,9 +1374,10 @@ export function AddAgentModal({ open, onClose }: Props) {
               const addr = agentAADefaultAddress || agentAccount;
               if (!addr) return '—';
               const chainIdHex = selectedChainIdHex || '0xaa36a7';
-              const chainId = chainIdHex === '0x14a34' ? 84532 : 11155111;
+              const chainConfig = getChainConfigByHex(chainIdHex);
+              const chainId = chainConfig?.chainId || 11155111; // Default to ETH Sepolia
               const caip10 = `eip155:${chainId}:${addr}`;
-              const explorerBase = chainId === 84532 ? 'https://sepolia.basescan.org' : 'https://sepolia.etherscan.io';
+              const explorerBase = getExplorerUrl(chainId);
               return (
                 <a href={`${explorerBase}/address/${addr}`} target="_blank" rel="noopener noreferrer">{caip10}</a>
               );
