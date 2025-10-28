@@ -403,6 +403,9 @@ export function AddAgentModal({ open, onClose }: Props) {
 
       const eip1193 = web3AuthProvider as any;
 
+      console.info("@@@@@@@@@@@@@@@@@@@ selectedChainIdHex: ", selectedChainIdHex);
+      console.info("chain config: ", getChainConfigByHex(selectedChainIdHex))
+
       const chainIdHex = selectedChainIdHex || '0xaa36a7';
       const rpcUrl = effectiveRpcUrl;
 
@@ -685,7 +688,12 @@ export function AddAgentModal({ open, onClose }: Props) {
 
       if (agentName && agentName.trim() !== '') {
         // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
-        const { agentId, account } = await getENSClientForChain().getAgentIdentityByName(agentName.trim());
+        // Use the correct ENS client for the current chain
+        const correctENSClient = agentENSClientForChain;
+        console.info("@@@@@@@@@@@@@@@@@@@ Using ENS client for chain:", resolvedChain.name, "ID:", resolvedChain.id);
+        console.info("@@@@@@@@@@@@@@@@@@@ ENS client chain:", (correctENSClient as any)?.chain?.name, "ID:", (correctENSClient as any)?.chain?.id);
+        
+        const { agentId, account } = await correctENSClient.getAgentIdentityByName(agentName.trim());
         if (account) {
           const agentAccountClient = await toMetaMaskSmartAccount({
             address: account as `0x${string}`,
