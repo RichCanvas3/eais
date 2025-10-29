@@ -7,7 +7,14 @@
   ],
   "scripts": {
     "dev:indexer": "pnpm --filter erc8004-indexer dev",
-    "dev:web": "pnpm --filter erc8004-web dev"
+    "dev:web": "pnpm --filter erc8004-web dev",
+    "dev:validator": "pnpm --filter erc8004-validator dev",
+    "build:validator": "pnpm --filter erc8004-validator build",
+    "start:validator": "pnpm --filter erc8004-validator start",
+    "build:sdks": "pnpm --filter @erc8004/sdk build && pnpm --filter @erc8004/agentic-trust-sdk build",
+    "pack:sdks": "pnpm --filter @erc8004/sdk pack && pnpm --filter @erc8004/agentic-trust-sdk pack",
+    "build:all": "pnpm build:sdks && pnpm --filter erc8004-web build && pnpm build:validator",
+    "dev:all": "pnpm dev:indexer & pnpm dev:web & pnpm dev:validator"
   },
   "packageManager": "pnpm@9.7.0",
   "dependencies": {

@@ -1,0 +1,23 @@
+{
+  "name": "erc8004-validator",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "ERC8004 Validator Application - Validates agent identities and reputations",
+  "scripts": {
+    "dev": "tsx src/validator.ts",
+    "build": "tsc",
+    "start": "node dist/validator.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "viem": "^2.13.3",
+    "ethers": "^6.13.2",
+    "@erc8004/sdk": "workspace:*",
+    "@erc8004/agentic-trust-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.15.7",
+    "typescript": "^5.6.2"
+  }
+}

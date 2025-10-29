@@ -24,7 +24,6 @@ import { useAgentENSClientFor } from './AIAgentENSClientsProvider';
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
 import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIdentityClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
-import { EthersAdapter } from '@erc8004/sdk';
 import { getChainConfigByHex, getIdentityRegistry, getExplorerUrl, getViemChain, getNetworkType } from '../config/chains';
 
 
