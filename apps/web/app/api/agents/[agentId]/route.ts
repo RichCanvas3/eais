@@ -10,7 +10,7 @@ export async function GET(req: Request, { params }: { params: { agentId: string 
     let row;
     if (chainId) {
       // If chainId is provided, use composite key lookup
-      row = db.prepare(`
+      row = await db.prepare(`
         SELECT chainId, agentId, agentAddress, agentOwner, agentName, description, image, a2aEndpoint, ensEndpoint,
                agentAccountEndpoint, supportedTrust, rawJson, metadataURI, createdAtBlock, createdAtTime
         FROM agents
@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: { params: { agentId: string 
       `).get(parseInt(chainId), agentId);
     } else {
       // If no chainId provided, return first match (for backward compatibility)
-      row = db.prepare(`
+      row = await db.prepare(`
         SELECT chainId, agentId, agentAddress, agentOwner, agentName, description, image, a2aEndpoint, ensEndpoint,
                agentAccountEndpoint, supportedTrust, rawJson, metadataURI, createdAtBlock, createdAtTime
         FROM agents

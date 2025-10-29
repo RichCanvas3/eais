@@ -172,6 +172,7 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
 
   // Fetch metadata from tokenURI BEFORE database insert to populate all fields
   let preFetchedMetadata: any = null;
+  let a2aEndpoint: string | null = null;
   if (tokenURI) {
     try {
       console.info("............upsertFromTransfer: fetching metadata from tokenURI before insert");
@@ -180,9 +181,21 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         console.info("............upsertFromTransfer: metadata fetched:", metadata);
         preFetchedMetadata = metadata;
         
+        // Extract agent name
         if (typeof metadata.name === 'string' && metadata.name.trim()) {
           agentName = metadata.name.trim();
           console.info("............upsertFromTransfer: found agentName:", agentName);
+        }
+        
+        // Extract a2a endpoint from endpoints array
+        const endpoints = Array.isArray(metadata.endpoints) ? metadata.endpoints : [];
+        const findEndpoint = (n: string) => {
+          const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
+          return e && typeof e.endpoint === 'string' ? e.endpoint : null;
+        };
+        a2aEndpoint = findEndpoint('A2A') || findEndpoint('a2a');
+        if (a2aEndpoint) {
+          console.info("............upsertFromTransfer: found a2aEndpoint:", a2aEndpoint);
         }
       }
     } catch (e) {
@@ -196,26 +209,31 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
     console.info("............insert into table: agentAddress: ", agentAddress)
     console.info("............insert into table: agentOwner: ", ownerAddress)
     console.info("............insert into table: agentName: ", agentName)
+    console.info("............insert into table: a2aEndpoint: ", a2aEndpoint)
     console.info("............insert into table: metadataURI: ", tokenURI)
     console.info("............insert into table: chainId: ", chainId)
     console.info("............insert into table: block: ", blockNumber)
-    db.prepare(`
-      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-      VALUES(@chainId, @agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
+    const currentTime = Math.floor(Date.now() / 1000);
+    await db.prepare(`
+      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(chainId, agentId) DO UPDATE SET
         agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
         agentOwner=excluded.agentOwner,
         agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
+        a2aEndpoint=COALESCE(excluded.a2aEndpoint, a2aEndpoint),
         metadataURI=COALESCE(excluded.metadataURI, metadataURI)
-    `).run({
+    `).run(
       chainId,
       agentId,
       agentAddress,
-      agentOwner: ownerAddress,
+      ownerAddress,
       agentName,
-      metadataURI: tokenURI,
-      block: Number(blockNumber),
-    });
+      tokenURI,
+      a2aEndpoint,
+      Number(blockNumber),
+      currentTime
+    );
 
 
     // Use pre-fetched metadata if available, otherwise fetch now
@@ -251,56 +269,58 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
         console.info("............update into table: image: ", image)
         console.info("............update into table: a2aEndpoint: ", a2aEndpoint)
         console.info("............update into table: ensEndpoint: ", ensEndpoint)
-        db.prepare(`
+        const updateTime = Math.floor(Date.now() / 1000);
+        await db.prepare(`
           UPDATE agents SET
-            type = COALESCE(type, @type),
+            type = COALESCE(type, ?),
             agentName = CASE 
-              WHEN @name IS NOT NULL AND @name != '' THEN @name 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
               ELSE agentName 
             END,
             agentAddress = CASE
               WHEN (agentAddress IS NULL OR agentAddress = '0x0000000000000000000000000000000000000000')
-                   AND (@agentAddress IS NOT NULL AND @agentAddress != '0x0000000000000000000000000000000000000000')
-              THEN @agentAddress
+                   AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
+              THEN ?
               ELSE agentAddress
             END,
             description = CASE 
-              WHEN @description IS NOT NULL AND @description != '' THEN @description 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
               ELSE description 
             END,
             image = CASE 
-              WHEN @image IS NOT NULL AND @image != '' THEN @image 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
               ELSE image 
             END,
             a2aEndpoint = CASE 
-              WHEN @a2a IS NOT NULL AND @a2a != '' THEN @a2a 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
               ELSE a2aEndpoint 
             END,
             ensEndpoint = CASE 
-              WHEN @ens IS NOT NULL AND @ens != '' THEN @ens 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
               ELSE ensEndpoint 
             END,
-            agentAccountEndpoint = COALESCE(@account, agentAccountEndpoint),
-            supportedTrust = COALESCE(@trust, supportedTrust),
-            rawJson = COALESCE(@raw, rawJson),
-            updatedAtTime = strftime('%s','now')
-          WHERE chainId = @chainId AND agentId = @agentId
-        `).run({
+            agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
+            supportedTrust = COALESCE(?, supportedTrust),
+            rawJson = COALESCE(?, rawJson),
+            updatedAtTime = ?
+          WHERE chainId = ? AND agentId = ?
+        `).run(
+          type,
+          name, name, name,
+          agentAddress, agentAddress, agentAddress,
+          description, description, description,
+          image, image, image,
+          a2aEndpoint, a2aEndpoint, a2aEndpoint,
+          ensEndpoint, ensEndpoint, ensEndpoint,
+          agentAccountEndpoint,
+          JSON.stringify(supportedTrust),
+          JSON.stringify(meta),
+          updateTime,
           chainId,
           agentId,
-          type,
-          name,
-          agentAddress,
-          description,
-          image,
-          a2a: a2aEndpoint,
-          ens: ensEndpoint,
-          account: agentAccountEndpoint,
-          trust: JSON.stringify(supportedTrust),
-          raw: JSON.stringify(meta),
-        });
+        );
 
-        recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId });
+        await recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId });
       } catch (error) {
         console.info("........... error updating a2aEndpoint", error)
       }
@@ -312,8 +332,8 @@ async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigi
     console.info("remove from list")
     try {
       const agentId = toDecString(tokenId);
-      db.prepare("DELETE FROM agents WHERE chainId = ? AND agentId = ?").run(chainId, agentId);
-      recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
+      await db.prepare("DELETE FROM agents WHERE chainId = ? AND agentId = ?").run(chainId, agentId);
+      await recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
     } catch {}
   }
 }
@@ -379,23 +399,25 @@ async function upsertFromTokenGraph(item: any, chainId: number) {
   }
 
   console.info("@@@@@@@@@@@@@@@@@@@ upsertFromTokenGraph 1: agentName: ", agentId, agentName)
-  db.prepare(`
+  const currentTime = Math.floor(Date.now() / 1000);
+  await db.prepare(`
     INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-    VALUES(@chainId, @agentId, @agentAddress, @agentOwner, @agentName, @metadataURI, @block, strftime('%s','now'))
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chainId, agentId) DO UPDATE SET
       agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
       agentOwner=excluded.agentOwner,
       agentName=CASE WHEN excluded.agentName IS NOT NULL AND length(excluded.agentName) > 0 THEN excluded.agentName ELSE agentName END,
       metadataURI=COALESCE(excluded.metadataURI, metadataURI)
-  `).run({
+  `).run(
     chainId,
     agentId,
     agentAddress,
-    agentOwner: ownerAddress,
+    ownerAddress,
     agentName,
     metadataURI,
-    block: 0,
-  });
+    0,
+    currentTime
+  );
 
   const type = null;
   let name: string | null = typeof item?.agentName === 'string' ? item.agentName : null;
@@ -482,47 +504,49 @@ async function upsertFromTokenGraph(item: any, chainId: number) {
   } catch {}
 
   // Write extended fields into agents
-  db.prepare(`
+  const updateTime = Math.floor(Date.now() / 1000);
+  await db.prepare(`
     UPDATE agents SET
-      type = COALESCE(type, @type),
-      agentName = COALESCE(NULLIF(TRIM(@name), ''), agentName),
-      description = COALESCE(@description, description),
-      image = COALESCE(@image, image),
-      a2aEndpoint = COALESCE(@a2a, a2aEndpoint),
-      ensEndpoint = COALESCE(@ens, ensEndpoint),
-      agentAccountEndpoint = COALESCE(@account, agentAccountEndpoint),
-      supportedTrust = COALESCE(@trust, supportedTrust),
-      rawJson = COALESCE(@raw, rawJson),
-      updatedAtTime = strftime('%s','now')
-    WHERE chainId = @chainId AND agentId = @agentId
-  `).run({
-    chainId,
-    agentId,
+      type = COALESCE(type, ?),
+      agentName = COALESCE(NULLIF(TRIM(?), ''), agentName),
+      description = COALESCE(?, description),
+      image = COALESCE(?, image),
+      a2aEndpoint = COALESCE(?, a2aEndpoint),
+      ensEndpoint = COALESCE(?, ensEndpoint),
+      agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
+      supportedTrust = COALESCE(?, supportedTrust),
+      rawJson = COALESCE(?, rawJson),
+      updatedAtTime = ?
+    WHERE chainId = ? AND agentId = ?
+  `).run(
     type,
     name,
     description,
     image,
-    a2a: a2aEndpoint,
-    ens: ensEndpoint,
-    account: agentAccountEndpoint,
-    trust: JSON.stringify([]),
+    a2aEndpoint,
+    ensEndpoint,
+    agentAccountEndpoint,
+    JSON.stringify([]),
     raw,
-  });
+    updateTime,
+    chainId,
+    agentId,
+  );
 }
 
-function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: string) {
+async function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: string) {
   const id = `${ev.transactionHash}:${ev.logIndex}`;
   const agentId = agentIdForEvent ?? (args?.agentId !== undefined ? toDecString(args.agentId) : (args?.tokenId !== undefined ? toDecString(args.tokenId) : "0"));
-  db.prepare(`INSERT OR IGNORE INTO events(id, agentId, type, blockNumber, logIndex, txHash, data)
-              VALUES(@id, @agentId, @type, @block, @idx, @tx, @data)`).run({
+  await db.prepare(`INSERT OR IGNORE INTO events(id, agentId, type, blockNumber, logIndex, txHash, data)
+              VALUES(?, ?, ?, ?, ?, ?, ?)`).run(
     id,
     agentId,
     type,
-    block: Number(ev.blockNumber),
-    idx: Number(ev.logIndex),
-    tx: ev.transactionHash,
-    data: JSON.stringify({ ...args, agentId })
-  });
+    Number(ev.blockNumber),
+    Number(ev.logIndex),
+    ev.transactionHash,
+    JSON.stringify({ ...args, agentId })
+  );
 }
 
 async function backfill(client: ERC8004Client) {
@@ -553,7 +577,7 @@ async function backfill(client: ERC8004Client) {
     return;
   }
 
-  const last = getCheckpoint(chainId);
+  const last = await getCheckpoint(chainId);
 
 
   console.info("............backfill: query: ", graphqlUrl, "for chain:", chainId)
@@ -593,31 +617,6 @@ async function backfill(client: ERC8004Client) {
   const pageSize = 1000; // Increased page size to fetch more historical data
   console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
   
-  // Fetch transfers - fetch in ascending order by timestamp to get historical data
-  /*
-  const historicalQuery = `query TokensAndTransfers($first: Int!) {
-    tokens(first: $first, orderBy: mintedAt, orderDirection: desc) {
-      id
-      uri
-      agentName
-      description
-      image
-      a2aEndpoint
-      ensName
-      agentAccount
-      metadataJson
-      mintedAt
-    }
-    transfers(first: $first, orderBy: timestamp, orderDirection: asc) {
-      id
-      token { id }
-      from { id }
-      to { id }
-      blockNumber
-      timestamp
-    }
-  }`;
-  */
 
   const historicalQuery = `query TokensAndTransfers($first: Int!) {
     transfers(first: $first, orderBy: timestamp, orderDirection: asc) {
@@ -630,7 +629,7 @@ async function backfill(client: ERC8004Client) {
     }
   }`;
   
-  const resp = await fetchJson({ query: historicalQuery, variables: { first: pageSize } });
+  const resp = await fetchJson({ query: historicalQuery, variables: { first: pageSize } }) as any;
   
   // Handle tokens (metadata) and transfers (ownership)
   const transferItems = (resp?.data?.transfers as any[]) || [];
@@ -651,17 +650,18 @@ async function backfill(client: ERC8004Client) {
     const blockNum = BigInt(tr?.blockNumber || 0);
     if (tokenId <= 0n || !toAddr) continue;
     const uri = await tryReadTokenURI(client, tokenId);
+    
     console.info("&&&&&&&&&&&& upsertFromTransfer: toAddr: ", toAddr)
     console.info("&&&&&&&&&&&& upsertFromTransfer: tokenId: ", tokenId)
     console.info("&&&&&&&&&&&& upsertFromTransfer: blockNum: ", blockNum)
     console.info("&&&&&&&&&&&& upsertFromTransfer: uri: ", uri)
     await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId); 
-    setCheckpoint(blockNum, chainId);
+    await setCheckpoint(blockNum, chainId);
   }
 
 
 
-  const tokenItems = (resp?.data?.tokens as any[]) || [];
+  const tokenItems = ((resp as any)?.data?.tokens as any[]) || [];
   const tokensOrdered = tokenItems
   .slice()
   .sort((a, b) => Number((a.mintedAt || 0)) - Number((b.mintedAt || 0)));
@@ -766,16 +766,16 @@ function watch() {
 (async () => {
   // Check if database has any data - if not, reset checkpoint to 0
   try {
-    const agentCount = db.prepare('SELECT COUNT(*) as count FROM agents').get() as { count: number };
-    const eventCount = db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number };
+    const agentCount = await db.prepare('SELECT COUNT(*) as count FROM agents').get() as { count: number };
+    const eventCount = await db.prepare('SELECT COUNT(*) as count FROM events').get() as { count: number };
     
     if (agentCount.count === 0 && eventCount.count === 0) {
       console.log('Database is empty - resetting checkpoints to 0 for all chains');
-      setCheckpoint(0n, 11155111); // ETH Sepolia
-      setCheckpoint(0n, 84532); // Base Sepolia (L2)
-      setCheckpoint(0n, 11155420); // Optimism Sepolia (L2)
+      await setCheckpoint(0n, 11155111); // ETH Sepolia
+      await setCheckpoint(0n, 84532); // Base Sepolia (L2)
+      await setCheckpoint(0n, 11155420); // Optimism Sepolia (L2)
       // Clear any stale checkpoint data
-      db.prepare("DELETE FROM checkpoints WHERE key LIKE 'lastProcessed%'").run();
+      await db.prepare("DELETE FROM checkpoints WHERE key LIKE 'lastProcessed%'").run();
     }
   } catch (error) {
     console.warn('Error checking database state:', error);

@@ -4,17 +4,34 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
-    "dev": "tsx src/indexer.ts"
+    "dev": "tsx src/indexer.ts",
+    "dev:graphql": "tsx src/graphql-server.ts",
+    "start:graphql": "tsx src/graphql-server.ts",
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env development",
+    "dev:worker": "wrangler dev",
+    "dev:worker:local": "wrangler dev --local",
+    "d1:create": "wrangler d1 create erc8004-indexer",
+    "d1:migrate": "wrangler d1 execute erc8004-indexer --remote --file=./migrations/0001_initial.sql",
+    "d1:clear": "wrangler d1 execute erc8004-indexer --remote --command=\"DELETE FROM agents; DELETE FROM events; DELETE FROM checkpoints;\"",
+    "d1:count": "wrangler d1 execute erc8004-indexer --remote --command=\"SELECT 'agents' as table_name, COUNT(*) as count FROM agents UNION ALL SELECT 'events', COUNT(*) FROM events UNION ALL SELECT 'checkpoints', COUNT(*) FROM checkpoints;\"",
+    "sync:d1": "tsx scripts/sync-to-d1.ts && wrangler d1 execute erc8004-indexer --remote --file=./migrations/sync_to_d1.sql"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.0",
     "dotenv": "^16.4.5",
     "viem": "^2.13.3",
     "ethers": "^6.13.2",
-    "@erc8004/sdk": "workspace:*"
+    "@erc8004/sdk": "workspace:*",
+    "express": "^4.18.2",
+    "graphql": "^16.8.1",
+    "graphql-http": "^1.18.0"
   },
   "devDependencies": {
     "tsx": "^4.15.7",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "@types/express": "^4.17.21",
+    "@cloudflare/workers-types": "^4.20240222.0",
+    "wrangler": "^3.56.3"
   }
 }

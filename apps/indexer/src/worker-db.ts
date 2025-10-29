@@ -1,0 +1,119 @@
+/**
+ * Database query functions for Cloudflare Workers (D1)
+ * These replace the better-sqlite3 queries used in the local version
+ */
+
+export function createDBQueries(db: any) {
+  // Helper function to build WHERE clause dynamically
+  function buildWhereClause(filters: {
+    chainId?: number;
+    agentId?: string;
+    agentOwner?: string;
+    agentName?: string;
+  }): { where: string; params: any[] } {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (filters.chainId !== undefined) {
+      conditions.push(`chainId = ?`);
+      params.push(filters.chainId);
+    }
+
+    if (filters.agentId) {
+      conditions.push(`agentId = ?`);
+      params.push(filters.agentId);
+    }
+
+    if (filters.agentOwner) {
+      conditions.push(`agentOwner = ?`);
+      params.push(filters.agentOwner);
+    }
+
+    if (filters.agentName) {
+      conditions.push(`agentName LIKE ?`);
+      params.push(`%${filters.agentName}%`);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    return { where, params };
+  }
+
+  return {
+    agents: async (args: {
+      chainId?: number;
+      agentId?: string;
+      agentOwner?: string;
+      agentName?: string;
+      limit?: number;
+      offset?: number;
+    }) => {
+      const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0 } = args;
+      const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
+      
+      const query = `SELECT * FROM agents ${where} ORDER BY createdAtTime DESC LIMIT ? OFFSET ?`;
+      const allParams = [...params, limit, offset];
+      
+      const result = await db.prepare(query).bind(...allParams).all();
+      return result.results || [];
+    },
+
+    agent: async (args: { chainId: number; agentId: string }) => {
+      const { chainId, agentId } = args;
+      const result = await db
+        .prepare('SELECT * FROM agents WHERE chainId = ? AND agentId = ?')
+        .bind(chainId, agentId)
+        .first();
+      return result || null;
+    },
+
+    agentsByChain: async (args: { chainId: number; limit?: number; offset?: number }) => {
+      const { chainId, limit = 100, offset = 0 } = args;
+      const result = await db
+        .prepare('SELECT * FROM agents WHERE chainId = ? ORDER BY createdAtTime DESC LIMIT ? OFFSET ?')
+        .bind(chainId, limit, offset)
+        .all();
+      return result.results || [];
+    },
+
+    agentsByOwner: async (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number }) => {
+      const { agentOwner, chainId, limit = 100, offset = 0 } = args;
+      
+      let query = 'SELECT * FROM agents WHERE agentOwner = ?';
+      const params: any[] = [agentOwner];
+      
+      if (chainId !== undefined) {
+        query += ' AND chainId = ?';
+        params.push(chainId);
+      }
+      
+      query += ' ORDER BY createdAtTime DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+      
+      const result = await db.prepare(query).bind(...params).all();
+      return result.results || [];
+    },
+
+    searchAgents: async (args: { query: string; chainId?: number; limit?: number; offset?: number }) => {
+      const { query: searchQuery, chainId, limit = 100, offset = 0 } = args;
+      const searchPattern = `%${searchQuery}%`;
+      
+      let sqlQuery = `
+        SELECT * FROM agents 
+        WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)
+      `;
+      const params: any[] = [searchPattern, searchPattern, searchPattern, searchPattern];
+      
+      if (chainId !== undefined) {
+        sqlQuery += ' AND chainId = ?';
+        params.push(chainId);
+      }
+      
+      sqlQuery += ' ORDER BY createdAtTime DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+      
+      const result = await db.prepare(sqlQuery).bind(...params).all();
+      return result.results || [];
+    },
+  };
+}
+

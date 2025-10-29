@@ -454,12 +454,18 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const agentIdNum = BigInt(agentId);
 			
 			// Get the correct agent identity client for this chain
-			const chainIdHex = getChainIdHex(chainId) || '0xaa36a7'; // Default to ETH Sepolia if not found
-			console.info("+++++++++++++++++++ openAgentInfo: chainIdHex", chainIdHex);
+			const chainIdHex = getChainIdHex(chainId);
+			if (!chainIdHex) {
+				throw new Error(`No chain configuration found for chainId ${chainId}. Cannot fetch agent account.`);
+			}
+			console.info("+++++++++++++++++++ openAgentInfo: chainIdHex", chainIdHex, "for chainId", chainId);
 			console.info("+++++++++++++++++++ openAgentInfo: available clients", Object.keys(agentIdentityClients));
 
 
 			const client = agentIdentityClients[chainIdHex];
+			if (!client) {
+				throw new Error(`No identity client available for chainId ${chainId} (${chainIdHex})`);
+			}
 			
 			let name: string | null = null;
 			let account: string | null = null;
@@ -479,25 +485,23 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			
 			try {
 				console.info("++++++++++++++++++++++++ openAgentInfo: get agent name from agentIdentityClient for chain", chainId, "chainIdHex", chainIdHex);
-				if (client) {
-
-					// Only fetch from chain if we don't have it from the row
-					if (!name) {
-						name = await client.getAgentName(agentIdNum);
+				// client is guaranteed to exist here due to check above
+				console.info(`openAgentInfo: Fetching agent account for agentId ${agentIdNum} on chain ${chainId} (${chainIdHex})`);
+				
+				// Only fetch from chain if we don't have it from the row
+				if (!name) {
+					name = await client.getAgentName(agentIdNum);
+				}
+				account = await client.getAgentAccount(agentIdNum);
+				
+				// Fetch token URI from chain if not available from database
+				if (!tokenUri) {
+					try {
+						tokenUri = await (client as any).getTokenURI(agentIdNum);
+						console.info("+++++++++++++++++++ openAgentInfo: fetched tokenUri from chain", tokenUri);
+					} catch (e) {
+						console.warn("Failed to fetch token URI from chain:", e);
 					}
-					account = await client.getAgentAccount(agentIdNum);
-					
-					// Fetch token URI from chain if not available from database
-					if (!tokenUri) {
-						try {
-							tokenUri = await (client as any).getTokenURI(agentIdNum);
-							console.info("+++++++++++++++++++ openAgentInfo: fetched tokenUri from chain", tokenUri);
-						} catch (e) {
-							console.warn("Failed to fetch token URI from chain:", e);
-						}
-					}
-				} else {
-					console.warn("No client found for chain", chainId, "chainIdHex", chainIdHex);
 				}
 			} catch (e: any) {
 				console.warn("Failed to get agent info from identity client:", e);
@@ -575,19 +579,27 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 
 	
 	// Fetch ENS names when data changes
+	/*
   React.useEffect(() => {
       if (data?.rows && Array.isArray(data.rows)) {
           data.rows.forEach(async (row) => {
               try {
 
 				// Get the correct agent identity client based on the row's chainId
-				const chainIdHex = getChainIdHex(row.chainId) || '0xaa36a7'; // Default to ETH Sepolia if not found
+				const chainIdHex = getChainIdHex(row.chainId);
+                
+                // Only proceed if we have a valid chain configuration for this chainId
+                if (!chainIdHex) {
+                    console.warn(`AgentTable: No chain configuration found for chainId ${row.chainId}, skipping getAgentAccount`);
+                    return; // Skip this row
+                }
 
                   const agentIdentityClient = agentIdentityClients[chainIdHex];
                   if (agentIdentityClient) {
                       const agentIdNum = BigInt(row.agentId);
                       
-                      // Fetch account address
+                      // Fetch account address using the row's chainId
+                      console.info(`AgentTable: Fetching agent account for agentId ${row.agentId} on chain ${row.chainId} (${chainIdHex})`);
                       const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
                       setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
                       
@@ -618,6 +630,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
           });
       }
   }, [data]);
+  */
 
    /*
 	React.useEffect(() => {

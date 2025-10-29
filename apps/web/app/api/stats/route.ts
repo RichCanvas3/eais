@@ -4,7 +4,7 @@ import { db } from '../../../../indexer/src/db';
 export async function GET() {
   try {
     // Get total agents per chain
-    const agentsPerChain = db.prepare(`
+    const agentsPerChain = await db.prepare(`
       SELECT 
         chainId,
         COUNT(*) as count,
@@ -20,12 +20,12 @@ export async function GET() {
     `).all() as Array<{ chainId: number; count: number; chainName: string }>;
 
     // Get total agents across all chains
-    const totalAgents = db.prepare(`
+    const totalAgents = await db.prepare(`
       SELECT COUNT(*) as total FROM agents
     `).get() as { total: number };
 
     // Get agents with metadata vs without
-    const agentsWithMetadata = db.prepare(`
+    const agentsWithMetadata = await db.prepare(`
       SELECT 
         chainId,
         COUNT(CASE WHEN metadataURI IS NOT NULL AND metadataURI != '' THEN 1 END) as withMetadata,
@@ -42,7 +42,7 @@ export async function GET() {
     `).all() as Array<{ chainId: number; withMetadata: number; total: number; chainName: string }>;
 
     // Get agents with ENS names vs without
-    const agentsWithENS = db.prepare(`
+    const agentsWithENS = await db.prepare(`
       SELECT 
         chainId,
         COUNT(CASE WHEN ensEndpoint IS NOT NULL AND ensEndpoint != '' THEN 1 END) as withENS,
@@ -59,7 +59,8 @@ export async function GET() {
     `).all() as Array<{ chainId: number; withENS: number; total: number; chainName: string }>;
 
     // Get recent activity (last 24 hours)
-    const recentActivity = db.prepare(`
+    const last24Hours = Math.floor(Date.now() / 1000) - 86400;
+    const recentActivity = await db.prepare(`
       SELECT 
         chainId,
         COUNT(*) as recentCount,
@@ -70,13 +71,13 @@ export async function GET() {
           ELSE 'Chain ' || chainId
         END as chainName
       FROM agents 
-      WHERE createdAtTime > (strftime('%s', 'now') - 86400)
+      WHERE createdAtTime > ?
       GROUP BY chainId 
       ORDER BY chainId
-    `).all() as Array<{ chainId: number; recentCount: number; chainName: string }>;
+    `).all(last24Hours) as Array<{ chainId: number; recentCount: number; chainName: string }>;
 
     // Get top agent IDs by chain
-    const topAgentIds = db.prepare(`
+    const topAgentIds = await db.prepare(`
       SELECT 
         chainId,
         agentId,

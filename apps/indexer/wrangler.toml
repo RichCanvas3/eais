@@ -1,0 +1,24 @@
+name = "erc8004-indexer-graphql"
+main = "src/worker.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Database configuration (Cloudflare D1)
+[[d1_databases]]
+  binding = "DB"
+  database_name = "erc8004-indexer"
+  database_id = "2b924f66-77c1-4faa-9b14-c0b1c6d208e9"
+
+# Environment variables
+[vars]
+NODE_ENV = "production"
+
+# Production environment
+[env.production]
+name = "erc8004-indexer-graphql"
+route = { pattern = "graphql.erc8004.*", zone_name = "your-domain.com" }
+
+# Development environment
+[env.development]
+name = "erc8004-indexer-graphql-dev"
+
