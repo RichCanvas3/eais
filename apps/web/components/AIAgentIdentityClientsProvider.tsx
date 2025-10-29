@@ -1,7 +1,6 @@
 'use client';
 import * as React from 'react';
-import { EthersAdapter } from '../../erc8004-src';
-import { AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { AIAgentIdentityClient } from '@erc8004/agentic-trust-sdk';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { CHAIN_CONFIGS } from '../config/chains';
 

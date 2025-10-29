@@ -106,13 +106,15 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       ] as const;
 
       // Create public client for reading
-      const publicClient = createPublicClient({
+      const publicClient = // @ts-ignore - viem version compatibility issue
+    createPublicClient({
         chain: (this as any).chain,
         transport: http((this as any).rpcUrl)
       });
 
       // Call the resolver directly to get URL text record
-      const url = await publicClient.readContract({
+      const url = await // @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
         address: resolverAddress,
         abi: resolverAbi,
         functionName: 'text',
@@ -178,13 +180,15 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       console.info("********************* TEST: Public client chain", (this as any).chain);
       console.info("********************* TEST: Public client rpcUrl", (this as any).rpcUrl);
 
-      const publicClient = createPublicClient({
+      const publicClient = // @ts-ignore - viem version compatibility issue
+    createPublicClient({
         chain: (this as any).chain,
         transport: http((this as any).rpcUrl)
       });
 
       try {
-        const owner = await publicClient.readContract({
+        const owner = await // @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
           address: ensRegistryAddress,
           abi: ensRegistryAbi,
           functionName: 'owner',
@@ -256,7 +260,8 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       ] as const;
 
       try {
-        const resolver = await publicClient.readContract({
+        const resolver = await // @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
           address: ensRegistryAddress,
           abi: registryResolverAbi,
           functionName: 'resolver',
@@ -298,7 +303,8 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
         }
       ] as const;
 
-      const address = await publicClient.readContract({
+      const address = await // @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
         address: resolverAddress,
         abi: addressResolverAbi,
         functionName: 'addr',

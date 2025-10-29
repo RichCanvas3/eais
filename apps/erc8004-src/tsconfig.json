@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": false,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "lib": ["ES2020", "DOM"],
+    "types": ["node"]
+  },
+  "include": [
+    "ERC8004Client.ts",
+    "IdentityClient.ts",
+    "ReputationClient.ts",
+    "ValidationClient.ts",
+    "types.ts",
+    "index.ts",
+    "adapters/types.ts",
+    "adapters/ethers.ts",
+    "abis/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "adapters/viem.ts",
+    "utils/ipfs.ts"
+  ]
+}

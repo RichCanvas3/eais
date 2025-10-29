@@ -1,8 +1,8 @@
 import { createPublicClient, createWalletClient, custom, http, defineChain, encodeFunctionData, parseEventLogs, zeroAddress, type Address, type Chain, type PublicClient, parseCompactSignature } from "viem";
 import { createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
-import { AIAgentENSClient, AIAgentIdentityClient } from '../../erc8004-agentic-trust-sdk';
-import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
+import { AIAgentENSClient, AIAgentIdentityClient } from '@erc8004/agentic-trust-sdk';
+import IdentityRegistryABI from '@erc8004/sdk/abis/IdentityRegistry.json';
 import { fetchInternalImage } from "next/dist/server/image-optimizer";
 
 const registryAbi = IdentityRegistryABI as any;

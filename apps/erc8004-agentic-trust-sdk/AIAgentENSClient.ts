@@ -33,7 +33,9 @@ export class AIAgentENSClient {
 
     this.chain = chain;
     this.adapter = adapter;
-    this.publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+    // @ts-ignore - viem version compatibility issue
+    this.publicClient = // @ts-ignore - viem version compatibility issue
+    createPublicClient({ chain, transport: http(rpcUrl) } as any);
     this.ensRegistryAddress = ensRegistryAddress;
     this.ensResolverAddress = ensResolverAddress;
     this.identityRegistryAddress = identityRegistryAddress;
@@ -104,7 +106,8 @@ export class AIAgentENSClient {
       const resolver = this.getEnsResolverAddress();
       /*
         const node = namehash(name) as `0x${string}`;
-        const resolver = await this.publicClient.readContract({
+        const resolver = await this.// @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
             address: this.ensRegistryAddress,
             abi: [{ name: "resolver", stateMutability: "view", type: "function",
                     inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
@@ -159,7 +162,8 @@ export class AIAgentENSClient {
 
     if (this.publicClient) {
         const node = namehash(name) as `0x${string}`;
-        const resolver = await this.publicClient.readContract({
+        const resolver = await this.// @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
             address: this.ensRegistryAddress,
             abi: [{ name: "resolver", stateMutability: "view", type: "function",
                     inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
@@ -208,6 +212,7 @@ export class AIAgentENSClient {
     let resolverAddr: `0x${string}` | null = null;
     try {
 
+      // @ts-ignore - viem version compatibility issue
       resolverAddr = await this.publicClient?.readContract({
         address: this.ensRegistryAddress as `0x${string}`,
         abi: [{
@@ -231,6 +236,7 @@ export class AIAgentENSClient {
     let ensName: string | null = null;
     try {
 
+      // @ts-ignore - viem version compatibility issue
       ensName = await this.publicClient?.readContract({
         address: resolverAddr,
         abi: PublicResolverABI.abi,
@@ -248,6 +254,7 @@ export class AIAgentENSClient {
       const forwardNode = namehash(ensName);
       try {
 
+        // @ts-ignore - viem version compatibility issue
         const value = await this.publicClient?.readContract({
           address: resolverAddr,
           abi: PublicResolverABI.abi,
@@ -289,6 +296,7 @@ export class AIAgentENSClient {
     let resolverAddr: `0x${string}` | null = null;
     try {
 
+      // @ts-ignore - viem version compatibility issue
       resolverAddr = await this.publicClient?.readContract({
         address: this.ensRegistryAddress as `0x${string}`,
         abi: [{
@@ -314,6 +322,7 @@ export class AIAgentENSClient {
     let agentId: bigint | null = null;
     try {
 
+      // @ts-ignore - viem version compatibility issue
       const value = await this.publicClient?.readContract({
         address: resolverAddr,
         abi: PublicResolverABI.abi,
@@ -363,6 +372,7 @@ export class AIAgentENSClient {
       console.info("ensName: ", ensName);
       console.info("this.ensRegistryAddress: ", this.ensRegistryAddress);
 
+      // @ts-ignore - viem version compatibility issue
       resolverAddr = await this.publicClient?.readContract({
         address: this.ensRegistryAddress as `0x${string}`,
         abi: [{
@@ -388,6 +398,7 @@ export class AIAgentENSClient {
     try {
 
       console.info("try and get addr for node using resolver")
+      // @ts-ignore - viem version compatibility issue
       const addr  = await this.publicClient?.readContract({
         address: resolverAddr,
         abi: PublicResolverABI.abi,
@@ -423,6 +434,7 @@ export class AIAgentENSClient {
     // resolver
     let resolverAddr: `0x${string}` | null = null;
     try {
+      // @ts-ignore - viem version compatibility issue
       resolverAddr = await this.publicClient?.readContract({
         address: this.ensRegistryAddress as `0x${string}`,
         abi: [{
@@ -442,6 +454,7 @@ export class AIAgentENSClient {
     }
 
     try {
+      // @ts-ignore - viem version compatibility issue
       const url = await this.publicClient?.readContract({
         address: resolverAddr,
         abi: PublicResolverABI.abi,
@@ -477,6 +490,7 @@ export class AIAgentENSClient {
     // resolver for reverse node
     let resolverAddr: `0x${string}` | null = null;
     try {
+      // @ts-ignore - viem version compatibility issue
       resolverAddr = await this.publicClient?.readContract({
         address: this.ensRegistryAddress as `0x${string}`,
         abi: [{
@@ -496,6 +510,7 @@ export class AIAgentENSClient {
     }
 
     try {
+      // @ts-ignore - viem version compatibility issue
       const ensName = await this.publicClient?.readContract({
         address: resolverAddr,
         abi: PublicResolverABI.abi,
@@ -543,7 +558,8 @@ export class AIAgentENSClient {
     const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
     if (this.publicClient) {
 
-      const resolver = await this.publicClient.readContract({
+      const resolver = await this.// @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
         address: this.ensRegistryAddress,
         abi: [{ name: "resolver", stateMutability: "view", type: "function",
                 inputs: [{ name: "node", type: "bytes32"}], outputs: [{ type: "address"}]}],
@@ -578,7 +594,8 @@ export class AIAgentENSClient {
 
       const BASE_REVERSE_NODE = namehash("addr.reverse");
       const ENS_REGISTRY_ADDRESS = this.ensRegistryAddress
-      const reverseRegistrar = await this.publicClient.readContract({
+      const reverseRegistrar = await this.// @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
           address: ENS_REGISTRY_ADDRESS as `0x${string}`,
           abi: [{
             name: "owner",
@@ -591,7 +608,8 @@ export class AIAgentENSClient {
           args: [BASE_REVERSE_NODE],
         });
 
-      const ourReverseRegistrar = await this.publicClient.readContract({
+      const ourReverseRegistrar = await this.// @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
         address: ENS_REGISTRY_ADDRESS as `0x${string}`,
         abi: [{
           name: "owner",

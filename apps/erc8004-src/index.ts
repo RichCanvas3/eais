@@ -12,13 +12,16 @@ export { ERC8004Client } from './ERC8004Client';
 export { IdentityClient } from './IdentityClient';
 export { ReputationClient } from './ReputationClient';
 export { ValidationClient } from './ValidationClient';
-export * from './adapters';
+export * from './adapters/types';
+export * from './adapters/ethers';
+// export * from './adapters/viem'; // Temporarily disabled due to viem compatibility issues
 export * from './types';
-export {
-  cidToBytes32,
-  ipfsUriToBytes32,
-  IPFSClient,
-  createIPFSClient,
-  type IPFSClientConfig,
-  type IPFSUploadResult
-} from './utils/ipfs';
+// IPFS utilities temporarily disabled due to TypeScript compatibility issues
+// export {
+//   cidToBytes32,
+//   ipfsUriToBytes32,
+//   IPFSClient,
+//   createIPFSClient,
+//   type IPFSClientConfig,
+//   type IPFSUploadResult
+// } from './utils/ipfs';

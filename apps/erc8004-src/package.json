@@ -1,0 +1,50 @@
+{
+  "name": "@erc8004/sdk",
+  "version": "1.0.0",
+  "description": "ERC-8004 Trustless Agents SDK - A TypeScript SDK for interacting with ERC-8004 compliant implementations",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "abis",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "erc8004",
+    "ethereum",
+    "identity",
+    "reputation",
+    "trustless-agents",
+    "blockchain",
+    "typescript",
+    "sdk"
+  ],
+  "author": "ERC-8004 Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erc8004/erc-8004-identity-indexer.git",
+    "directory": "apps/erc8004-src"
+  },
+  "dependencies": {
+    "viem": "^2.0.0",
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "peerDependencies": {
+    "viem": ">=2.0.0",
+    "ethers": ">=6.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

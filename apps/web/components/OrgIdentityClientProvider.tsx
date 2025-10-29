@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
-import { EthersAdapter } from '../../erc8004-src';
-import { OrgIdentityClient } from '../../erc8004-agentic-trust-sdk';
+import { EthersAdapter } from '@erc8004/sdk';
+import { OrgIdentityClient } from '@erc8004/agentic-trust-sdk';
 
 type Ctx = OrgIdentityClient | null;
 const OrgIdentityClientContext = React.createContext<Ctx>(null);

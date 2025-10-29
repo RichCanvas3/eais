@@ -7,9 +7,9 @@ import { ethers } from 'ethers';
 import { sepolia, baseSepolia, optimismSepolia } from 'viem/chains';
 
 
-import { IdentityClient as BaseIdentityClient } from '../erc8004-src/IdentityClient';
-import IdentityRegistryABI from '../erc8004-src/abis/IdentityRegistry.json';
-import type { MetadataEntry } from '../erc8004-src/types';
+import { IdentityClient as BaseIdentityClient } from '@erc8004/sdk';
+import IdentityRegistryABI from './abis/IdentityRegistry.json';
+import type { MetadataEntry } from '@erc8004/sdk';
 
 export class AIAgentIdentityClient extends BaseIdentityClient {
   private chain: Chain;
@@ -26,6 +26,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
     // Configure the correct chain based on chainId
     this.chain = this.getChainById(chainId);
+    // @ts-ignore - viem version compatibility issue
     this.publicClient = createPublicClient({ chain: this.chain, transport: http(rpcUrl) });
     this.identityRegistryAddress = identityRegistryAddress;
   }
@@ -46,6 +47,7 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
 
   async getMetadata(agentId: bigint, key: string): Promise<string> {
+    // @ts-ignore - viem version compatibility issue
     const bytes = await this.publicClient?.readContract({
       address: this.identityRegistryAddress,
       abi: IdentityRegistryABI,
@@ -202,7 +204,8 @@ export class AIAgentIdentityClient extends BaseIdentityClient {
 
   async getAgentEoaByAgentAccount(agentAccount: `0x${string}`): Promise<string | null> {
     if (this.publicClient) {
-        const eoa = await this.publicClient.readContract({
+        // @ts-ignore - viem version compatibility issue
+    const eoa = await this.publicClient.readContract({
         address: agentAccount as `0x${string}`,
         abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
         functionName: 'owner',

@@ -1,8 +1,8 @@
 'use client';
 import * as React from 'react';
 import { sepolia } from 'viem/chains';
-import { EthersAdapter } from '../../erc8004-src';
-import { AIAgentL2ENSDurenClient as AIAgentENSClient } from '../../erc8004-agentic-trust-sdk';
+import { EthersAdapter } from '@erc8004/sdk';
+import { AIAgentL2ENSDurenClient as AIAgentENSClient } from '@erc8004/agentic-trust-sdk';
 
 type Ctx = AIAgentENSClient | null;
 const AIAgentENSClientContext = React.createContext<Ctx>(null);

@@ -20,14 +20,14 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
-import IdentityRegistryABI from '../../erc8004-src/abis/IdentityRegistry.json';
-import { AIAgentENSClient, AIAgentIdentityClient, OrgIdentityClient } from '../../erc8004-agentic-trust-sdk';
-import { EthersAdapter } from '../../erc8004-src';
+import IdentityRegistryABI from '@erc8004/sdk/abis/IdentityRegistry.json';
+import { AIAgentENSClient, AIAgentIdentityClient, OrgIdentityClient } from '@erc8004/agentic-trust-sdk';
+import { EthersAdapter } from '@erc8004/sdk';
 import { 
 	setAgentNameUri as adapterSetAgentNameUri, 
 	setAgentIdentityRegistrationUri as adapterSetAgentIdentityRegistrationUri 
 } from '@/lib/agentAdapter';
-import ReputationRegistryABI from '../../erc8004-src/abis/ReputationRegistry.json';
+import ReputationRegistryABI from '@erc8004/sdk/abis/ReputationRegistry.json';
 
 
 import { useAgentIdentityClient } from './AIAgentIdentityClientProvider';
@@ -285,8 +285,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				
 				const { ethers } = await import('ethers');
 				const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
-				const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
-				const { ERC8004Client } = await import('../../erc8004-src');
+				const { EthersAdapter } = await import('@erc8004/sdk');
+				const { ERC8004Client } = await import('@erc8004/sdk');
 				const adapter = new EthersAdapter(ethersProvider);
 				const erc8004Client = new ERC8004Client({
 					adapter,
@@ -1138,8 +1138,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
 			const { ethers } = await import('ethers');
 			const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
-			const { EthersAdapter } = await import('../../erc8004-src/adapters/ethers');
-			const { ERC8004Client } = await import('../../erc8004-src');
+			const { EthersAdapter } = await import('@erc8004/sdk');
+			const { ERC8004Client } = await import('@erc8004/sdk');
 			const adapter = new EthersAdapter(ethersProvider);
 			const erc8004Client = new ERC8004Client({
 				adapter,

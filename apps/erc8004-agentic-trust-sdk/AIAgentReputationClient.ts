@@ -8,9 +8,23 @@ import { sepolia } from 'viem/chains';
 
 
 
-import { ReputationClient as BaseReputationClient, type GiveFeedbackParams } from '../erc8004-src/ReputationClient';
-import ReputationRegistryABI from '../erc8004-src/abis/ReputationRegistry.json';
-import type { MetadataEntry } from '../erc8004-src/types';
+import { ReputationClient as BaseReputationClient } from '@erc8004/sdk';
+import ReputationRegistryABI from './abis/ReputationRegistry.json';
+import type { MetadataEntry } from '@erc8004/sdk';
+
+// Define GiveFeedbackParams locally since it's not exported from the base SDK
+export interface GiveFeedbackParams {
+  agent: string;
+  score: number;
+  feedback: string;
+  metadata?: MetadataEntry[];
+  tag1?: string;
+  tag2?: string;
+  feedbackHash?: string;
+  feedbackUri?: string;
+  agentId?: string;
+  feedbackAuth?: string;
+}
 
 export class AIAgentReputationClient extends BaseReputationClient {
   private chain: Chain;

@@ -15,6 +15,53 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
 
+  apps/erc8004-agentic-trust-sdk:
+    dependencies:
+      '@erc8004/sdk':
+        specifier: workspace:*
+        version: link:../erc8004-src
+      '@metamask/delegation-toolkit':
+        specifier: ^0.13.0
+        version: 0.13.0(viem@2.37.11(typescript@5.9.3))
+      '@thenamespace/indexer':
+        specifier: ^1.0.2
+        version: 1.0.2
+      '@thenamespace/mint-manager':
+        specifier: ^1.1.0
+        version: 1.1.0
+      ethers:
+        specifier: ^6.13.2
+        version: 6.15.0
+      react:
+        specifier: '>=18.0.0'
+        version: 18.3.1
+      viem:
+        specifier: ^2.37.11
+        version: 2.37.11(typescript@5.9.3)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.0.0
+        version: 18.3.26
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
+  apps/erc8004-src:
+    dependencies:
+      ethers:
+        specifier: ^6.0.0
+        version: 6.15.0
+      viem:
+        specifier: ^2.0.0
+        version: 2.37.11(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.24
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
   apps/identity-service:
     dependencies:
       '@ethersproject/base64':
@@ -65,12 +112,18 @@ importers:
 
   apps/indexer:
     dependencies:
+      '@erc8004/sdk':
+        specifier: workspace:*
+        version: link:../erc8004-src
       better-sqlite3:
         specifier: ^9.4.0
         version: 9.6.0
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
+      ethers:
+        specifier: ^6.13.2
+        version: 6.15.0
       viem:
         specifier: ^2.13.3
         version: 2.37.11(typescript@5.9.3)
@@ -93,6 +146,12 @@ importers:
       '@ensdomains/ensjs':
         specifier: 4.0.2
         version: 4.0.2(encoding@0.1.13)(typescript@5.9.3)(viem@2.37.11(typescript@5.9.3))
+      '@erc8004/agentic-trust-sdk':
+        specifier: workspace:*
+        version: link:../erc8004-agentic-trust-sdk
+      '@erc8004/sdk':
+        specifier: workspace:*
+        version: link:../erc8004-src
       '@metamask/delegation-toolkit':
         specifier: 0.12.0
         version: 0.12.0(viem@2.37.11(typescript@5.9.3))
@@ -126,6 +185,9 @@ importers:
       better-sqlite3:
         specifier: ^9.4.0
         version: 9.6.0
+      ethers:
+        specifier: ^6.13.2
+        version: 6.15.0
       next:
         specifier: ^14.2.5
         version: 14.2.33(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -560,12 +622,24 @@ packages:
   '@leichtgewicht/ip-codec@2.0.5':
     resolution: {integrity: sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw==}
 
+  '@metamask/7715-permission-types@0.3.0':
+    resolution: {integrity: sha512-+bqFNe6/YCe2LZapiVJO3/hn7BSJLExYT+cDJS1spJocPeVsTyURv3IjblZxRqTOv+igTwrYbh45LvdkgzxkZQ==}
+    engines: {node: ^18.18 || >=20}
+
   '@metamask/abi-utils@2.0.4':
     resolution: {integrity: sha512-StnIgUB75x7a7AgUhiaUZDpCsqGp7VkNnZh2XivXkJ6mPkE83U8ARGQj5MbRis7VJY8BC5V1AbB1fjdh0hupPQ==}
     engines: {node: '>=16.0.0'}
 
+  '@metamask/abi-utils@3.0.0':
+    resolution: {integrity: sha512-a/l0DiSIr7+CBYVpHygUa3ztSlYLFCQMsklLna+t6qmNY9+eIO5TedNxhyIyvaJ+4cN7TLy0NQFbp9FV3X2ktg==}
+    engines: {node: ^18.18 || ^20.14 || >=22}
+
   '@metamask/delegation-abis@0.11.0':
     resolution: {integrity: sha512-tnNGFDLQ5jfgPhHJaT5JwvF759nja1iGAG00REbk1Ufir+TxjxTmF8L9MbJifZmUh4fnyqV4Ik6NAOYVNBPVBg==}
+    engines: {node: ^18.18 || >=20}
+
+  '@metamask/delegation-core@0.2.0':
+    resolution: {integrity: sha512-leP40qoxhTmexfeY/neZ9XkhmUiq8fHh3ax4wmmTB5CG6VuXStn2LzLz875RiBtjwU3c4IqaZljxvwC1dUuWVw==}
     engines: {node: ^18.18 || >=20}
 
   '@metamask/delegation-deployments@0.12.0':
@@ -578,6 +652,12 @@ packages:
     peerDependencies:
       viem: '>=2.18.2 <3.0.0'
 
+  '@metamask/delegation-toolkit@0.13.0':
+    resolution: {integrity: sha512-SVc2gcnKQ8KQodugfuXMs49pHO1x9AYw3Wmdg4yBEsgm5TF5zPpWFmAj+bOL8q+Fn+mHJAibFIrJBtS970G9Dw==}
+    engines: {node: ^18.18 || >=20}
+    peerDependencies:
+      viem: ^2.31.4
+
   '@metamask/detect-provider@2.0.0':
     resolution: {integrity: sha512-sFpN+TX13E9fdBDh9lvQeZdJn4qYoRb/6QF2oZZK/Pn559IhCFacPMU1rMuqyXoFQF3JSJfii2l98B87QDPeCQ==}
     engines: {node: '>=14.0.0'}
@@ -589,6 +669,10 @@ packages:
   '@metamask/superstruct@3.2.1':
     resolution: {integrity: sha512-fLgJnDOXFmuVlB38rUN5SmU7hAFQcCjrg3Vrxz67KTY7YHFnSNEKvX4avmEBdOI0yTCxZjwMCFEqsC8k2+Wd3g==}
     engines: {node: '>=16.0.0'}
+
+  '@metamask/utils@11.8.1':
+    resolution: {integrity: sha512-DIbsNUyqWLFgqJlZxi1OOCMYvI23GqFCvNJAtzv8/WXWzJfnJnvp1M24j7VvUe3URBi3S86UgQ7+7aWU9p/cnQ==}
+    engines: {node: ^18.18 || ^20.14 || >=22}
 
   '@metamask/utils@8.5.0':
     resolution: {integrity: sha512-I6bkduevXb72TIM9q2LRO63JSsF9EXduh3sBr9oybNX2hNNpr/j1tEjXrsG0Uabm4MJ1xkGAQEMwifvKZIkyxQ==}
@@ -1002,20 +1086,23 @@ packages:
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
 
+  '@types/lodash@4.17.20':
+    resolution: {integrity: sha512-H3MHACvFUEiujabxhaI/ImO6gUrd8oOurg7LQtS7mbwIXA/cUqWrvBsaeJ23aZEPk1TAYkurjfMbSELfoCXlGA==}
+
   '@types/minimatch@3.0.5':
     resolution: {integrity: sha512-Klz949h02Gz2uZCMGwDUSDS1YBlTdDDgbWHi+81l29tQALUtvz4rAYi5uoVhE5Lagoq6DeqAUlbrHvW/mXDgdQ==}
 
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
+  '@types/node@20.19.24':
+    resolution: {integrity: sha512-FE5u0ezmi6y9OZEzlJfg37mqqf6ZDSF2V/NLjUyGrR9uTZ7Sb9F7bLNZ03S4XVUNRWGA7Ck4c1kK+YnuWjl+DA==}
+
   '@types/node@22.18.12':
     resolution: {integrity: sha512-BICHQ67iqxQGFSzfCFTT7MRQ5XcBjG5aeKh5Ok38UBbPe5fxTyE+aHFxwVrGyr8GNlqFMLKD1D3P2K/1ks8tog==}
 
   '@types/node@22.7.5':
     resolution: {integrity: sha512-jML7s2NAzMWc//QSJ1a3prpk78cOPchGvXJsC3C6R6PSMoooztvRVQEz89gmBTBY1SPMaqo5teB4uNHPdetShQ==}
-
-  '@types/node@24.6.2':
-    resolution: {integrity: sha512-d2L25Y4j+W3ZlNAeMKcy7yDsK425ibcAOO2t7aPTz6gNMH0z2GThtwENCDc0d/Pw9wgyRqE5Px1wkV7naz8ang==}
 
   '@types/parse-json@4.0.2':
     resolution: {integrity: sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw==}
@@ -1027,6 +1114,9 @@ packages:
     resolution: {integrity: sha512-8TV6R3h2j7a91c+1DXdJi3Syo69zzIZbz7Lg5tORM5LEJG7X/E6a1V3drRyBRZq7/utz7A+c4OgYLiLcYGHG6w==}
     peerDependencies:
       '@types/react': '*'
+
+  '@types/react@18.3.26':
+    resolution: {integrity: sha512-RFA/bURkcKzx/X9oumPG9Vp3D3JUgus/d0b67KB0t5S/raciymilkOa66olh78MUI92QLbEJevO7rvqU/kjwKA==}
 
   '@types/react@19.1.12':
     resolution: {integrity: sha512-cMoR+FoAf/Jyq6+Df2/Z41jISvGZZ2eTlnsaJRptmZ76Caldwy1odD4xTr/gNV9VLj0AWgg/nmkevIyUfIIq5w==}
@@ -2147,6 +2237,9 @@ packages:
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
 
+  lodash@4.17.21:
+    resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
+
   loglevel@1.9.2:
     resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
     engines: {node: '>= 0.6.0'}
@@ -2973,9 +3066,6 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici-types@7.13.0:
-    resolution: {integrity: sha512-Ov2Rr9Sx+fRgagJ5AX0qvItZG/JKKoBRAVITs1zk7IqZGTJUwgUr7qoYBpWwakpWilTZFM98rG/AFRocu10iIQ==}
-
   unload@2.4.1:
     resolution: {integrity: sha512-IViSAm8Z3sRBYA+9wc0fLQmU9Nrxb16rcDmIiR6Y9LJSZzI7QY5QsDhqPpKOjAn0O9/kfK1TfNEMMAGPTIraPw==}
 
@@ -3540,6 +3630,8 @@ snapshots:
 
   '@leichtgewicht/ip-codec@2.0.5': {}
 
+  '@metamask/7715-permission-types@0.3.0': {}
+
   '@metamask/abi-utils@2.0.4':
     dependencies:
       '@metamask/superstruct': 3.2.1
@@ -3547,7 +3639,22 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@metamask/abi-utils@3.0.0':
+    dependencies:
+      '@metamask/superstruct': 3.2.1
+      '@metamask/utils': 11.8.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@metamask/delegation-abis@0.11.0': {}
+
+  '@metamask/delegation-core@0.2.0':
+    dependencies:
+      '@metamask/abi-utils': 3.0.0
+      '@metamask/utils': 11.8.1
+      '@noble/hashes': 1.8.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@metamask/delegation-deployments@0.12.0': {}
 
@@ -3558,6 +3665,18 @@ snapshots:
       buffer: 6.0.3
       viem: 2.37.11(typescript@5.9.3)
       webauthn-p256: 0.0.10
+
+  '@metamask/delegation-toolkit@0.13.0(viem@2.37.11(typescript@5.9.3))':
+    dependencies:
+      '@metamask/7715-permission-types': 0.3.0
+      '@metamask/delegation-abis': 0.11.0
+      '@metamask/delegation-core': 0.2.0
+      '@metamask/delegation-deployments': 0.12.0
+      buffer: 6.0.3
+      viem: 2.37.11(typescript@5.9.3)
+      webauthn-p256: 0.0.10
+    transitivePeerDependencies:
+      - supports-color
 
   '@metamask/detect-provider@2.0.0': {}
 
@@ -3573,6 +3692,22 @@ snapshots:
       - supports-color
 
   '@metamask/superstruct@3.2.1': {}
+
+  '@metamask/utils@11.8.1':
+    dependencies:
+      '@ethereumjs/tx': 4.2.0
+      '@metamask/superstruct': 3.2.1
+      '@noble/hashes': 1.8.0
+      '@scure/base': 1.2.6
+      '@types/debug': 4.1.12
+      '@types/lodash': 4.17.20
+      debug: 4.4.3
+      lodash: 4.17.21
+      pony-cause: 2.1.11
+      semver: 7.7.2
+      uuid: 9.0.1
+    transitivePeerDependencies:
+      - supports-color
 
   '@metamask/utils@8.5.0':
     dependencies:
@@ -4038,9 +4173,15 @@ snapshots:
     dependencies:
       '@types/ms': 2.1.0
 
+  '@types/lodash@4.17.20': {}
+
   '@types/minimatch@3.0.5': {}
 
   '@types/ms@2.1.0': {}
+
+  '@types/node@20.19.24':
+    dependencies:
+      undici-types: 6.21.0
 
   '@types/node@22.18.12':
     dependencies:
@@ -4050,10 +4191,6 @@ snapshots:
     dependencies:
       undici-types: 6.19.8
 
-  '@types/node@24.6.2':
-    dependencies:
-      undici-types: 7.13.0
-
   '@types/parse-json@4.0.2': {}
 
   '@types/prop-types@15.7.15': {}
@@ -4062,6 +4199,11 @@ snapshots:
     dependencies:
       '@types/react': 19.1.12
 
+  '@types/react@18.3.26':
+    dependencies:
+      '@types/prop-types': 15.7.15
+      csstype: 3.1.3
+
   '@types/react@19.1.12':
     dependencies:
       csstype: 3.1.3
@@ -4069,7 +4211,7 @@ snapshots:
   '@types/request@2.48.13':
     dependencies:
       '@types/caseless': 0.12.5
-      '@types/node': 24.6.2
+      '@types/node': 20.19.24
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.5
 
@@ -5457,6 +5599,8 @@ snapshots:
 
   lodash.merge@4.6.2: {}
 
+  lodash@4.17.21: {}
+
   loglevel@1.9.2: {}
 
   long@5.3.2: {}
@@ -5813,7 +5957,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 24.6.2
+      '@types/node': 20.19.24
       long: 5.3.2
 
   proxy-addr@2.0.7:
@@ -6306,8 +6450,6 @@ snapshots:
   undici-types@6.19.8: {}
 
   undici-types@6.21.0: {}
-
-  undici-types@7.13.0: {}
 
   unload@2.4.1: {}
 

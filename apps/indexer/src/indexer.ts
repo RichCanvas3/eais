@@ -2,8 +2,7 @@ import { createPublicClient, http, webSocket, type Address, decodeEventLog } fro
 import { db, getCheckpoint, setCheckpoint } from "./db";
 import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, OP_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
-import { ERC8004Client } from '../../erc8004-src';
-import { EthersAdapter } from '../../erc8004-src/adapters/ethers';
+import { ERC8004Client, EthersAdapter } from '@erc8004/sdk';
 
 
 import { 

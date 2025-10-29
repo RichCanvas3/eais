@@ -1,6 +1,6 @@
 import { createPublicClient, http, type PublicClient } from 'viem';
 import { sepolia } from 'viem/chains';
-import type { BlockchainAdapter } from '../erc8004-src/adapters/types';
+import type { BlockchainAdapter } from '@erc8004/sdk';
 
 /**
  * Org Identity Client - ENS utilities for organizations
@@ -18,6 +18,7 @@ export class OrgIdentityClient {
     this.adapter = adapter;
     this.ensRegistryAddress = (options?.ensRegistry || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e') as `0x${string}`;
     if (options?.rpcUrl) {
+      // @ts-ignore - viem version compatibility issue
       this.publicClient = createPublicClient({ chain: sepolia, transport: http(options.rpcUrl) });
     }
   }
@@ -52,7 +53,8 @@ export class OrgIdentityClient {
 
   async getOrgEoaByAccount(orgAccount: `0x${string}`): Promise<string | null> {
     if (this.publicClient) {
-        const eoa = await this.publicClient.readContract({
+        // @ts-ignore - viem version compatibility issue
+      const eoa = await this.publicClient.readContract({
         address: orgAccount as `0x${string}`,
         abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
         functionName: 'owner',
