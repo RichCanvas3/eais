@@ -1,8 +1,9 @@
 name = "erc8004-web"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 # Pages build output directory - excludes .next/cache which contains large dev files
-pages_build_output_dir = ".next"
+pages_build_output_dir = ".vercel/output/static"
 
 # Cloudflare Pages configuration
 # Note: Environment variables should be configured in Cloudflare Pages dashboard

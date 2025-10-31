@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "NODE_ENV=production next build",
+    "build:cloudflare": "next build && npx @cloudflare/next-on-pages",
     "start": "next start"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.0",
     "@ensdomains/ensjs": "4.0.2",
-    "@erc8004/sdk": "workspace:*",
     "@erc8004/agentic-trust-sdk": "workspace:*",
+    "@erc8004/sdk": "workspace:*",
     "@metamask/delegation-toolkit": "0.12.0",
     "@mui/icons-material": "^6.1.2",
     "@mui/material": "^6.1.2",
@@ -32,6 +33,7 @@
     "viem": "^2.21.16"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@types/react": "19.1.12",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.41",

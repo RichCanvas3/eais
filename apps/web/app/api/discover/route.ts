@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 type InAgent = { agentId: string; agentName: string; description?: string | null };
 
 type AgentSkill = {
