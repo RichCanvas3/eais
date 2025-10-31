@@ -623,9 +623,11 @@ class ensService {
         let baseRegistrarOwner;
         try {
           console.log('Checking ownership in BaseRegistrar...: ', baseRegistrar.target);
+          console.log('Token ID:', tokenId);
           baseRegistrarOwner = await baseRegistrar.ownerOf(tokenId);
           console.log('BaseRegistrar owner:', baseRegistrarOwner);
         } catch (error) {
+          console.error('Error checking ownership in BaseRegistrar:', error);
           throw new Error(`ENS name "${ensName}" does not exist or is not registered`);
         }
 
@@ -947,7 +949,12 @@ class ensService {
 
       validateSepoliaChain(chain);
 
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      // Use Ethereum Sepolia RPC provider instead of browser provider
+      const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+      if (!rpcUrl) {
+        throw new Error('NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL environment variable is not set');
+      }
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
 
       const baseRegistrar = new ethers.Contract(
         '0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85',
@@ -961,7 +968,7 @@ class ensService {
         provider
       );
 
-                const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+      const ENS_REGISTRY_ADDRESS = (process.env.NEXT_PUBLIC_ENS_REGISTRY as `0x${string}`) || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
       const ensRegistry = new ethers.Contract(
         ENS_REGISTRY_ADDRESS,
         ['function owner(bytes32 node) view returns (address)'],
@@ -974,7 +981,11 @@ class ensService {
 
       const parentLabel = ensName.split('.')[0];
       const parentTokenId = keccak256(toUtf8Bytes(parentLabel));
+      console.info("ensName to match: ", ensName);
       const parentNode = namehash(ensName + '.eth');
+
+      const ensOwner123  = await ensRegistry.owner(parentNode);
+      console.info("ensOwner123: ", ensOwner123);
 
       let result: {
         exists: boolean;

@@ -83,6 +83,8 @@ export function AddAgentModal({ open, onClose }: Props) {
   const [orgUrlError, setOrgUrlError] = React.useState<string | null>(null);
   const [orgUrlEdit, setOrgUrlEdit] = React.useState('');
   const [orgUrlSaving, setOrgUrlSaving] = React.useState(false);
+  const [orgWrapping, setOrgWrapping] = React.useState(false);
+  const [orgWrapError, setOrgWrapError] = React.useState<string | null>(null);
   
   // Agent availability state
   const [agentAvailable, setAgentAvailable] = React.useState<boolean | null>(null);
@@ -327,7 +329,9 @@ export function AddAgentModal({ open, onClose }: Props) {
 
   function cleanOrg(dom: string) {
     const base = dom.trim().toLowerCase().replace(/^ens:\s*/i, '').replace(/\.eth$/i, '');
-    return base.replace(/[^a-z0-9-]/g, '');
+    const baseClean = base.replace(/[^a-z0-9-]/g, '');
+    console.info("............cleanOrg: base: ", base, "baseClean: ", baseClean);
+    return baseClean;
   }
 
 
@@ -691,6 +695,10 @@ export function AddAgentModal({ open, onClose }: Props) {
         const correctENSClient = agentENSClientForChain;
         console.info("@@@@@@@@@@@@@@@@@@@ Using ENS client for chain:", resolvedChain.name, "ID:", resolvedChain.id);
         console.info("@@@@@@@@@@@@@@@@@@@ ENS client chain:", (correctENSClient as any)?.chain?.name, "ID:", (correctENSClient as any)?.chain?.id);
+        
+        if (!correctENSClient) {
+          throw new Error('ENS client not available for the selected chain');
+        }
         
         const { agentId, account } = await correctENSClient.getAgentIdentityByName(agentName.trim());
         if (account) {
@@ -1281,9 +1289,87 @@ export function AddAgentModal({ open, onClose }: Props) {
                   const wrappedText = orgStatus.isWrapped ? 'wrapped' : 'unwrapped';
                   const url = `https://sepolia.app.ens.domains/${base}.eth`;
                   return (
-                    <>
-                      Org ENS: <a href={url} target="_blank" rel="noopener noreferrer">{base}.eth</a> — {wrappedText}
-                    </>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <span>
+                        Org ENS: <a href={url} target="_blank" rel="noopener noreferrer">{base}.eth</a> — {wrappedText}
+                      </span>
+                      {!orgStatus.isWrapped && (orgStatus.registrationMethod === 'baseRegistrar' || orgStatus.registrationMethod === 'ensRegistry') && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={Boolean(orgWrapping || !provider)}
+                          onClick={async () => {
+                            try {
+                              setOrgWrapping(true);
+                              setOrgWrapError(null);
+                              
+                              if (!provider) {
+                                throw new Error('Wallet not connected');
+                              }
+                              
+                              // Get org owner address
+                              const orgName = cleanOrg(org);
+                              const orgFullName = `${orgName}.eth`;
+                              
+                              // Get org owner as smart account
+                              const orgOwnerAddress = await orgIdentityClient.getOrgAccountByName(orgFullName);
+                              
+                              // Use ENS private key for signer (required for wrapping)
+                              const ensPrivateKey = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`;
+                              if (!ensPrivateKey) {
+                                throw new Error('NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY not configured');
+                              }
+                              
+                              const ensAccount = privateKeyToAccount(ensPrivateKey);
+                              console.info("@@@@@@@@@@@@@@@@@@@ ensAccount: ", ensAccount.address);
+                              console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerAddress: ", orgOwnerAddress);
+                              const ensWalletClient = createWalletClient({
+                                chain: sepolia,
+                                transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string),
+                                account: ensAccount,
+                              });
+                              
+                              // Create signer using the ENS private key
+                              const ensJsonRpcProvider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
+                              const ensWallet = new ethers.Wallet(ensPrivateKey, ensJsonRpcProvider);
+                              
+                              // Create smart account client
+                              const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
+                              
+                              console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerAddress: ", orgOwnerAddress);
+                              const smartAccountClient = await toMetaMaskSmartAccount({
+                                address: orgOwnerAddress as `0x${string}`,
+                                client: publicClient,
+                                implementation: Implementation.Hybrid,
+                                signatory: { walletClient: ensWalletClient },
+                              });
+                              
+                              // Wrap the domain using ensService with ENS private key signer
+                              console.info("@@@@@@@@@@@@@@@@@@@ wrapping org name: ", orgName);
+                              console.info("@@@@@@@@@@@@@@@@@@@ smartAccountClient: ", smartAccountClient.address);
+                              await ensService.wrapEnsDomainName(ensWallet as any, smartAccountClient, orgName, sepolia);
+                              
+                              // Refresh org status to show new wrapped status
+                              const status = await ensService.checkEnsNameStatus(orgFullName, sepolia);
+                              setOrgStatus(status);
+                              
+                              setOrgWrapping(false);
+                            } catch (err: any) {
+                              console.error('Error wrapping org:', err);
+                              setOrgWrapError(err?.message || 'Failed to wrap domain');
+                              setOrgWrapping(false);
+                            }
+                          }}
+                        >
+                          {orgWrapping ? 'Wrapping...' : 'Wrap Domain'}
+                        </Button>
+                      )}
+                      {orgWrapError && (
+                        <Typography variant="caption" color="error">
+                          {orgWrapError}
+                        </Typography>
+                      )}
+                    </Stack>
                   );
                 })()
               ) : (
