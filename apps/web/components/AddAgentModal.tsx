@@ -39,7 +39,7 @@ type Props = {
 export function AddAgentModal({ open, onClose }: Props) {
   // All useState hooks first
   const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string>('0xaa36a7');
-  const [org, setOrg] = React.useState('');
+  const [org, setOrg] = React.useState('8004-agent');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
@@ -379,7 +379,9 @@ export function AddAgentModal({ open, onClose }: Props) {
 
   // Create agent name using ENS client for L1/L2 architecture
   async function createAgentName(agentName: string, parentDomain: string, agentAddress: `0x${string}`) {
-    if (!agentName || !parentDomain) return;
+    
+    if (!agentName || !parentDomain) throw new Error('Missing agent name or org name for deployment');;
+    if (!effectiveBundlerUrl) throw new Error('Missing BUNDLER_URL for deployment');
 
     // Use the provider and address from component level (already available)
     const web3AuthProvider = provider;
@@ -390,25 +392,9 @@ export function AddAgentModal({ open, onClose }: Props) {
 
     try {
       const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-      
-      console.info("@@@@@@@@@@@@@@@@@@@ selectedChainIdHex: ", selectedChainIdHex);
-      console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain: ", resolvedChain);
-      console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain.id: ", resolvedChain.id);
-      
+
       // Get the correct agentIdentityClient for the selected chain from the clients object
-      const correctAgentIdentityClient = clients[selectedChainIdHex || ''] || agentIdentityClient;
-      console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient: ", correctAgentIdentityClient);
-      console.info("@@@@@@@@@@@@@@@@@@@ correctAgentIdentityClient chain: ", (correctAgentIdentityClient as any)?.chain);
-      
-
-
-
-
       const eip1193 = web3AuthProvider as any;
-
-      console.info("@@@@@@@@@@@@@@@@@@@ selectedChainIdHex: ", selectedChainIdHex);
-      console.info("chain config: ", getChainConfigByHex(selectedChainIdHex))
-
       const chainIdHex = selectedChainIdHex || '0xaa36a7';
       const rpcUrl = effectiveRpcUrl;
 
@@ -428,40 +414,53 @@ export function AddAgentModal({ open, onClose }: Props) {
       });
 
       // Add delay to allow wallet to adapt to chain switch
-      console.log('********************* 1111111111111111 Waiting for wallet to adapt to chain switch...');
       await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
-      console.log('********************* Chain switch adaptation complete');
 
       const ethersProvider = new ethers.BrowserProvider(eip1193);
-      //const sgner = await provider.getSigner();
-      //const agentAdapter = sgner ? new EthersAdapter(provider, sgner) : new EthersAdapter(provider, undefined as any);
-
-      // Use the selected chain's provider by converting ethers.js provider to viem-compatible format
-      //const ethersProvider = agentAdapter.getProvider();
-      console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider: ", ethersProvider);
-
-
-      
-      // Debug the ethers provider to see what methods are available
-      console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider methods:", Object.getOwnPropertyNames(ethersProvider));
-      console.info("@@@@@@@@@@@@@@@@@@@ ethersProvider prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(ethersProvider)));
-      
-      // Convert ethers.js provider to viem-compatible provider
       const viemCompatibleProvider = createViemCompatibleProvider(ethersProvider);
-      
-      console.info("@@@@@@@@@@@@@@@@@@@ eoaAddress: ", eoaAddress);
       const walletClient = createWalletClient({ 
         chain: resolvedChain as any, 
         transport: custom(viemCompatibleProvider as any), 
         account: eoaAddress as Address 
       });
-      console.info("@@@@@@@@@@@@@@@@@@@ walletClient: ", walletClient);
+
       try { (walletClient as any).account = eoaAddress as Address; } catch {}
-      
-      console.info(".................... getDefaultAgentAccountClient 5: ", agentName.toLowerCase());
+
+      const pimlicoClient = createPimlicoClient({ transport: http(effectiveBundlerUrl) });
+      const bundlerClient = createBundlerClient({
+        transport: http(effectiveBundlerUrl),
+        paymaster: true as any,
+        chain: resolvedChain as any,
+        paymasterContext: { mode: 'SPONSORED' },
+      } as any);
+
+      // get default agent account client based on agent name or if it already exists
       agentAccountClient = await getDefaultAgentAccountClient(agentName.toLowerCase(), publicClient, walletClient);
       addressToUse = await agentAccountClient.getAddress();
-      console.info('Computed agent address for agent name creation:', addressToUse);
+
+      // Ensure Agent AA is deployed (sponsored via Pimlico)
+      const deployed = await agentAccountClient.isDeployed();
+      if (!deployed) {
+
+        const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
+
+        console.info("send user operation with bundlerClient 2: ", bundlerClient);
+        const userOperationHash = await bundlerClient!.sendUserOperation({
+          account: agentAccountClient as any,
+          calls: [
+            {
+              to: zeroAddress,
+            },
+          ],
+          ...fee,
+        });
+
+        console.info("individual account is deployed - done");
+        const { receipt } = await bundlerClient!.waitForUserOperationReceipt({
+          hash: userOperationHash,
+        });
+      }
+
     } catch (error) {
       console.error('Failed to compute agent address:', error);
       setAgentError('Failed to compute agent address for agent name creation');
@@ -545,50 +544,12 @@ export function AddAgentModal({ open, onClose }: Props) {
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
         */
 
-        const bundlerUrl = effectiveBundlerUrl;
-          if (!bundlerUrl) throw new Error('Missing BUNDLER_URL for deployment');
-        console.info("Deployment - bundlerUrl:", bundlerUrl, "chain:", resolvedChain.name, "chainId:", resolvedChain.id);
-        const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
-        const bundlerClient = createBundlerClient({
-          transport: http(bundlerUrl),
-          paymaster: true as any,
-          chain: resolvedChain as any,
-          paymasterContext: { mode: 'SPONSORED' },
-        } as any);
         
-        
-        // Ensure Agent AA is deployed (sponsored via Pimlico)
-        const deployed = await agentAccountClient.isDeployed();
-        if (!deployed) {
           
-          const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
-          console.info("fee: ", fee);
 
-          try {
-            console.info("send user operation with bundlerClient 2: ", bundlerClient);
+        
+        
 
-            console.info("send user operation with bundlerClient 2: ", bundlerClient);
-            const userOperationHash = await bundlerClient!.sendUserOperation({
-              account: agentAccountClient as any,
-              calls: [
-                {
-                  to: zeroAddress,
-                },
-              ],
-              ...fee,
-            });
-
-            console.info("individual account is deployed - done");
-            const { receipt } = await bundlerClient!.waitForUserOperationReceipt({
-              hash: userOperationHash,
-            });
-
-
-
-          } catch (error) {
-            console.info("error deploying indivAccountClient: ", error);
-          }
-        }
         console.log('deployment done ======> prepareAddAgentNameToOrgCalls');
 
         // ENS Owner AA: parent domain controller
@@ -672,10 +633,7 @@ export function AddAgentModal({ open, onClose }: Props) {
     try {
       // Ensure wallet is connected to the correct chain
       const currentChainId = await walletClient.getChainId();
-      console.info("@@@@@@@@@@@@@@@@@@@ getDefaultAgentAccountClient - currentChainId: ", currentChainId);
-      console.info("@@@@@@@@@@@@@@@@@@@ getDefaultAgentAccountClient - resolvedChain.id: ", resolvedChain.id);
-      console.info("@@@@@@@@@@@@@@@@@@@ getDefaultAgentAccountClient - resolvedChain.name: ", resolvedChain.name);
-      
+
       if (currentChainId !== resolvedChain.id) {
         console.info(`🔄 Wallet is on chain ${currentChainId}, switching to ${resolvedChain.id} (${resolvedChain.name})`);
         
@@ -693,9 +651,7 @@ export function AddAgentModal({ open, onClose }: Props) {
         // Resolve via SDK: ENS -> agent-identity -> agentId -> on-chain account
         // Use the correct ENS client for the current chain
         const correctENSClient = agentENSClientForChain;
-        console.info("@@@@@@@@@@@@@@@@@@@ Using ENS client for chain:", resolvedChain.name, "ID:", resolvedChain.id);
-        console.info("@@@@@@@@@@@@@@@@@@@ ENS client chain:", (correctENSClient as any)?.chain?.name, "ID:", (correctENSClient as any)?.chain?.id);
-        
+
         if (!correctENSClient) {
           throw new Error('ENS client not available for the selected chain');
         }
@@ -747,21 +703,20 @@ export function AddAgentModal({ open, onClose }: Props) {
   }, [eoaAddress, resolvedChain]);
 
   // Compute agent AA default address when agent name or chain changes
-  /*
   React.useEffect(() => {
     if (!agentName || !agentName.trim() || !eoaAddress) {
       setAgentAADefaultAddress(null);
       return;
     }
     
-      let cancelled = false;
-      (async () => {
+    let cancelled = false;
+    (async () => {
       try {
         // Compute the default agent account address for the current chain
         const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
         const walletClient = createWalletClient({
           chain: resolvedChain,
-          transport: custom(provider),
+          transport: custom(provider as any),
           account: eoaAddress as Address 
         });
         try { (walletClient as any).account = eoaAddress as Address; } catch {}
@@ -784,7 +739,6 @@ export function AddAgentModal({ open, onClose }: Props) {
     
       return () => { cancelled = true; };
   }, [agentName, selectedChainIdHex, eoaAddress, provider, resolvedChain, effectiveRpcUrl, getDefaultAgentAccountClient]);
-  */
  
   // Check if agent identity already exists when agent name changes
 	React.useEffect(() => {
@@ -848,7 +802,10 @@ export function AddAgentModal({ open, onClose }: Props) {
       try {
         setOrgStatusLoading(true);
         setOrgStatusError(null);
-        const status = await ensService.checkEnsNameStatus(base, resolvedChain);
+        // Org validation always uses Ethereum Sepolia (L1) since orgs are registered on L1
+        const l1RpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+        const l1PublicClient = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
+        const status = await ensService.checkEnsNameStatus(base, sepolia);
         if (!cancelled) setOrgStatus(status);
 
         // derive owner
@@ -862,8 +819,8 @@ export function AddAgentModal({ open, onClose }: Props) {
 
         if (owner) {
           try {
-            const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
-            const code = await publicClient.getBytecode({ address: owner as `0x${string}` });
+            // Use L1 public client for org owner checks
+            const code = await l1PublicClient.getBytecode({ address: owner as `0x${string}` });
             if (!cancelled) setOrgOwnerIsContract(!!code);
           } catch {
             if (!cancelled) setOrgOwnerIsContract(null);
@@ -906,13 +863,13 @@ export function AddAgentModal({ open, onClose }: Props) {
 
           // If AA (contract), attempt to find controlling EOA via common owner functions
           try {
-            const publicClient = createPublicClient({ chain: resolvedChain, transport: http(effectiveRpcUrl) });
+            // Use L1 public client for org owner checks
             let controller: string | null = null;
-            const ownerCode = await publicClient.getBytecode({ address: owner as `0x${string}` });
+            const ownerCode = await l1PublicClient.getBytecode({ address: owner as `0x${string}` });
             if (!!ownerCode) {
               // Try Ownable.owner()
               try {
-                const eoa = await publicClient.readContract({
+                const eoa = await l1PublicClient.readContract({
                   address: owner as `0x${string}`,
                   abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
                   functionName: 'owner',
@@ -922,7 +879,7 @@ export function AddAgentModal({ open, onClose }: Props) {
               // Try getOwner()
               if (!controller) {
                 try {
-                  const eoa = await publicClient.readContract({
+                  const eoa = await l1PublicClient.readContract({
                     address: owner as `0x${string}`,
                     abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
                     functionName: 'getOwner',
@@ -933,7 +890,7 @@ export function AddAgentModal({ open, onClose }: Props) {
               // Try owners() -> address[] and take first
               if (!controller) {
                 try {
-                  const eoas = await publicClient.readContract({
+                  const eoas = await l1PublicClient.readContract({
                     address: owner as `0x${string}`,
                     abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
                     functionName: 'owners',
@@ -1004,9 +961,12 @@ export function AddAgentModal({ open, onClose }: Props) {
     setError(null);
     setIsSubmitting(true);
     try {
-      const agentNameLower = agentName.trim().toLowerCase();
 
-      console.log('********************* agentNameLower', agentNameLower);
+      // create ens agent name
+      createAgentName(agentName, org, (ensAgentAddress || agentAccount) as `0x${string}`)
+
+      // mind agent identity
+      const agentNameLower = agentName.trim().toLowerCase();
 
       // 0) Early exit if agent already exists for this agentNameLower
       // Note: This check is now handled by the agentIdentityExists state
@@ -1016,17 +976,9 @@ export function AddAgentModal({ open, onClose }: Props) {
 
       // Owner/signatory based on current EOA from Web3Auth
       if (!eoaAddress) { throw new Error('No EOA address from Web3Auth'); }
-      const owner = eoaAddress as Address;
-      
-      // Use the agentIdentityClient's adapter which has the correct provider for the selected chain
-      //const agentAdapter = (agentIdentityClient as any).adapter;
-      //const ethersProvider = agentAdapter.getProvider();
-      //const adapterSigner = agentAdapter.getSigner();
 
-
-
-      const web3AuthProvider = provider;
-      const eip1193 = web3AuthProvider as any;
+        const web3AuthProvider = provider;
+        const eip1193 = web3AuthProvider as any;
 
         const chainIdHex = selectedChainIdHex || '0xaa36a7';
         const rpcUrl = effectiveRpcUrl;
@@ -1075,24 +1027,7 @@ export function AddAgentModal({ open, onClose }: Props) {
       // Ensure Agent AA is deployed (sponsored via Pimlico)
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
-        /*
-        const BUNDLER_URL = effectiveBundlerUrl;
-        if (!BUNDLER_URL) throw new Error('Missing BUNDLER_URL for deployment');
-        const pimlicoClient = createPimlicoClient({ transport: http(BUNDLER_URL) } as any);
-        const bundlerClient = createBundlerClient({
-          transport: http(BUNDLER_URL),
-          paymaster: true,
-          chain: resolvedChain,
-          paymasterContext: { mode: 'SPONSORED' },
-        } as any);
-        const { fast: fee } = await (pimlicoClient as any).getUserOperationGasPrice();
-        const userOperationHash = await (bundlerClient as any).sendUserOperation({
-          account: agentAccountClient,
-          calls: [{ to: zeroAddress }],
-          ...fee,
-        });
-        await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOperationHash });
-        */
+
 
         const pimlico = createPimlicoClient({ transport: http(effectiveBundlerUrl) });
 				const bundlerClient = createBundlerClient({
@@ -1280,7 +1215,47 @@ export function AddAgentModal({ open, onClose }: Props) {
       </DialogTitle>
       <DialogContent sx={{ overflow: 'visible' }}>
         <Stack spacing={2}>
-          <TextField label="Org" placeholder="airbnb.eth" value={org} onChange={(e) => setOrg(e.target.value)} fullWidth autoFocus />
+          {/* Agent Chain Selection at the top */}
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Agent Chain</Typography>
+            <select 
+              value={selectedChainIdHex} 
+              onChange={(e) => {
+                const newChain = e.target.value || '0xaa36a7';
+                setSelectedChainIdHex(newChain);
+                // Default org based on selected chain
+                if (newChain === '0xaa36a7') {
+                  // Ethereum Sepolia
+                  setOrg('8004-agent');
+                } else if (newChain === '0x14a34') {
+                  // Base Sepolia
+                  setOrg('agnt');
+                } else {
+                  // Other chains
+                  setOrg('');
+                }
+              }}
+              style={{ 
+                flex: 1, 
+                padding: '8px 12px', 
+                borderRadius: '4px', 
+                border: '1px solid #ccc',
+                fontSize: '14px'
+              }}
+            >
+              {Object.keys(clients).map((cid) => {
+                const chainConfig = getChainConfigByHex(cid);
+                const label = chainConfig?.chainName || cid;
+                return (
+                  <option key={cid} value={cid}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </Stack>
+          
+          <TextField label="Org" placeholder="8004-agent.eth" value={org} onChange={(e) => setOrg(e.target.value)} fullWidth autoFocus />
           <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5, wordBreak: 'break-all', minHeight: '20px' }}>
             {org ? (
               orgStatusLoading ? 'Org: checking…' : orgStatusError ? `Org: error — ${orgStatusError}` : orgStatus?.exists ? (
@@ -1385,6 +1360,7 @@ export function AddAgentModal({ open, onClose }: Props) {
               )
             ) : 'Enter an ENS Org (e.g. airbnb.eth)'}
           </Typography>
+          {/* Commented out Org URL fields for now
           {org && orgStatus && orgStatus.exists && (
             <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
               Org URL: {orgUrlLoading ? 'checking…' : orgUrlError ? `error — ${orgUrlError}` : orgUrlText ? (
@@ -1469,26 +1445,11 @@ export function AddAgentModal({ open, onClose }: Props) {
               >Save Org URL</Button>
             </Stack>
           )}
+          */}
           
           <br></br>
           
-          {/* Agent Chain Selection */}
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography variant="body2">Agent Chain</Typography>
-            <select value={selectedChainIdHex} onChange={(e) => setSelectedChainIdHex(e.target.value || '0xaa36a7')}>
-              {Object.keys(clients).map((cid) => {
-                const chainConfig = getChainConfigByHex(cid);
-                const label = chainConfig?.chainName || cid;
-                return (
-                  <option key={cid} value={cid}>{label}</option>
-                );
-              })}
-            </select>
-          </Stack>
-          
           <TextField label="Agent Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-          
-          {/* Agent URL Input Field - shown right under agent name */}
           <TextField 
             label="Agent URL" 
             value={agentUrlEdit} 
@@ -1497,33 +1458,14 @@ export function AddAgentModal({ open, onClose }: Props) {
             }}
             fullWidth
             placeholder="https://example.com/agent-name"
-            helperText={agentUrlIsAuto ? "Auto-populated from org URL + agent name" : "Manually set URL"}
             sx={{ ml: 5 }}
           />
-          
-                  <Typography variant="caption" color="text.secondary" sx={{ ml: 5 }}>
-            Agent AA: {(() => {
-              const addr = agentAADefaultAddress || agentAccount;
-              if (!addr) return '—';
-              const chainIdHex = selectedChainIdHex || '0xaa36a7';
-              const chainConfig = getChainConfigByHex(chainIdHex);
-              const chainId = chainConfig?.chainId || 11155111; // Default to ETH Sepolia
-              const caip10 = `eip155:${chainId}:${addr}`;
-              const explorerBase = getExplorerUrl(chainId);
-              return (
-                <a href={`${explorerBase}/address/${addr}`} target="_blank" rel="noopener noreferrer">{caip10}</a>
-              );
-            })()}
-                  </Typography>
+          <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
                   
           {/* Agent Name Creation */}
           {agentName && org && (
             <Stack spacing={1} sx={{ ml: 5, mt: 1 }}>
-              <Typography variant="caption" color="info.main" fontWeight="bold">
-                Agent Name:
-              </Typography>
-              
-              
+
               {/* Agent name creation */}
               {agentChecking ? (
                 <Typography variant="caption" color="text.secondary">
@@ -1534,21 +1476,17 @@ export function AddAgentModal({ open, onClose }: Props) {
                   <Typography variant="caption" color="success.main">
                     ✓ {agentName} is available
                   </Typography>
-                    <Button
-                    size="small"
-                      variant="outlined"
-                    onClick={() => createAgentName(agentName, org, (ensAgentAddress || agentAccount) as `0x${string}`)}
-                    disabled={agentCreating}
-                    sx={{ width: 'fit-content' }}
-                  >
-                    {agentCreating ? 'Creating...' : 'Create Agent Name'}
-                  </Button>
                 </Stack>
               ) : agentExists === true ? (
                 <Stack spacing={0.5}>
                   <Typography variant="caption" color="success.main">
                     ✓ <a href={`https://sepolia.app.ens.domains/${agentName}`} target="_blank" rel="noopener noreferrer">{agentName}</a> exists
                   </Typography>
+                  {agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000' && (
+                    <Typography variant="caption" color="warning.main">
+                      ⚠ Agent account already exists: {agentAccount}. Cannot create new identity.
+                    </Typography>
+                  )}
                   {ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase() && (
                     <Typography variant="caption" color="error">
                       ⚠ ENS name is owned by a different account ({ensAgentOwnerEoa}). Connect that wallet or use a name you control.
@@ -1566,15 +1504,9 @@ export function AddAgentModal({ open, onClose }: Props) {
               ) : null}
             </Stack>
           )}
+
           
-          {/* Agent Description - Only show when ready to create agent identity */}
-          {agentName.trim() && 
-           agentUrlEdit && 
-           /^https?:\/\//i.test(agentUrlEdit) && 
-           agentIdentityExists !== true && 
-           (!ensAgentOwnerEoa || !eoaAddress || ensAgentOwnerEoa.toLowerCase() === eoaAddress.toLowerCase()) && (
-          <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
-          )}
+
           {agentIdentityExists === true && (
             <Typography variant="body2" color="error">
               Create disabled: Agent Identity already exists for this agent{existingAgentId ? ` (ID: ${existingAgentId})` : ''}.
@@ -1592,8 +1524,9 @@ export function AddAgentModal({ open, onClose }: Props) {
           !agentName.trim() ||
           !agentUrlEdit ||
           !/^https?:\/\//i.test(agentUrlEdit) ||
-          (ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase())
-        )}>Create</Button>
+          (ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase()) ||
+          (agentExists === true && agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000')
+        )}>Create Agent Identity</Button>
       </DialogActions>
     </Dialog>
   );

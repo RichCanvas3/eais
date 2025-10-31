@@ -20,9 +20,16 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     ensResolverAddress: `0x${string}`,
     identityRegistryAddress: `0x${string}`,
   ) {
-    super(chain, rpcUrl, adapter, ensRegistryAddress, ensResolverAddress, identityRegistryAddress);
+    super(chain, rpcUrl, adapter, 
+      '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c', 
+      '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c', 
+      identityRegistryAddress);
     this.initializeNamespaceClient();
+    
+    //ensRegistryAddress = '0xf584057f3e9ecd550b52a86f84dfeb9f928e003f' as `0x${string}`;
+    //ensResolverAddress = '0xf584057f3e9ecd550b52a86f84dfeb9f928e003f' as `0x${string}`;
   }
+
 
   /**
    * Override to ensure L2 client always returns true for isL2()
@@ -75,7 +82,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       console.info("AIAgentL2ENSDurenClient.getAgentUrlByName: node", node);
 
       // Use direct resolver call to get URL text record (equivalent to cast call)
-      const resolverAddress = '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c' as `0x${string}`;
+      const resolverAddress = this.getEnsResolverAddress()
       
       // ENS Resolver ABI for text function
       const resolverAbi = [
@@ -154,7 +161,8 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       console.info("********************* TEST: Checking if NFT exists for name:", name);
       
       // First check if the name exists in the ENS registry (has an owner)
-      const ensRegistryAddress = '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c' as `0x${string}`;
+      const ensRegistryAddress = this.getEnsRegistryAddress()
+
       const ensRegistryAbi = [
         {
           "inputs": [
@@ -207,8 +215,8 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       }
 
       // Use direct resolver call to get address (equivalent to cast call)
-      const resolverAddress = '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c' as `0x${string}`;
-      
+      const resolverAddress = this.getEnsResolverAddress()
+
       // ENS Resolver ABI for addr function
       const resolverAbi = [
         {
@@ -333,6 +341,70 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
    * This method is actually in AIAgentIdentityClient, so we don't need to override it here.
    * The ownership detection logic is handled in the UI layer (AddAgentModal.tsx)
    */
+
+  /**
+   * Override hasAgentNameOwner to use L2Registrar available() function
+   */
+  async hasAgentNameOwner(orgName: string, agentName: string): Promise<boolean> {
+    console.info("AIAgentL2ENSDurenClient.hasAgentNameOwner");
+    
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(orgName);
+    const label = clean(agentName).replace(/\s+/g, '-');
+    console.info("AIAgentL2ENSDurenClient.hasAgentNameOwner: label", label);
+    console.info("AIAgentL2ENSDurenClient.hasAgentNameOwner: parent", parent);
+    const fullSubname = `${label}.${parent}`;
+    console.info("AIAgentL2ENSDurenClient.hasAgentNameOwner: fullSubname", fullSubname);
+
+    // Use L2Registrar contract address (same as registerSubdomain)
+    const l2RegistrarAddress = "0x68CAd072571E8bea1DA9e5C071367Aa6ddC8F37F" as `0x${string}`;
+    const l2RegistrarAbi = [
+      {
+        "inputs": [
+          {
+            "internalType": "string",
+            "name": "label",
+            "type": "string"
+          }
+        ],
+        "name": "available",
+        "outputs": [
+          {
+            "internalType": "bool",
+            "name": "available",
+            "type": "bool"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ] as const;
+
+    const publicClient = // @ts-ignore - viem version compatibility issue
+    createPublicClient({
+      chain: (this as any).chain,
+      transport: http((this as any).rpcUrl)
+    });
+
+    try {
+      // Call registrar.available(label) - returns true if available, false if taken
+      const isAvailable = await // @ts-ignore - viem version compatibility issue
+    publicClient.readContract({
+        address: l2RegistrarAddress,
+        abi: l2RegistrarAbi,
+        functionName: 'available',
+        args: [label]
+      });
+
+      // If not available, then it has an owner
+      const hasOwner = !isAvailable;
+      console.info(`AIAgentL2ENSDurenClient.hasAgentNameOwner: "${fullSubname}" (label: "${label}") ${hasOwner ? 'HAS owner' : 'has NO owner'} (available: ${isAvailable})`);
+      return hasOwner;
+    } catch (error) {
+      console.error('Error checking agent name owner via registrar:', error);
+      return false;
+    }
+  }
 
   /**
    * Override prepareAddAgentNameToOrgCalls to use direct chain calls instead of namespace.ninja SDK
@@ -609,7 +681,8 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     console.log("key:", key);
     console.log("value:", value);
 
-    const resolverAddress = '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c' as `0x${string}`;
+    const resolverAddress = this.getEnsResolverAddress()
+
 
     // ENS Resolver ABI for setText
     const resolverAbi = [
@@ -669,7 +742,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     console.log("coinType:", coinType);
     console.log("address:", address);
 
-    const resolverAddress = '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c' as `0x${string}`;
+    const resolverAddress = this.getEnsResolverAddress()
 
     // ENS Resolver ABI for setAddr
     const resolverAbi = [

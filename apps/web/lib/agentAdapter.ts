@@ -292,6 +292,8 @@ export async function addAgentNameToOrg(params: {
   console.log('********************* cleanAgentName', cleanAgentName);
   console.log('********************* agentUrl', agentUrl);
   
+
+  
 /*
   const { privateKeyToAccount } = await import('viem/accounts');
   const { createWalletClient, http } = await import('viem');
@@ -398,21 +400,27 @@ export async function addAgentNameToOrg(params: {
       }
       */
 
-      console.log('********************* send sponsored user operation to add agent name to org');
-      const userOperationHash = await sendSponsoredUserOperation({
-        bundlerUrl,
-        chain,
-        accountClient: agentAccountClient,
-        calls: orgCalls
-      });
+
+        // Check if agent name already has an owner before attempting to create
+      const hasOwner = await agentENSClient.hasAgentNameOwner(cleanOrgName, cleanAgentName);
+      if (hasOwner == false) {
+
+        console.log('********************* send sponsored user operation to add agent name to org');
+        const userOperationHash = await sendSponsoredUserOperation({
+          bundlerUrl,
+          chain,
+          accountClient: agentAccountClient,
+          calls: orgCalls
+        });
 
 
-      
-      console.log("UserOp submitted:", userOperationHash);
-      
-      // Wait for the transaction to be mined
-      const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
-      console.log("Subname minted successfully! Transaction hash:", receipt);
+        
+        console.log("UserOp submitted:", userOperationHash);
+        
+        // Wait for the transaction to be mined
+        const receipt = await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
+        console.log("Subname minted successfully! Transaction hash:", receipt);
+      }
 
 
       const { calls : infoCalls } = await agentENSClient.prepareAddAgentInfoCalls({

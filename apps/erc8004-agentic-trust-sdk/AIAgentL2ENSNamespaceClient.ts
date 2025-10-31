@@ -141,6 +141,34 @@ export class AIAgentL2ENSNamespaceClient extends AIAgentENSClient {
    */
 
   /**
+   * Override hasAgentNameOwner to use namespace.ninja for L2 availability checking
+   */
+  async hasAgentNameOwner(orgName: string, agentName: string): Promise<boolean> {
+    console.info("AIAgentL2ENSNamespaceClient.hasAgentNameOwner");
+    
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(orgName) + ".eth";
+    const label = clean(agentName).replace(/\s+/g, '-');
+    const fullSubname = `${label}.${parent}`;
+
+    // Use namespace.ninja to check if subname exists
+    if (this.namespaceClient) {
+      try {
+        const chainId = (this as any).chain.id;
+        const isAvailable = await this.namespaceClient.isL2SubnameAvailable(fullSubname, chainId);
+        const hasOwner = !isAvailable; // If not available, it has an owner
+        console.info(`AIAgentL2ENSNamespaceClient.hasAgentNameOwner: "${fullSubname}" ${hasOwner ? 'HAS owner' : 'has NO owner'}`);
+        return hasOwner;
+      } catch (error) {
+        console.error('Error checking agent name owner:', error);
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Override prepareAddAgentNameToOrgCalls to use namespace.ninja SDK for L2
    */
   async prepareAddAgentNameToOrgCalls(params: {

@@ -42,6 +42,10 @@ export class AIAgentENSClient {
 
   }
 
+  getEnsRegistryAddress(): `0x${string}` {
+    return this.ensRegistryAddress;
+  }
+  
   getEnsResolverAddress(): `0x${string}` {
     return this.ensResolverAddress;
   }
@@ -348,6 +352,35 @@ export class AIAgentENSClient {
     return { agentId, account: null };
   }
 
+
+  /**
+   * Check if an agent name record already has an owner in the ENS Registry.
+   * This doesn't require an address to be set, just checks if the record exists.
+   */
+  async hasAgentNameOwner(orgName: string, agentName: string): Promise<boolean> {
+    const clean = (s: string) => (s || '').trim().toLowerCase();
+    const parent = clean(orgName);
+    const label = clean(agentName).replace(/\s+/g, '-');
+    const fullSubname = `${label}.${parent}.eth`;
+    const subnameNode = namehash(fullSubname);
+
+    try {
+      // @ts-ignore - viem version compatibility issue
+      const existingOwner = await this.publicClient?.readContract({
+        address: this.ensRegistryAddress as `0x${string}`,
+        abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [{ type: 'bytes32' }], outputs: [{ type: 'address' }] }],
+        functionName: 'owner',
+        args: [subnameNode]
+      });
+      
+      const hasOwner = existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000';
+      console.info(`hasAgentNameOwner: "${fullSubname}" ${hasOwner ? 'HAS owner' : 'has NO owner'}${hasOwner ? `: ${existingOwner}` : ''}`);
+      return hasOwner;
+    } catch (error) {
+      console.error('Error checking agent name owner:', error);
+      return false;
+    }
+  }
 
   /**
    * Resolve account address for an ENS name via resolver.addr(namehash(name)).
@@ -672,8 +705,6 @@ export class AIAgentENSClient {
 
 
     const parentNode = namehash(parent + ".eth");
-
-
 
     const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
 
