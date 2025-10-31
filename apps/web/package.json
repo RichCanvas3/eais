@@ -4,7 +4,9 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
-    "dev": "next dev -p 3000"
+    "dev": "next dev -p 3000",
+    "build": "NODE_ENV=production next build",
+    "start": "next start"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",
@@ -22,7 +24,6 @@
     "@web3auth/metamask-adapter": "^8.12.4",
     "@web3auth/modal": "^8.12.4",
     "@web3auth/openlogin-adapter": "^8.12.4",
-    "better-sqlite3": "^9.4.0",
     "ethers": "^6.13.2",
     "next": "^14.2.5",
     "permissionless": "^0.2.4",

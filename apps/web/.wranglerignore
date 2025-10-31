@@ -1,0 +1,24 @@
+# Files and directories to exclude from Cloudflare Pages deployment
+
+# Cache directories
+.next/cache/
+.next/trace/
+
+# Source maps (large and not needed in production)
+**/*.map
+
+# Webpack cache files
+**/*.pack.gz
+
+# Log files
+**/*.log
+
+# Temporary files
+**/*.tmp
+**/*.temp
+
+# Development files
+node_modules/
+.env.local
+.env*.local
+

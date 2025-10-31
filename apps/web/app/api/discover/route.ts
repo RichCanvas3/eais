@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as fs from 'fs';
-import * as path from 'path';
 
 type InAgent = { agentId: string; agentName: string; description?: string | null };
 
@@ -22,15 +20,10 @@ type AgentCard = {
 };
 
 function getAgentCard(agentName: string): AgentCard | null {
-  try {
-    const safe = agentName.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_');
-    const file = path.resolve(process.cwd(), 'apps/web/data/cards', `${safe}.json`);
-    if (!fs.existsSync(file)) return null;
-    const raw = fs.readFileSync(file, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  // Note: Filesystem access removed for Cloudflare Pages compatibility
+  // Agent cards are now stored client-side only
+  // Return null as cards are not available server-side
+  return null;
 }
 
 type AgentWithCard = InAgent & { card?: AgentCard | null };

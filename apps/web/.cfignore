@@ -1,0 +1,44 @@
+# Cloudflare Pages ignore file
+# Exclude cache and unnecessary files from deployment
+
+# Webpack cache files (very large, not needed for production)
+.next/cache/
+.next/**/*.pack.gz
+
+# Development files
+.next/trace
+
+# Source maps (large and not needed in production)
+.next/**/*.map
+**/*.map
+
+# Node modules (should already be in .gitignore, but just in case)
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts that shouldn't be deployed
+*.log
+*.tmp
+
+# Database files (transitioned to cloud database)
+*.db
+*.sqlite
+*.sqlite3
+data/
+apps/web/data/
+

@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { getAddress } from 'viem';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -102,7 +102,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [infoOpen, setInfoOpen] = React.useState(false);
 	const [infoLoading, setInfoLoading] = React.useState(false);
 	const [infoError, setInfoError] = React.useState<string | null>(null);
-	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null; tokenUri?: string | null } | null>(null);
+	const [infoData, setInfoData] = React.useState<{ agentId?: string | null; agentName?: string | null; agentAccount?: string | null; tokenUri?: string | null; chainId?: number; a2aEndpoint?: string | null } | null>(null);
 
 	// Agent Card modal state
 	const [cardOpen, setCardOpen] = React.useState(false);
@@ -138,21 +138,13 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	// ENS modal state
 	const [ensOpen, setEnsOpen] = React.useState(false);
 	const [ensData, setEnsData] = React.useState<{
-		agentName: string;
-		agentAccount: string;
-		agentId: string;
-		agentAddress: string;
-		agentOwner: string;
-		agentEndpoint: string;
-		agentENSDomain: string;
-		agentDNSDomain: string;
-		agentENSName: string;
-		agentAccountEndpoint: string;
-		metadataURI: string;
-		blockNumber: number;
-		transactionHash: string;
-		ensEndpoint: string;
-		a2aEndpoint: string;
+		name: string | null;
+		avatar: string | null;
+		website: string | null;
+		email: string | null;
+		twitter: string | null;
+		github: string | null;
+		discord: string | null;
 	} | null>(null);
 	const [ensLoading, setEnsLoading] = React.useState(false);
 	const [ensError, setEnsError] = React.useState<string | null>(null);
@@ -513,7 +505,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 
 			console.info("++++++++++++++++++++ openAgentInfo: name", name, "account", account, "tokenUri", tokenUri);
 
-			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null, tokenUri: tokenUri || null });
+			setInfoData({ agentId: agentId, agentName: name || null, agentAccount: account || null, tokenUri: tokenUri || null, chainId: chainId, a2aEndpoint: row.a2aEndpoint || null });
 		} catch (e: any) {
 			setInfoError(e?.message || 'Failed to load agent info');
 		} finally {
@@ -884,7 +876,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 		try {
 			const base = cardJson ? JSON.parse(cardJson) : {};
 			const merged = buildMerged(base);
-			await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: cardDomain, card: merged }) });
+			// Note: agent-cards API endpoint removed - cards are now stored client-side only
 			const json = JSON.stringify(merged, null, 2);
 			setStoredCard(cardDomain, json);
 			setCardJson(json);
@@ -1276,12 +1268,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			setStoredCard(agentName, json);
 			setCardJson(json);
 			await populateFieldsFromObj(cardObj);
-			// Persist immediately on first creation
-			try {
-				await fetch('/api/agent-cards', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain: agentName, card: cardObj }) });
-			} catch (e: any) {
-				setCardError(e?.message ?? 'Save failed');
-			}
+			// Note: agent-cards API endpoint removed - cards are now stored client-side only
 			setCardOpen(true);
 		} catch (err: any) {
 			setCardError(err?.message ?? 'Failed to build agent card');
@@ -2215,30 +2202,203 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			</DialogActions>
 		</Dialog>
 
-		{/* Agent INFO dialog */}
-		<Dialog open={infoOpen} onClose={() => setInfoOpen(false)} fullWidth maxWidth="sm">
-			<DialogTitle>Agent Identity Info</DialogTitle>
-			<DialogContent dividers>
-				{infoLoading ? (
-					<Typography variant="body2" color="text.secondary">Loading…</Typography>
-				) : infoError ? (
-					<Typography variant="body2" color="error">{infoError}</Typography>
-				) : infoData ? (
-					<Stack spacing={1}>
-						<Typography variant="body2"><strong>Agent ID:</strong> {infoData.agentId ?? '—'}</Typography>
-						<Typography variant="body2"><strong>Agent Name:</strong> {infoData.agentName ?? '—'}</Typography>
-						<Typography variant="body2"><strong>Agent Account:</strong> {infoData.agentAccount ?? '—'}</Typography>
-						<Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-							<strong>Token URI:</strong> {infoData.tokenUri ?? '—'}
+		{/* Agent INFO dialog - ENS Name Card Style */}
+		<Dialog open={infoOpen} onClose={() => setInfoOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: 2 } }}>
+			{infoLoading ? (
+				<>
+					<DialogTitle>Loading…</DialogTitle>
+					<DialogContent>
+						<Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading agent information…</Typography>
+					</DialogContent>
+				</>
+			) : infoError ? (
+				<>
+					<DialogTitle>Error</DialogTitle>
+					<DialogContent>
+						<Typography variant="body2" color="error" sx={{ py: 2 }}>{infoError}</Typography>
+					</DialogContent>
+					<DialogActions>
+						<Button onClick={() => setInfoOpen(false)}>Close</Button>
+					</DialogActions>
+				</>
+			) : infoData ? (
+				<>
+					{/* Header - Domain Name */}
+					<Box sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', p: 3, position: 'relative' }}>
+						<Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 0.5, wordBreak: 'break-word' }}>
+							{infoData.agentName || 'Unnamed Agent'}
 						</Typography>
-					</Stack>
-				) : (
-					<Typography variant="body2" color="text.secondary">No info</Typography>
-				)}
-			</DialogContent>
-			<DialogActions>
-				<Button onClick={() => setInfoOpen(false)}>Close</Button>
-			</DialogActions>
+						{infoData.agentName && (
+							<Link 
+								href={`https://sepolia.app.ens.domains/${infoData.agentName}`} 
+								target="_blank" 
+								rel="noopener noreferrer"
+								sx={{ color: 'primary.contrastText', opacity: 0.9, textDecoration: 'none', fontSize: '0.875rem', '&:hover': { textDecoration: 'underline' } }}
+							>
+								View on ENS App →
+							</Link>
+						)}
+					</Box>
+
+					<DialogContent sx={{ p: 0 }}>
+						<Stack spacing={0}>
+							{/* Address Records Card */}
+							<Card variant="outlined" sx={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
+								<CardHeader 
+									title="Address" 
+									titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}
+									sx={{ pb: 1 }}
+								/>
+								<CardContent sx={{ pt: 0 }}>
+									{infoData.agentAccount ? (
+										<Stack spacing={1}>
+											<Box>
+												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+													{infoData.chainId ? getExplorerName(infoData.chainId) : 'Ethereum'}
+												</Typography>
+												<Stack direction="row" spacing={1} alignItems="center">
+													{infoData.chainId && getExplorerUrl(infoData.chainId) && infoData.agentAccount ? (
+														<Link 
+															href={`${getExplorerUrl(infoData.chainId)}/address/${infoData.agentAccount}`} 
+															target="_blank" 
+															rel="noopener noreferrer"
+															sx={{ 
+																fontFamily: 'monospace', 
+																wordBreak: 'break-all',
+																fontWeight: 500,
+																textDecoration: 'none',
+																color: 'inherit',
+																flex: 1,
+																'&:hover': { textDecoration: 'underline' }
+															}}
+														>
+															{infoData.agentAccount}
+														</Link>
+													) : (
+														<Typography 
+															variant="body2" 
+															sx={{ 
+																fontFamily: 'monospace', 
+																wordBreak: 'break-all',
+																fontWeight: 500,
+																flex: 1
+															}}
+														>
+															{infoData.agentAccount}
+														</Typography>
+													)}
+													<Tooltip title="Copy address">
+														<IconButton 
+															size="small" 
+															onClick={() => navigator.clipboard.writeText(infoData.agentAccount!)}
+														>
+															<ContentCopyIcon fontSize="small" />
+														</IconButton>
+													</Tooltip>
+												</Stack>
+											</Box>
+										</Stack>
+									) : (
+										<Typography variant="body2" color="text.secondary">No address set</Typography>
+									)}
+								</CardContent>
+							</Card>
+
+							{/* Text Records Card */}
+							<Card variant="outlined" sx={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
+								<CardHeader 
+									title="Records" 
+									titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}
+									sx={{ pb: 1 }}
+								/>
+								<CardContent sx={{ pt: 0 }}>
+									<Stack spacing={2}>
+										{infoData.agentId && (
+											<Box>
+												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Agent ID</Typography>
+												<Stack direction="row" spacing={1} alignItems="center">
+													<Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
+														{infoData.agentId}
+													</Typography>
+													{infoData.chainId && (() => {
+														const identityRegistry = getIdentityRegistry(infoData.chainId);
+														const explorerBase = getExplorerUrl(infoData.chainId);
+														if (identityRegistry && explorerBase) {
+															const nftUrl = `${explorerBase}/nft/${identityRegistry}/${infoData.agentId}`;
+															return (
+																<Link 
+																	href={nftUrl} 
+																	target="_blank" 
+																	rel="noopener noreferrer"
+																	sx={{ 
+																		fontSize: '0.875rem',
+																		textDecoration: 'none',
+																		'&:hover': { textDecoration: 'underline' }
+																	}}
+																>
+																	View on {getExplorerName(infoData.chainId)} →
+																</Link>
+															);
+														}
+														return null;
+													})()}
+												</Stack>
+											</Box>
+										)}
+										{infoData.a2aEndpoint && (
+											<Box>
+												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>A2A Endpoint</Typography>
+												<Link 
+													href={infoData.a2aEndpoint} 
+													target="_blank" 
+													rel="noopener noreferrer"
+													sx={{ 
+														wordBreak: 'break-all',
+														fontSize: '0.875rem',
+														textDecoration: 'none',
+														'&:hover': { textDecoration: 'underline' }
+													}}
+												>
+													{infoData.a2aEndpoint}
+												</Link>
+											</Box>
+										)}
+										
+										{infoData.tokenUri && (
+											<Box>
+												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Token URI</Typography>
+												<Typography 
+													variant="body2" 
+													sx={{ 
+														wordBreak: 'break-all',
+														fontFamily: 'monospace',
+														fontSize: '0.875rem'
+													}}
+												>
+													{infoData.tokenUri}
+												</Typography>
+											</Box>
+										)}
+									</Stack>
+								</CardContent>
+							</Card>
+						</Stack>
+					</DialogContent>
+					<DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+						<Button onClick={() => setInfoOpen(false)} variant="outlined">Close</Button>
+					</DialogActions>
+				</>
+			) : (
+				<>
+					<DialogTitle>No Information</DialogTitle>
+					<DialogContent>
+						<Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No agent information available</Typography>
+					</DialogContent>
+					<DialogActions>
+						<Button onClick={() => setInfoOpen(false)}>Close</Button>
+					</DialogActions>
+				</>
+			)}
 		</Dialog>
 
 			{/* Agent Card dialog */}

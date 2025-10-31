@@ -1,0 +1,17 @@
+name = "erc8004-web"
+compatibility_date = "2024-01-01"
+
+# Pages build output directory - excludes .next/cache which contains large dev files
+pages_build_output_dir = ".next"
+
+# Cloudflare Pages configuration
+# Note: Environment variables should be configured in Cloudflare Pages dashboard
+# Settings → Environment variables
+
+# For local development with wrangler
+# [env.development]
+# vars = { NODE_ENV = "development" }
+
+# For production
+# [env.production]
+# vars = { NODE_ENV = "production" }
