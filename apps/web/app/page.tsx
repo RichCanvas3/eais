@@ -37,7 +37,7 @@ export default function Page() {
       ) : (
         <Box sx={{ textAlign: 'center', py: 8 }}>
           <Typography variant="h3" fontWeight={600} sx={{ mb: 3, color: 'primary.main' }}>
-            Create and Manage your Agent Identity
+            Create and Manage your Agent Identities
           </Typography>
 
           <Button 

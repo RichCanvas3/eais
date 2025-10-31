@@ -128,16 +128,14 @@ export function AddAgentModal({ open, onClose }: Props) {
     }
   }, [clients, selectedChainIdHex]);
 
-  // Reset selectedChainIdHex to first chain when modal opens
+  // Reset selectedChainIdHex to Ethereum Sepolia when modal opens
   React.useEffect(() => {
-    if (open && !selectedChainIdHex) {
-      const first = Object.keys(clients)[0];
-      if (first) {
-        console.log('Setting default chain to first available:', first);
-        setSelectedChainIdHex(first);
-      }
+    if (open) {
+      // Always default to Ethereum Sepolia (0xaa36a7) for Create Agent Identity
+      setSelectedChainIdHex('0xaa36a7');
+      console.log('Resetting chain to Ethereum Sepolia for Create Agent Identity');
     }
-  }, [open, clients, selectedChainIdHex]);
+  }, [open]);
 
   // Check agent availability when agent name or domain changes
   React.useEffect(() => {
@@ -240,10 +238,23 @@ export function AddAgentModal({ open, onClose }: Props) {
   */
 
   // Helper function to get the appropriate ENS client for the selected chain
+  // Default to L1 (AIAgentENSClient) for Ethereum Sepolia, but use chain-specific client for other chains
   const getENSClientForChain = React.useCallback(() => {
-    const client = agentENSClientForChain || agentENSClient;
-    return client;
-  }, [agentENSClientForChain, agentENSClient]);
+    // For Ethereum Sepolia (0xaa36a7), use the base L1 ENS client
+    if (selectedChainIdHex === '0xaa36a7' && agentENSClient) {
+      return agentENSClient;
+    }
+    // For other chains (like Base Sepolia), use the chain-specific client
+    // This will be AIAgentL2ENSDurenClient for L2 chains
+    if (agentENSClientForChain) {
+      return agentENSClientForChain;
+    }
+    // Fallback to base L1 client if chain-specific client is not available
+    if (!agentENSClient) {
+      throw new Error('No ENS client available');
+    }
+    return agentENSClient;
+  }, [selectedChainIdHex, agentENSClient, agentENSClientForChain]);
 
   // Helper function to convert ethers.js provider to viem-compatible provider
   const createViemCompatibleProvider = (ethersProvider: any) => {
@@ -963,7 +974,7 @@ export function AddAgentModal({ open, onClose }: Props) {
     try {
 
       // create ens agent name
-      createAgentName(agentName, org, (ensAgentAddress || agentAccount) as `0x${string}`)
+      await createAgentName(agentName, org, (ensAgentAddress || agentAccount) as `0x${string}`)
 
       // mind agent identity
       const agentNameLower = agentName.trim().toLowerCase();
@@ -1024,6 +1035,7 @@ export function AddAgentModal({ open, onClose }: Props) {
         
       const agentAddress = await agentAccountClient.getAddress();
 
+      /*
       // Ensure Agent AA is deployed (sponsored via Pimlico)
       const deployed = await agentAccountClient.isDeployed();
       if (!deployed) {
@@ -1044,6 +1056,7 @@ export function AddAgentModal({ open, onClose }: Props) {
 				});
 				await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
       }
+        */
 
       // Check if an agent already exists for this AA address via backend DB
       try {
