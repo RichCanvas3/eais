@@ -122,6 +122,12 @@ Add these in Cloudflare Pages dashboard (**Settings** → **Environment variable
 
 **⚠️ CRITICAL**: Without these D1 variables, API routes will fail because they can't access the database.
 
+### GraphQL API (REQUIRED for API routes)
+- `GRAPHQL_API_URL` or `NEXT_PUBLIC_GRAPHQL_API_URL` - URL to your GraphQL server
+  - Example: `https://your-graphql-worker.workers.dev/graphql`
+  - Or: `http://localhost:4000/graphql` (for local development)
+  - **Note**: If not set, API routes will return empty data (site will still load)
+
 ### OpenAI (Optional - for discover/graph features)
 - `OPENAI_API_KEY` - For AI-powered agent discovery
 - `OPENAI_MODEL` - Model to use (defaults to 'gpt-4o-mini')

@@ -42,3 +42,14 @@ Thumbs.db
 data/
 apps/web/data/
 
+# Standalone build artifacts (not needed for Pages)
+.next/standalone/
+
+# Serverless function files (we use edge runtime)
+.next/server/pages/**/*.js
+.next/server/app/**/*.js
+
+# Additional large build artifacts
+.next/server/chunks/**/*.js.gz
+.next/server/chunks/**/*.js.br
+

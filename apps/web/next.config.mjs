@@ -12,8 +12,10 @@ const nextConfig = {
       'viem',
       '@ensdomains/ensjs',
     ],
-    // Exclude Node.js-only packages from server bundle (if any)
-    // serverComponentsExternalPackages: [],
+    // Exclude Node.js-only packages from server bundle
+    serverComponentsExternalPackages: [
+      'better-sqlite3', // Already removed, but keep here as safety
+    ],
   },
   
   // Optimize for Cloudflare Pages
@@ -24,8 +26,51 @@ const nextConfig = {
       // Disable source maps to reduce bundle size
       config.devtool = false;
       
-      // Let Next.js handle bundle splitting by default - it's more optimized
-      // Custom splitChunks can cause duplication and increase total size
+      // Aggressive code splitting for client bundles
+      if (!isServer) {
+        config.optimization = {
+          ...config.optimization,
+          splitChunks: {
+            chunks: 'all',
+            cacheGroups: {
+              default: false,
+              vendors: false,
+              // Separate large libraries
+              ethers: {
+                name: 'ethers',
+                test: /[\\/]node_modules[\\/]ethers[\\/]/,
+                priority: 20,
+                reuseExistingChunk: true,
+              },
+              viem: {
+                name: 'viem',
+                test: /[\\/]node_modules[\\/]viem[\\/]/,
+                priority: 20,
+                reuseExistingChunk: true,
+              },
+              web3auth: {
+                name: 'web3auth',
+                test: /[\\/]node_modules[\\/]@web3auth[\\/]/,
+                priority: 20,
+                reuseExistingChunk: true,
+              },
+              mui: {
+                name: 'mui',
+                test: /[\\/]node_modules[\\/]@mui[\\/]/,
+                priority: 20,
+                reuseExistingChunk: true,
+              },
+              // Everything else
+              common: {
+                name: 'commons',
+                minChunks: 2,
+                priority: 10,
+                reuseExistingChunk: true,
+              },
+            },
+          },
+        };
+      }
       
       return config;
     },

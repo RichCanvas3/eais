@@ -1,141 +1,66 @@
-# Cloudflare Pages Startup Issues - Immediate Fixes
+# Cloudflare Pages Startup Issues - ✅ FIXED
 
-## 🔴 CRITICAL ISSUE: API Routes Using Node.js Dependencies
+## ✅ All Critical Issues Resolved
 
-### Problem
-Your API routes are importing from `../../../../indexer/src/db` which:
-1. Uses `better-sqlite3` (Node.js native module)
-2. Uses Node.js `fs` and `path` modules
-3. Doesn't work on Cloudflare Pages edge runtime
+### 1. ✅ Database Access - FIXED
 
-**Affected Routes**:
-- `/api/agents`
-- `/api/stats`
-- `/api/agents/[agentId]`
+**Problem (RESOLVED)**: API routes were importing Node.js-only dependencies.
 
-### Why It Prevents Startup
+**Solution**: All API routes now use HTTP calls to your GraphQL server:
+- `/api/agents` → GraphQL `agents` query
+- `/api/stats` → GraphQL `agents` query  
+- `/api/agents/[agentId]` → GraphQL `agent` query
 
-When these routes are accessed (even during build or initial page load), they try to:
-1. Import `better-sqlite3` → **FAILS** (not available on edge)
-2. Import `fs` module → **FAILS** (not available on edge)
-3. Initialize database → **FAILS** (can't use Node.js APIs)
+**Benefits**:
+- ✅ No Node.js dependencies
+- ✅ Works on Cloudflare Pages edge runtime
+- ✅ Graceful fallback (returns empty data if GraphQL not configured)
+- ✅ Site can start even without GraphQL URL set
 
-This causes the entire site to fail at startup.
+### 2. ✅ File System Access - FIXED
 
-## ✅ Quick Fix Options
+**Status**: `/api/agent-cards` route removed. Agent cards stored client-side only.
 
-### Option 1: Temporarily Disable API Routes (Fastest)
+## Configuration Required
 
-Comment out the database imports and return empty data:
+### GraphQL API URL (Optional - but recommended)
 
-```typescript
-// apps/web/app/api/agents/route.ts
-import { NextResponse } from 'next/server';
-// import { db } from '../../../../indexer/src/db'; // DISABLED for Cloudflare
+Set one of these in Cloudflare Pages dashboard:
+- `GRAPHQL_API_URL` - Server-side only
+- `NEXT_PUBLIC_GRAPHQL_API_URL` - Available to browser
 
-export async function GET(req: Request) {
-  // Temporarily return empty data until database is configured
-  return NextResponse.json({ rows: [], total: 0, page: 1, pageSize: 50 });
-}
-```
+**Example**: `https://your-graphql-worker.workers.dev/graphql`
 
-### Option 2: Use Your GraphQL Server (Recommended)
+**Note**: If not set, API routes return empty data but the site will still load.
 
-Point API routes to your existing GraphQL endpoint:
+### Required Environment Variables
 
-```typescript
-// apps/web/app/api/agents/route.ts
-import { NextResponse } from 'next/server';
+Ensure these are set for the app to function:
 
-const GRAPHQL_URL = process.env.GRAPHQL_API_URL || 'https://your-graphql-worker.workers.dev/graphql';
-
-export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const query = `
-      query GetAgents($page: Int, $pageSize: Int) {
-        agents(page: $page, pageSize: $pageSize) {
-          rows { chainId, agentId, agentName }
-          total
-        }
-      }
-    `;
-    
-    const res = await fetch(GRAPHQL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { page: 1, pageSize: 50 } })
-    });
-    
-    const data = await res.json();
-    return NextResponse.json(data.data.agents);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed' }, { status: 500 });
-  }
-}
-```
-
-### Option 3: Use D1 HTTP API
-
-If you have a Cloudflare D1 database, use the HTTP API:
-
-```typescript
-const D1_API_URL = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
-
-export async function GET(req: Request) {
-  const query = 'SELECT * FROM agents LIMIT 50';
-  const res = await fetch(D1_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ sql: query })
-  });
-  // ...
-}
-```
-
-## 🚨 Immediate Action Required
-
-1. **Check Cloudflare Pages Build Logs**:
-   - Go to your Pages project → Deployments → Latest
-   - Look for errors mentioning:
-     - "better-sqlite3"
-     - "Module not found"
-     - "Cannot find module"
-     - "ERR_MODULE_NOT_FOUND"
-
-2. **Check Runtime Logs**:
-   - Cloudflare Pages dashboard → Functions → Logs
-   - Or check browser console for 500 errors
-
-3. **Quick Test**:
-   - Try accessing `https://your-site.pages.dev/api/stats`
-   - If it returns 500 or crashes, that's the issue
-
-## 📋 Environment Variables Check
-
-Ensure these are set in Cloudflare Pages:
-
-### Required for App Startup:
 - `NEXT_PUBLIC_WEB3AUTH_CLIENT_ID`
 - `NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL`
 - `NEXT_PUBLIC_ETH_SEPOLIA_CHAIN_ID_HEX`
+- `NEXT_PUBLIC_ETH_SEPOLIA_ENS_REGISTRY`
+- `NEXT_PUBLIC_ETH_SEPOLIA_ENS_RESOLVER`
+- `NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY`
+- `NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL`
+- Plus other chain-specific variables if needed
 
-### Required for Database (if using Option 3):
-- `USE_D1=true`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_D1_DATABASE_ID`
-- `CLOUDFLARE_API_TOKEN`
+## Testing
 
-### Optional:
-- `GRAPHQL_API_URL` (if using Option 2)
-- `OPENAI_API_KEY` (for discover/graph features)
+1. **Deploy to Cloudflare Pages**
+2. **Check if site loads** - Should work even without GraphQL URL
+3. **Test API routes**:
+   - Visit `https://your-site.pages.dev/api/stats`
+   - Should return data if GraphQL URL is set, or empty data if not
+4. **Set GraphQL URL** - Once set, API routes will return real data
 
-## 🔧 Next Steps
+## What Changed
 
-1. **Immediate**: Comment out database imports in API routes
-2. **Short-term**: Point API routes to your GraphQL server
-3. **Long-term**: Migrate API routes to Cloudflare Workers Functions
+- ✅ Removed all direct database imports from API routes
+- ✅ Replaced with HTTP GraphQL calls
+- ✅ Removed filesystem dependencies
+- ✅ Added graceful error handling
+- ✅ Site can start even if GraphQL is unavailable
 
+The site should now start successfully on Cloudflare Pages! 🎉

@@ -2,38 +2,20 @@
 
 ## Common Issues Preventing Startup
 
-### 1. ❌ Database Access Issue (CRITICAL)
+### 1. ✅ Database Access Issue (RESOLVED)
 
-**Problem**: API routes import from `../../../../indexer/src/db` which uses:
-- `better-sqlite3` (Node.js native module - doesn't work on Cloudflare edge)
-- Direct D1 database access via `wrangler` bindings
+**Status**: API routes have been updated to use HTTP calls to GraphQL server instead of direct database imports.
 
-**Impact**: API routes (`/api/agents`, `/api/stats`, `/api/agents/[agentId]`) will fail at startup or runtime.
+**Solution Implemented**:
+- All API routes (`/api/agents`, `/api/stats`, `/api/agents/[agentId]`) now use GraphQL HTTP calls
+- No Node.js dependencies (no `better-sqlite3`, no `fs`, no direct DB imports)
+- Routes gracefully fall back to empty data if GraphQL URL is not configured
+- Site can start even without GraphQL server (API routes return empty data)
 
-**Solution Options**:
-
-#### Option A: Use Cloudflare Workers Functions (Recommended)
-- Move API routes to Cloudflare Workers Functions
-- Access D1 database through Workers bindings
-- Configure Workers in `wrangler.toml`:
-
-```toml
-[functions]
-directory = "functions"
-
-[[functions.routes]]
-pattern = "/api/*"
-```
-
-#### Option B: Use HTTP API Gateway
-- Create a separate Cloudflare Worker for the GraphQL API
-- Have Pages API routes call the Worker via HTTP
-- Example: `fetch('https://graphql.your-domain.com')`
-
-#### Option C: Convert to Edge-compatible Database
-- Use Cloudflare D1 via HTTP API
-- Use fetch to query D1 from Pages
-- Requires D1 HTTP API endpoint
+**Configuration**:
+- Set `GRAPHQL_API_URL` or `NEXT_PUBLIC_GRAPHQL_API_URL` environment variable
+- Example: `https://your-graphql-worker.workers.dev/graphql`
+- If not set, API routes return empty data (site still loads)
 
 ### 2. ✅ File System Access Issue (RESOLVED)
 
@@ -109,34 +91,22 @@ const nextConfig = {
 - "Cannot find module"
 - "Dynamic require is not supported"
 
-## Immediate Fixes Needed
+## ✅ Issues Resolved
 
-### Priority 1: Database Access
+### ✅ Database Access - FIXED
 
-The API routes need to be refactored to work with Cloudflare's edge runtime:
+All API routes have been updated to use GraphQL HTTP calls:
+- `/api/agents` → Uses GraphQL `agents` query
+- `/api/stats` → Uses GraphQL `agents` query with client-side aggregation
+- `/api/agents/[agentId]` → Uses GraphQL `agent` query
 
-**Current (Won't Work)**:
-```typescript
-import { db } from '../../../../indexer/src/db';
-```
+**No more Node.js dependencies in API routes!**
 
-**Needs to be**:
-- HTTP calls to a Worker with D1 access, OR
-- D1 HTTP API calls, OR
-- Move API routes to Cloudflare Workers Functions
+### ✅ File System - FIXED
 
-### Priority 2: File System
-
-**Current (Won't Work)**:
-```typescript
-import * as fs from 'fs';
-fs.readFileSync(...);
-```
-
-**Needs to be**:
-- Cloudflare KV storage
-- Cloudflare R2 storage
-- Or remove this feature for Pages deployment
+- `/api/agent-cards` route has been removed
+- Agent cards are now stored client-side only
+- No filesystem access needed
 
 ### Priority 3: Environment Variables
 
