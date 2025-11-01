@@ -969,7 +969,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
         url.searchParams.set("page", String(page));
         url.searchParams.set("pageSize", "50");
 		try {
-			console.info("&&&&&&&&&&&& fetchData: url: ", url)
+
 				const res = await fetch(url);
                 if (!res.ok) {
                     setData({ page: page, pageSize: 50, total: 0, rows: [] });
@@ -980,8 +980,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				if (text && text.trim().length > 0) {
 					try { json = JSON.parse(text); } catch { json = null; }
 				}
-				console.info("&&&&&&&&&&&& fetchData: json: ", JSON.stringify(json, null, 2));
-                // Ensure the response has the correct structure
+				
+				// Ensure the response has the correct structure
                 const responseData = json ?? { page, pageSize: 50, total: 0, rows: [] };
                 setData({
                     page: responseData.page ?? page,

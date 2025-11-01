@@ -17,11 +17,19 @@ async function queryGraphQL(query: string, variables: any = {}) {
     const requestBody = { query, variables };
     console.info("++++++++++++++++++++ queryGraphQL request body: ", JSON.stringify(requestBody, null, 2));
 
+    // Get secret access code for server-to-server authentication
+    const secretAccessCode = process.env.GRAPHQL_SECRET_ACCESS_CODE;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (secretAccessCode) {
+      headers['Authorization'] = `Bearer ${secretAccessCode}`;
+    }
+
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
       body: JSON.stringify(requestBody),
     });
 
