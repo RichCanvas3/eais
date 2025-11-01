@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
+export const dynamic = 'force-dynamic';
 async function queryGraphQL(query: string, variables: any = {}) {
   const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL;
   

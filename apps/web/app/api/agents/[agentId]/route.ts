@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-//export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic';
 
 async function queryGraphQL(query: string, variables: any = {}) {
   // Get GraphQL endpoint URL from environment at runtime
