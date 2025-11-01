@@ -57,6 +57,13 @@ const schema = buildSchema(`
     searchAgents(query: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
     
     getAccessCode(address: String!): AccessCode
+    
+    countAgents(
+      chainId: Int
+      agentId: String
+      agentOwner: String
+      agentName: String
+    ): Int!
   }
 
   type Mutation {

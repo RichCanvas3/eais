@@ -13,6 +13,7 @@ compatibility_flags = ["nodejs_compat"]
 # Environment variables
 [vars]
 NODE_ENV = "production"
+GRAPHQL_SECRET_ACCESS_CODE = "ERC8004-secret-code"
 
 # Optional: Production-specific route configuration
 # route = { pattern = "graphql.erc8004.*", zone_name = "your-domain.com" }

@@ -144,6 +144,22 @@ export function createDBQueries(db: any) {
       return result || null;
     },
 
+    countAgents: async (args: {
+      chainId?: number;
+      agentId?: string;
+      agentOwner?: string;
+      agentName?: string;
+    }) => {
+      const { where, params } = buildWhereClause(args);
+      const query = `SELECT COUNT(*) as count FROM agents ${where}`;
+      console.log('🔢 countAgents SQL:', query, 'params:', params);
+      
+      const result = await db.prepare(query).bind(...params).first() as { count: number } | undefined;
+      const count = result?.count || 0;
+      console.log(`✅ countAgents returning: ${count}`);
+      return count;
+    },
+
     createAccessCode: async (args: { address: string }) => {
       const { address } = args;
       const normalizedAddress = address.toLowerCase();

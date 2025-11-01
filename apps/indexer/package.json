@@ -4,6 +4,7 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
+    "sync:check": "bash sync-check.sh",
     "dev": "tsx src/indexer.ts",
     "dev:agent": "tsx src/indexer.ts",
     "dev:graphql": "tsx src/graphql-server.ts",

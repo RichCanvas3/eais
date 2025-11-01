@@ -78,6 +78,13 @@ const schema = buildSchema(`
     searchAgents(query: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
     
     getAccessCode(address: String!): AccessCode
+    
+    countAgents(
+      chainId: Int
+      agentId: String
+      agentOwner: String
+      agentName: String
+    ): Int!
   }
 
   type Mutation {
@@ -193,6 +200,7 @@ const root = {
       const orderByClause = buildOrderByClause(orderBy, orderDirection);
     
       console.log('📋 SQL orderByClause:', orderByClause);
+      console.log('📋 SQL where clause:', where);
       const query = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
     const allParams = [...params, limit, offset];
       
@@ -200,6 +208,16 @@ const root = {
       console.log('📊 SQL params:', allParams);
     
     const rows = db.prepare(query).all(...allParams) as any[];
+    
+    // Log sample of results to debug ordering
+    if (rows.length > 0) {
+      const sampleIds = rows.slice(0, 5).map((r: any) => `${r.agentId} (chain: ${r.chainId})`).join(', ');
+      console.log(`📊 Sample agentIds (first 5): ${sampleIds}`);
+      if (rows.length >= 5) {
+        const lastIds = rows.slice(-5).map((r: any) => `${r.agentId} (chain: ${r.chainId})`).join(', ');
+        console.log(`📊 Sample agentIds (last 5): ${lastIds}`);
+      }
+    }
  
       console.log(`✅ agents resolver returning ${rows.length} rows`);
     return rows;
@@ -305,6 +323,27 @@ const root = {
       return row || null;
     } catch (error) {
       console.error('❌ Error in getAccessCode resolver:', error);
+      throw error;
+    }
+  },
+
+  countAgents: (args: {
+    chainId?: number;
+    agentId?: string;
+    agentOwner?: string;
+    agentName?: string;
+  }) => {
+    try {
+      const { where, params } = buildWhereClause(args);
+      const query = `SELECT COUNT(*) as count FROM agents ${where}`;
+      console.log('🔢 countAgents SQL:', query, 'params:', params);
+      
+      const result = db.prepare(query).get(...params) as { count: number } | undefined;
+      const count = result?.count || 0;
+      console.log(`✅ countAgents returning: ${count}`);
+      return count;
+    } catch (error) {
+      console.error('❌ Error in countAgents resolver:', error);
       throw error;
     }
   },

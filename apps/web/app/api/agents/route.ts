@@ -123,23 +123,20 @@ export async function GET(req: Request) {
       console.info("++++++++++++++++++++ GET first row sample: ", JSON.stringify(rows[0], null, 2));
     }
 
-    // Get total count (using a separate query for simplicity)
-    // Don't pass orderBy/orderDirection to count query - it doesn't need them
-    const countFilters: any = { limit: 10000, offset: 0 };
+    // Get total count using the new countAgents query (more efficient)
+    const countFilters: any = {};
     if (chainId) countFilters.chainId = parseInt(chainId);
     if (id) countFilters.agentId = id;
     if (address) countFilters.agentOwner = address.toLowerCase();
     if (name) countFilters.agentName = name.toLowerCase();
     
     const countQuery = `
-      query GetAgentsCount($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String, $limit: Int, $offset: Int) {
-        agents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName, limit: $limit, offset: $offset) {
-          agentId
-        }
+      query GetAgentsCount($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String) {
+        countAgents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName)
       }
     `;
     const countData = await queryGraphQL(countQuery, countFilters);
-    const total = countData?.agents?.length || rows.length;
+    const total = countData?.countAgents || rows.length;
 
     return NextResponse.json({ rows, total, page, pageSize });
   } catch (e: any) {
