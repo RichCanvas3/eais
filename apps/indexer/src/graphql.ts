@@ -3,6 +3,16 @@ import { buildSchema, GraphQLSchema } from 'graphql';
 import express from 'express';
 import { db, formatSQLTimestamp } from './db';
 import crypto from 'crypto';
+import { ethers } from 'ethers';
+import { ERC8004Client, EthersAdapter } from '@erc8004/sdk';
+import { 
+  ETH_SEPOLIA_IDENTITY_REGISTRY, 
+  BASE_SEPOLIA_IDENTITY_REGISTRY, 
+  OP_SEPOLIA_IDENTITY_REGISTRY,
+  ETH_SEPOLIA_RPC_HTTP_URL, 
+  BASE_SEPOLIA_RPC_HTTP_URL,
+  OP_SEPOLIA_RPC_HTTP_URL 
+} from './env';
 
 // CORS configuration to allow Authorization header
 const cors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -72,6 +82,13 @@ const schema = buildSchema(`
 
   type Mutation {
     createAccessCode(address: String!): AccessCode!
+    indexAgent(agentId: String!, chainId: Int): IndexAgentResult!
+  }
+
+  type IndexAgentResult {
+    success: Boolean!
+    message: String!
+    processedChains: [String!]!
   }
 `);
 
@@ -326,7 +343,266 @@ const root = {
       throw error;
     }
   },
+
+  indexAgent: async (args: { agentId: string; chainId?: number }) => {
+    try {
+      const { agentId, chainId } = args;
+      const agentIdBigInt = BigInt(agentId);
+      const processedChains: string[] = [];
+
+      // Initialize ERC8004 clients for each chain
+      const ethSepoliaProvider = new ethers.JsonRpcProvider(ETH_SEPOLIA_RPC_HTTP_URL);
+      const ethSepoliaAdapter = new EthersAdapter(ethSepoliaProvider);
+      const erc8004EthSepoliaClient = new ERC8004Client({
+        adapter: ethSepoliaAdapter,
+        addresses: {
+          identityRegistry: ETH_SEPOLIA_IDENTITY_REGISTRY,
+          reputationRegistry: '0x0000000000000000000000000000000000000000',
+          validationRegistry: '0x0000000000000000000000000000000000000000',
+          chainId: 11155111,
+        }
+      });
+
+      const baseSepoliaProvider = new ethers.JsonRpcProvider(BASE_SEPOLIA_RPC_HTTP_URL);
+      const baseSepoliaAdapter = new EthersAdapter(baseSepoliaProvider);
+      const erc8004BaseSepoliaClient = new ERC8004Client({
+        adapter: baseSepoliaAdapter,
+        addresses: {
+          identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY,
+          reputationRegistry: '0x0000000000000000000000000000000000000000',
+          validationRegistry: '0x0000000000000000000000000000000000000000',
+          chainId: 84532,
+        }
+      });
+
+      // Determine which chains to process
+      const chainsToProcess: Array<{ name: string; client: ERC8004Client; chainId: number }> = [];
+      
+      if (chainId === undefined || chainId === 11155111) {
+        chainsToProcess.push({ name: 'ETH Sepolia', client: erc8004EthSepoliaClient, chainId: 11155111 });
+      }
+      
+      if (chainId === undefined || chainId === 84532) {
+        chainsToProcess.push({ name: 'Base Sepolia', client: erc8004BaseSepoliaClient, chainId: 84532 });
+      }
+
+      if (OP_SEPOLIA_RPC_HTTP_URL && OP_SEPOLIA_IDENTITY_REGISTRY) {
+        if (chainId === undefined || chainId === 11155420) {
+          const opSepoliaProvider = new ethers.JsonRpcProvider(OP_SEPOLIA_RPC_HTTP_URL);
+          const opSepoliaAdapter = new EthersAdapter(opSepoliaProvider);
+          const erc8004OpSepoliaClient = new ERC8004Client({
+            adapter: opSepoliaAdapter,
+            addresses: {
+              identityRegistry: OP_SEPOLIA_IDENTITY_REGISTRY,
+              reputationRegistry: '0x0000000000000000000000000000000000000000',
+              validationRegistry: '0x0000000000000000000000000000000000000000',
+              chainId: 11155420,
+            }
+          });
+          chainsToProcess.push({ name: 'Optimism Sepolia', client: erc8004OpSepoliaClient, chainId: 11155420 });
+        }
+      }
+
+      // Process each chain
+      for (const { name, client, chainId: cId } of chainsToProcess) {
+        try {
+          // Check if agent exists by trying to get owner
+          const owner = await client.identity.getOwner(agentIdBigInt);
+          const tokenURI = await client.identity.getTokenURI(agentIdBigInt).catch(() => null);
+          
+          // Get current block number
+          const publicClient = (client as any).adapter?.provider;
+          let blockNumber = 0n;
+          try {
+            const block = await publicClient?.getBlockNumber?.() || await publicClient?.getBlock?.('latest');
+            blockNumber = block?.number ? BigInt(block.number) : 0n;
+          } catch {
+            blockNumber = 0n;
+          }
+          
+          if (owner && owner !== '0x0000000000000000000000000000000000000000') {
+            // Import helper functions from indexer.ts logic (duplicated here for GraphQL)
+            await processAgentDirectly(owner.toLowerCase(), agentIdBigInt, blockNumber, tokenURI, cId);
+            processedChains.push(name);
+          }
+        } catch (error: any) {
+          console.log(`  ⚠️  Agent ${agentId} not found on ${name}: ${error?.message || error}`);
+        }
+      }
+
+      return {
+        success: processedChains.length > 0,
+        message: processedChains.length > 0
+          ? `Successfully indexed agent ${agentId} on ${processedChains.join(', ')}`
+          : `Agent ${agentId} not found on any chain`,
+        processedChains,
+      };
+    } catch (error: any) {
+      console.error('❌ Error in indexAgent resolver:', error);
+      throw error;
+    }
+  },
 };
+
+// Helper function to process an agent directly from chain (not from subgraph)
+// This duplicates logic from indexer.ts but makes it accessible from GraphQL
+async function processAgentDirectly(
+  ownerAddress: string,
+  tokenId: bigint,
+  blockNumber: bigint,
+  tokenURI: string | null,
+  chainId: number
+) {
+  const agentId = tokenId.toString();
+  const agentAddress = ownerAddress;
+  let agentName = '';
+
+  // Fetch metadata from tokenURI
+  let preFetchedMetadata: any = null;
+  let a2aEndpoint: string | null = null;
+  
+  if (tokenURI) {
+    try {
+      // Fetch from IPFS gateway
+      const cidMatch = tokenURI.match(/ipfs:\/\/([a-z0-9]+)/i) || tokenURI.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
+      if (cidMatch) {
+        const cid = cidMatch[1];
+        const ipfsUrl = `https://${cid}.ipfs.w3s.link`;
+        const resp = await fetch(ipfsUrl);
+        if (resp?.ok) {
+          preFetchedMetadata = await resp.json();
+          if (typeof preFetchedMetadata?.name === 'string' && preFetchedMetadata.name.trim()) {
+            agentName = preFetchedMetadata.name.trim();
+          }
+          const endpoints = Array.isArray(preFetchedMetadata.endpoints) ? preFetchedMetadata.endpoints : [];
+          const findEndpoint = (n: string) => {
+            const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
+            return e && typeof e.endpoint === 'string' ? e.endpoint : null;
+          };
+          a2aEndpoint = findEndpoint('A2A') || findEndpoint('a2a');
+        }
+      } else if (/^https?:\/\//i.test(tokenURI)) {
+        const resp = await fetch(tokenURI);
+        if (resp?.ok) {
+          preFetchedMetadata = await resp.json();
+          if (typeof preFetchedMetadata?.name === 'string' && preFetchedMetadata.name.trim()) {
+            agentName = preFetchedMetadata.name.trim();
+          }
+          const endpoints = Array.isArray(preFetchedMetadata.endpoints) ? preFetchedMetadata.endpoints : [];
+          const findEndpoint = (n: string) => {
+            const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
+            return e && typeof e.endpoint === 'string' ? e.endpoint : null;
+          };
+          a2aEndpoint = findEndpoint('A2A') || findEndpoint('a2a');
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch metadata:', e);
+    }
+  }
+
+  if (ownerAddress !== '0x000000000000000000000000000000000000dEaD') {
+    const currentTime = Math.floor(Date.now() / 1000);
+    
+    // Insert or update agent
+    await db.prepare(`
+      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(chainId, agentId) DO UPDATE SET
+        agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
+        agentOwner=excluded.agentOwner,
+        agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
+        a2aEndpoint=COALESCE(excluded.a2aEndpoint, a2aEndpoint),
+        metadataURI=COALESCE(excluded.metadataURI, metadataURI)
+    `).run(
+      chainId,
+      agentId,
+      agentAddress,
+      ownerAddress,
+      agentName,
+      tokenURI,
+      a2aEndpoint,
+      Number(blockNumber),
+      currentTime
+    );
+
+    // Update metadata fields if available
+    if (preFetchedMetadata) {
+      try {
+        const meta = preFetchedMetadata;
+        const type = typeof meta.type === 'string' ? meta.type : null;
+        const name = typeof meta.name === 'string' ? meta.name : null;
+        const description = typeof meta.description === 'string' ? meta.description : null;
+        const image = meta.image == null ? null : String(meta.image);
+        const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
+        const findEndpoint = (n: string) => {
+          const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
+          return e && typeof e.endpoint === 'string' ? e.endpoint : null;
+        };
+        const a2aEp = findEndpoint('A2A') || findEndpoint('a2a');
+        const ensEndpoint = findEndpoint('ENS');
+        let agentAccountEndpoint = findEndpoint('agentAccount');
+        if (!agentAccountEndpoint || !/^eip155:/i.test(agentAccountEndpoint)) {
+          agentAccountEndpoint = `eip155:${chainId}:${ownerAddress}`;
+        }
+        const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
+        const updateTime = Math.floor(Date.now() / 1000);
+        
+        await db.prepare(`
+          UPDATE agents SET
+            type = COALESCE(type, ?),
+            agentName = CASE 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
+              ELSE agentName 
+            END,
+            agentAddress = CASE
+              WHEN (agentAddress IS NULL OR agentAddress = '0x0000000000000000000000000000000000000000')
+                   AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
+              THEN ?
+              ELSE agentAddress
+            END,
+            description = CASE 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
+              ELSE description 
+            END,
+            image = CASE 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
+              ELSE image 
+            END,
+            a2aEndpoint = CASE 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
+              ELSE a2aEndpoint 
+            END,
+            ensEndpoint = CASE 
+              WHEN ? IS NOT NULL AND ? != '' THEN ? 
+              ELSE ensEndpoint 
+            END,
+            agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
+            supportedTrust = COALESCE(?, supportedTrust),
+            rawJson = COALESCE(?, rawJson),
+            updatedAtTime = ?
+          WHERE chainId = ? AND agentId = ?
+        `).run(
+          type,
+          name, name, name,
+          agentAddress, agentAddress, agentAddress,
+          description, description, description,
+          image, image, image,
+          a2aEp, a2aEp, a2aEp,
+          ensEndpoint, ensEndpoint, ensEndpoint,
+          agentAccountEndpoint,
+          JSON.stringify(supportedTrust),
+          JSON.stringify(meta),
+          updateTime,
+          chainId,
+          agentId,
+        );
+      } catch (error) {
+        console.warn('Error updating metadata:', error);
+      }
+    }
+  }
+}
 
 // Create GraphQL handler
 // graphql-http's Express handler automatically reads from req.body when it's parsed
@@ -362,13 +638,14 @@ export function createGraphQLServer(port: number = 4000) {
       return next();
     }
 
-    // Skip auth for getAccessCode and createAccessCode operations
+    // Skip auth for getAccessCode, createAccessCode, and indexAgent operations
     const queryString = (req.body?.query || '').toString();
     const isAccessCodeOperation = 
       queryString.includes('getAccessCode') || 
       queryString.includes('createAccessCode');
+    const isIndexAgentOperation = queryString.includes('indexAgent');
     
-    if (isAccessCodeOperation) {
+    if (isAccessCodeOperation || isIndexAgentOperation) {
       return next();
     }
 

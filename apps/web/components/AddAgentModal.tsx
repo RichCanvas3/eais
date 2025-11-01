@@ -1125,6 +1125,36 @@ export function AddAgentModal({ open, onClose }: Props) {
         tokenUri: tokenUri,
       })
 
+      // Index the agent in the indexer after creation
+      if (agentIdNum > 0n) {
+        try {
+          console.log(`🔄 Indexing agent ${agentIdNum.toString()} after creation...`);
+          const chainId = parseInt(selectedChainIdHex || '0xaa36a7', 16);
+          
+          const indexResponse = await fetch('/api/indexAgent', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              agentId: agentIdNum.toString(),
+              chainId: chainId,
+            }),
+          });
+
+          if (indexResponse.ok) {
+            const indexData = await indexResponse.json();
+            console.log('✅ Agent indexed successfully:', indexData);
+          } else {
+            const errorData = await indexResponse.json();
+            console.warn('⚠️ Failed to index agent:', errorData);
+            // Don't throw - indexing failure shouldn't block the user
+          }
+        } catch (indexError: any) {
+          console.warn('⚠️ Error indexing agent:', indexError?.message || indexError);
+          // Don't throw - indexing failure shouldn't block the user
+        }
+      }
 
       setIsSubmitting(false);
       setMintingProgress(100);

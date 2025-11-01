@@ -2990,7 +2990,11 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			{/* Add Agent Modal */}
 			<AddAgentModal
 				open={addAgentOpen}
-				onClose={() => setAddAgentOpen(false)}
+				onClose={() => {
+					setAddAgentOpen(false);
+					// Refresh the table after agent creation
+					fetchData(data.page);
+				}}
 			/>
 
 			{/* DID:Web Modal */}

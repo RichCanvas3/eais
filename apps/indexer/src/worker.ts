@@ -61,6 +61,13 @@ const schema = buildSchema(`
 
   type Mutation {
     createAccessCode(address: String!): AccessCode!
+    indexAgent(agentId: String!, chainId: Int): IndexAgentResult!
+  }
+
+  type IndexAgentResult {
+    success: Boolean!
+    message: String!
+    processedChains: [String!]!
   }
 `);
 
@@ -279,7 +286,7 @@ export default {
           query = url.searchParams.get('query') || '';
         }
         
-        // Check if this is an access code operation (skip auth)
+        // Check if this is an access code operation or indexAgent (skip auth)
         // Also check operationName if provided
         const operationName = body?.operationName || '';
         const queryString = (query || '').toString();
@@ -288,8 +295,11 @@ export default {
           operationName === 'createAccessCode' ||
           (typeof queryString === 'string' && queryString.includes('getAccessCode')) || 
           (typeof queryString === 'string' && queryString.includes('createAccessCode'));
+        const isIndexAgentOperation = 
+          operationName === 'indexAgent' ||
+          (typeof queryString === 'string' && queryString.includes('indexAgent'));
         
-        if (!isAccessCodeOperation) {
+        if (!isAccessCodeOperation && !isIndexAgentOperation) {
           // Require access code authentication
           const authHeader = request.headers.get('authorization') || '';
           const accessCode = authHeader.startsWith('Bearer ') 

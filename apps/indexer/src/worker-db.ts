@@ -180,6 +180,17 @@ export function createDBQueries(db: any) {
         createdAt: timestamp,
       };
     },
+
+    indexAgent: async (args: { agentId: string; chainId?: number }, env?: any) => {
+      // Note: This requires environment variables to be set in the Worker
+      // For now, return an error indicating it's not fully implemented in workers
+      // The local GraphQL server (graphql.ts) has full implementation
+      return {
+        success: false,
+        message: 'indexAgent mutation is currently only available in the local GraphQL server. Please use the local server at http://localhost:4000/graphql for agent indexing.',
+        processedChains: [],
+      };
+    },
   };
 }
 
