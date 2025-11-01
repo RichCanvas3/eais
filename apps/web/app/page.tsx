@@ -176,7 +176,7 @@ export default function Page() {
               <Card elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
                 <CardContent sx={{ p: '0 !important' }}>
                   <Typography variant="subtitle1" fontWeight={500} sx={{ mb: 1, color: 'text.primary' }}>
-                    Indexer GraphQL Access
+                    ERC-8004 Agent GraphQL
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
                     Query agent data via GraphQL API. Get your access token.

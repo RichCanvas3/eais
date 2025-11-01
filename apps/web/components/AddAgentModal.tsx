@@ -330,7 +330,6 @@ export function AddAgentModal({ open, onClose }: Props) {
   function cleanOrg(dom: string) {
     const base = dom.trim().toLowerCase().replace(/^ens:\s*/i, '').replace(/\.eth$/i, '');
     const baseClean = base.replace(/[^a-z0-9-]/g, '');
-    console.info("............cleanOrg: base: ", base, "baseClean: ", baseClean);
     return baseClean;
   }
 
