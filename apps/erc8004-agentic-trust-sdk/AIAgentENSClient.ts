@@ -373,7 +373,7 @@ export class AIAgentENSClient {
         args: [subnameNode]
       });
       
-      const hasOwner = existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000';
+      const hasOwner = Boolean(existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000');
       console.info(`hasAgentNameOwner: "${fullSubname}" ${hasOwner ? 'HAS owner' : 'has NO owner'}${hasOwner ? `: ${existingOwner}` : ''}`);
       return hasOwner;
     } catch (error) {
