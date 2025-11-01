@@ -32,7 +32,6 @@ export function useAgentENSClientFor(chainIdHex?: string): AIAgentENSClient | nu
   }
   
   try {
-    console.log('🔍 Using fallback ENS client');
     return useAgentENSClient?.() ?? null;
   } catch {
     console.log('🔍 No ENS client available');

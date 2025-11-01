@@ -1006,7 +1006,6 @@ class ensService {
         result.baseRegistrarOwner = baseOwner;
         result.exists = true;
         result.registrationMethod = 'baseRegistrar';
-        console.log('✅ Found in BaseRegistrar, owner:', baseOwner);
       } catch (error) {
         console.log('❌ Not found in BaseRegistrar');
       }
@@ -1015,21 +1014,17 @@ class ensService {
       try {
         const ensOwner = await ensRegistry.owner(parentNode);
         result.ensRegistryOwner = ensOwner;
-        console.log('🔍 ENS Registry owner:', ensOwner);
-        
+
         if (ensOwner && ensOwner !== '0x0000000000000000000000000000000000000000') {
           result.exists = true;
           
           // Check if the owner is NameWrapper (meaning it's wrapped)
           if (ensOwner.toLowerCase() === ((process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8').toLowerCase()) {
-            console.log('✅ Domain is wrapped, checking NameWrapper owner...');
-            
             try {
               const wrapperOwner = await nameWrapper.ownerOf(parentNode);
               result.nameWrapperOwner = wrapperOwner;
               result.isWrapped = true;
               result.registrationMethod = 'nameWrapper';
-              console.log('✅ Found in NameWrapper, owner:', wrapperOwner);
             } catch (error) {
               console.log('❌ Error getting NameWrapper owner:', error);
               // Still mark as wrapped but with no owner

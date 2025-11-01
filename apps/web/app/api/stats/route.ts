@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 
-// Get GraphQL endpoint URL from environment
-const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL;
-
 async function queryGraphQL(query: string, variables: any = {}) {
-  if (!GRAPHQL_URL) {
-    return null;
-  }
-
+  // Get GraphQL endpoint URL from environment at runtime
+  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL || 'https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphql';
+  
   try {
+    if (!GRAPHQL_URL) {
+      console.warn("No GRAPHQL_URL configured");
+      return null;
+    }
+
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
       headers: {
@@ -29,8 +30,8 @@ async function queryGraphQL(query: string, variables: any = {}) {
     }
 
     return data.data;
-  } catch (error) {
-    console.error('GraphQL fetch error:', error);
+  } catch (error: any) {
+    console.error('GraphQL fetch error:', error?.message || error);
     return null;
   }
 }

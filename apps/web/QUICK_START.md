@@ -34,8 +34,18 @@ Should be under 100MB. If larger, run cleanup:
 4. **Set Environment Variables** (see below)
 5. Deploy
 
-### Option B: Wrangler CLI
+### Option B: Wrangler CLI (⚠️ Known Issues)
 
+**WARNING**: Manual Wrangler deployments using `@cloudflare/next-on-pages` currently have API route issues.
+
+Currently, deploying via `wrangler pages deploy` results in:
+- ✅ Homepage works
+- ❌ All API routes return 500 errors
+- Error: `No such module "__next-on-pages-dist__/functions/api/async_hooks"`
+
+**Workaround**: Use Option A (Cloudflare Dashboard) which uses native Next.js integration.
+
+If you must use Wrangler:
 ```bash
 cd apps/web
 ./deploy-to-cloudflare.sh

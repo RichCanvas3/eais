@@ -1,109 +1,83 @@
-# Deployment Status Check
+# Cloudflare Pages Deployment Status
 
-## Current Status: ❌ NOT DEPLOYED
+## Current Status
 
-The default Cloudflare Pages domain returns 404, which means:
-- No deployment exists, OR
-- Project name is wrong, OR
-- Deployment failed
+✅ **Homepage**: https://www.8004-agent.com loads successfully  
+❌ **API Routes**: All API routes return 500 Internal Server Error
 
-## Fix: Deploy Now
+## Root Cause
 
-### Step 1: Check if Project Exists
+`@cloudflare/next-on-pages` is attempting to import `async_hooks` which is not available in Cloudflare's Edge Runtime, even with `nodejs_compat` flag enabled. This is evidenced by the error:
 
-```bash
-wrangler pages project list
+```
+Error: No such module "__next-on-pages-dist__/functions/api/async_hooks"
 ```
 
-Look for `erc8004-web` in the list.
+## Test Results
 
-### Step 2: Build the Project
+### Local Development
+- ✅ All API routes work: `localhost:3000/api/agents`, `localhost:3000/api/stats`, etc.
+- ✅ GraphQL queries work correctly
+- ✅ Edge runtime functions properly
 
-```bash
-# From project root
-cd /home/barb/erc8004/erc-8004-identity-indexer
+### Cloudflare Pages (via next-on-pages)
+- ✅ Homepage loads
+- ❌ All API routes return 500
+- ❌ Even simplest possible Edge route fails
+- ❌ `wrangler pages dev` shows the `async_hooks` error
 
-# Install dependencies
-pnpm install
+## API Routes Affected
 
-# Build SDKs
-pnpm build:sdks
+1. `/api/agents` - Returns agent list from GraphQL
+2. `/api/agents/[agentId]` - Returns individual agent details
+3. `/api/stats` - Returns statistics aggregated from GraphQL
+4. `/api/discover` - AI-powered agent discovery
+5. `/api/graph-layout` - Graph layout computation
+6. `/api/proxy` - CORS proxy endpoint
 
-# Build web app
-NODE_ENV=production pnpm --filter erc8004-web build
+## Solutions
+
+### Option 1: Cloudflare Dashboard Build (Recommended)
+Deploy via the dashboard using the built-in Next.js integration:
+
+1. Go to Cloudflare Dashboard → Pages → Settings
+2. Framework preset: **Next.js**
+3. Root directory: `apps/web`
+4. Build command: `cd ../.. && pnpm install && pnpm build:sdks && NODE_ENV=production pnpm --filter erc8004-web build`
+5. Output directory: `.next`
+6. Environment variables: See `QUICK_START.md`
+
+This bypasses `next-on-pages` entirely and uses Cloudflare's native Next.js support.
+
+### Option 2: Wait for next-on-pages fix
+The `async_hooks` issue is a known limitation/bug in the current version. Check for updates:
+- https://github.com/cloudflare/next-on-pages
+- https://developers.cloudflare.com/pages/
+
+### Option 3: Remove API routes (not recommended)
+If API routes aren't critical, use static export mode:
+```javascript
+// next.config.mjs
+export default {
+  output: 'export',
+  // ... rest
+}
 ```
+This disables all server-side functionality.
 
-### Step 3: Deploy
+## Environment Variables Required
 
-**Option A: Use Deployment Script**
+See `QUICK_START.md` for complete list. Key ones:
+- `GRAPHQL_API_URL` - Hardcoded to `https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphql`
+- `NEXT_PUBLIC_WEB3AUTH_CLIENT_ID`
+- `NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL`
+- `NEXT_PUBLIC_ETH_SEPOLIA_CHAIN_ID_HEX`
+- And many others...
 
-```bash
-cd apps/web
-chmod +x deploy-to-cloudflare.sh
-./deploy-to-cloudflare.sh
-```
+## Notes
 
-**Option B: Manual Wrangler Deploy**
-
-```bash
-cd apps/web
-wrangler pages deploy .next --project-name=erc8004-web
-```
-
-### Step 4: Verify Deployment
-
-After deployment, check:
-
-```bash
-curl -I https://erc8004-web.pages.dev
-```
-
-Should return `HTTP/2 200` not `404`.
-
-## If Deployment Fails
-
-### Build Errors
-
-Check for:
-- Missing environment variables (set in dashboard)
-- SDK build errors
-- File size > 25MB
-- Missing dependencies
-
-### Authentication Errors
-
-```bash
-wrangler login
-```
-
-### Project Name Wrong
-
-If project has different name:
-```bash
-wrangler pages deploy .next --project-name=YOUR_PROJECT_NAME
-```
-
-## After Successful Deployment
-
-1. ✅ Verify: https://erc8004-web.pages.dev works
-2. ✅ Configure custom domain: www.8004-agent.com
-3. ✅ Set environment variables
-4. ✅ Test site functionality
-
-## Quick Checklist
-
-- [ ] Built SDKs successfully
-- [ ] Built web app successfully
-- [ ] Deployed to Cloudflare Pages
-- [ ] Default domain works
-- [ ] Custom domain configured
-- [ ] Environment variables set
-- [ ] Site loads without errors
-
-## Still Having Issues?
-
-Check these files:
-- `QUICK_START.md` - Step by step deployment
-- `CUSTOM_DOMAIN_SETUP.md` - Domain configuration
-- `FINAL_DEPLOYMENT_GUIDE.md` - Complete guide
+- API routes work perfectly in local dev
+- GraphQL endpoint is working and accessible
+- Issue is 100% related to `@cloudflare/next-on-pages` Edge runtime compatibility
+- `nodejs_compat` flag doesn't help - `async_hooks` isn't supported
 

@@ -1,12 +1,12 @@
 # Cloudflare Pages Deployment
 
-## Current Problem: 404 Errors
+## Current Status
 
-All routes return 404 even though deployment succeeds.
+✅ **Site is deployed and loading**: https://www.8004-agent.com loads successfully
 
-## Root Cause
+✅ **Local development working**: API routes work correctly in local development
 
-Cloudflare Pages doesn't recognize `.next` as a Next.js App Router deployment when manually uploaded via Wrangler.
+⚠️ **Cloudflare deployment**: API routes need Cloudflare Dashboard deployment with Next.js preset (manual wrangler deployment has compatibility issues)
 
 ## Solutions
 
@@ -79,12 +79,24 @@ Cloudflare needs either:
 - Special output from adapter (Solution 2)
 - Static HTML export (Solution 3)
 
-## Next Steps
+## Debugging Steps
 
-**Check your Cloudflare Dashboard** and share:
-1. Framework preset setting
-2. Latest deployment build logs
-3. Any errors shown
+**If you're seeing 500 errors on API routes:**
 
-Then I can give you the exact fix!
+1. Check Cloudflare Dashboard → Errors & Logs for runtime errors
+2. Try deploying via the Dashboard with Next.js preset instead of Wrangler
+3. Verify all environment variables are set correctly in Dashboard → Settings → Environment Variables
+4. Test with `wrangler pages dev .vercel/output/static` locally to see runtime errors
+
+**Root Cause Identified:**
+```
+Error: No such module "__next-on-pages-dist__/functions/api/async_hooks"
+```
+
+`@cloudflare/next-on-pages` attempts to import `async_hooks` which is not supported in Cloudflare's Edge runtime, even with `nodejs_compat` flag. This is a known limitation in the `@cloudflare/next-on-pages` adapter.
+
+**Solution:**
+Deploy via Cloudflare Dashboard with the Next.js preset (see Solution 1 above). This bypasses the adapter and uses Cloudflare's native Next.js support.
+
+**Note:** API routes work perfectly in local dev (`localhost:3000`), confirming the issue is specific to the `@cloudflare/next-on-pages` deployment on Cloudflare Pages.
 

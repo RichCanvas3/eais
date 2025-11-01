@@ -1,13 +1,7 @@
-/**
- * L2 ENS Client for Base Sepolia and Optimism Sepolia
- * Extends AIAgentENSClient with namespace.ninja integration for L2 subname operations
- */
+
 import { createPublicClient, http, custom, encodeFunctionData, keccak256, stringToHex, zeroAddress, createWalletClient, namehash, hexToString, type Address } from 'viem';
 
 import { AIAgentENSClient } from './AIAgentENSClient';
-// @ts-ignore - @thenamespace/mint-manager doesn't have type definitions
-import { createMintClient } from '@thenamespace/mint-manager';
-import { createIndexerClient } from '@thenamespace/indexer';
 import { sepolia, baseSepolia, optimismSepolia } from 'viem/chains';
 
 export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
@@ -24,7 +18,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
       '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c', 
       '0x119bFf40969bFBe0438c3f72f3855958E8E0d30c', 
       identityRegistryAddress);
-    this.initializeNamespaceClient();
+
     
     //ensRegistryAddress = '0xf584057f3e9ecd550b52a86f84dfeb9f928e003f' as `0x${string}`;
     //ensResolverAddress = '0xf584057f3e9ecd550b52a86f84dfeb9f928e003f' as `0x${string}`;
@@ -52,26 +46,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     return 'L2';
   }
 
-  private initializeNamespaceClient() {
-    try {
-      const client = createMintClient({
-        isTestnet: true, // Use testnet (sepolia)
-        cursomRpcUrls: {
-          [sepolia.id]: process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/demo',
-          [baseSepolia.id]: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || 'https://base-sepolia.g.alchemy.com/v2/demo',
-          [optimismSepolia.id]: process.env.NEXT_PUBLIC_OP_SEPOLIA_RPC_URL || 'https://op-sepolia.g.alchemy.com/v2/demo',
-        }
-      });
-      
-      console.info('Namespace.ninja L2 client initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize namespace.ninja L2 client:', error);
-    }
-  }
 
-  /**
-   * Override getAgentUrlByName to use direct chain calls instead of namespace.ninja
-   */
   async getAgentUrlByName(name: string): Promise<string | null> {
 
     console.info("AIAgentL2ENSDurenClient.getAgentUrlByName: ", name);
@@ -143,9 +118,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     }
   }
 
-  /**
-   * Override getAgentAccountByName to use direct chain calls instead of namespace.ninja
-   */
+
   async getAgentAccountByName(name: string): Promise<`0x${string}` | null> {
 
     console.info("AIAgentL2ENSDurenClient.getAgentAccountByName: ", name);
@@ -406,9 +379,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     }
   }
 
-  /**
-   * Override prepareAddAgentNameToOrgCalls to use direct chain calls instead of namespace.ninja SDK
-   */
+
   async prepareAddAgentNameToOrgCalls(params: {
     orgName: string;            // e.g., 'airbnb.eth'
     agentName: string;          // e.g., 'my-agent'
