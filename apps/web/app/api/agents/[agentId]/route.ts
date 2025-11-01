@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+//export const dynamic = 'force-dynamic';
 
 async function queryGraphQL(query: string, variables: any = {}) {
   // Get GraphQL endpoint URL from environment at runtime
-  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL || 'https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphql';
+  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL ;
   
   try {
     if (!GRAPHQL_URL) {

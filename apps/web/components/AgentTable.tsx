@@ -980,6 +980,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				if (text && text.trim().length > 0) {
 					try { json = JSON.parse(text); } catch { json = null; }
 				}
+				console.info("&&&&&&&&&&&& fetchData: json: ", JSON.stringify(json, null, 2));
                 // Ensure the response has the correct structure
                 const responseData = json ?? { page, pageSize: 50, total: 0, rows: [] };
                 setData({

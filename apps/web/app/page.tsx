@@ -15,7 +15,7 @@ export default function Page() {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h5" fontWeight={600}>Agentic Trust Layer - Agent Explorer</Typography>
+          <Typography variant="h5" fontWeight={600}>Agentic Trust - Agent Explorer</Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isLoggedIn && (
               <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small">

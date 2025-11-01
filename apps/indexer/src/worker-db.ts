@@ -38,6 +38,21 @@ export function createDBQueries(db: any) {
     return { where, params };
   }
 
+  // Helper function to build ORDER BY clause
+  function buildOrderByClause(orderBy?: string, orderDirection?: string): string {
+    // Valid columns for ordering
+    const validColumns = ['agentId', 'agentName', 'createdAtTime', 'createdAtBlock', 'agentOwner'];
+    
+    // Default to agentId ASC if not specified
+    const column = orderBy && validColumns.includes(orderBy) ? orderBy : 'agentId';
+    const direction = (orderDirection?.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
+    
+    // Cast agentId to integer for proper numeric sorting
+    const orderColumn = column === 'agentId' ? 'CAST(agentId AS INTEGER)' : column;
+    
+    return `ORDER BY ${orderColumn} ${direction}`;
+  }
+
   return {
     agents: async (args: {
       chainId?: number;
@@ -46,11 +61,14 @@ export function createDBQueries(db: any) {
       agentName?: string;
       limit?: number;
       offset?: number;
+      orderBy?: string;
+      orderDirection?: string;
     }) => {
-      const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0 } = args;
+      const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0, orderBy, orderDirection } = args;
       const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
       
-      const query = `SELECT * FROM agents ${where} ORDER BY createdAtTime DESC LIMIT ? OFFSET ?`;
+      const query = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
       const allParams = [...params, limit, offset];
       
       const result = await db.prepare(query).bind(...allParams).all();
@@ -66,17 +84,17 @@ export function createDBQueries(db: any) {
       return result || null;
     },
 
-    agentsByChain: async (args: { chainId: number; limit?: number; offset?: number }) => {
-      const { chainId, limit = 100, offset = 0 } = args;
-      const result = await db
-        .prepare('SELECT * FROM agents WHERE chainId = ? ORDER BY createdAtTime DESC LIMIT ? OFFSET ?')
-        .bind(chainId, limit, offset)
-        .all();
+    agentsByChain: async (args: { chainId: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
+      const { chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      const query = `SELECT * FROM agents WHERE chainId = ? ${orderByClause} LIMIT ? OFFSET ?`;
+      
+      const result = await db.prepare(query).bind(chainId, limit, offset).all();
       return result.results || [];
     },
 
-    agentsByOwner: async (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number }) => {
-      const { agentOwner, chainId, limit = 100, offset = 0 } = args;
+    agentsByOwner: async (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
+      const { agentOwner, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
       
       let query = 'SELECT * FROM agents WHERE agentOwner = ?';
       const params: any[] = [agentOwner];
@@ -86,15 +104,16 @@ export function createDBQueries(db: any) {
         params.push(chainId);
       }
       
-      query += ' ORDER BY createdAtTime DESC LIMIT ? OFFSET ?';
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      query += ` ${orderByClause} LIMIT ? OFFSET ?`;
       params.push(limit, offset);
       
       const result = await db.prepare(query).bind(...params).all();
       return result.results || [];
     },
 
-    searchAgents: async (args: { query: string; chainId?: number; limit?: number; offset?: number }) => {
-      const { query: searchQuery, chainId, limit = 100, offset = 0 } = args;
+    searchAgents: async (args: { query: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
+      const { query: searchQuery, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
       const searchPattern = `%${searchQuery}%`;
       
       let sqlQuery = `
@@ -108,7 +127,8 @@ export function createDBQueries(db: any) {
         params.push(chainId);
       }
       
-      sqlQuery += ' ORDER BY createdAtTime DESC LIMIT ? OFFSET ?';
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      sqlQuery += ` ${orderByClause} LIMIT ? OFFSET ?`;
       params.push(limit, offset);
       
       const result = await db.prepare(sqlQuery).bind(...params).all();

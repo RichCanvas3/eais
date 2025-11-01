@@ -1,38 +1,47 @@
 import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+//export const dynamic = 'force-dynamic';
 
 async function queryGraphQL(query: string, variables: any = {}) {
   // Get GraphQL endpoint URL from environment at runtime
-  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL || 'https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphql';
-  
+  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL;
+  console.info("++++++++++++++++++++ queryGraphQL 0: GRAPHQL_URL", GRAPHQL_URL);
   try {
-    console.info("++++++++++++++++++++ queryGraphQL: GRAPHQL_URL", GRAPHQL_URL);
+    console.info("++++++++++++++++++++ queryGraphQL 1: GRAPHQL_URL", GRAPHQL_URL);
     if (!GRAPHQL_URL) {
       // Fallback to empty data if GraphQL URL not configured
       console.warn("No GRAPHQL_URL configured");
       return null;
     }
 
+    const requestBody = { query, variables };
+    console.info("++++++++++++++++++++ queryGraphQL request body: ", JSON.stringify(requestBody, null, 2));
+
     const res = await fetch(GRAPHQL_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query, variables }),
+      body: JSON.stringify(requestBody),
     });
 
+
     if (!res.ok) {
-      console.error(`GraphQL request failed: ${res.status} ${res.statusText}`);
+      const errorText = await res.text();
+      console.error(`GraphQL request failed: ${res.status} ${res.statusText}`, errorText);
       return null;
     }
 
     const data = await res.json();
+
     if (data.errors) {
       console.error('GraphQL errors:', data.errors);
       return null;
     }
-
+    console.info("++++++++++++++++++++ queryGraphQL response - has data:", !!data.data, "has errors:", !!data.errors);
+    if (data.data) {
+      console.info("++++++++++++++++++++ queryGraphQL data.agents count:", data.data.agents?.length || 0);
+    }
     return data.data;
   } catch (error: any) {
     console.error('GraphQL fetch error:', error?.message || error);
@@ -53,15 +62,15 @@ export async function GET(req: Request) {
     const chainId = searchParams.get('chainId');
 
     // Build GraphQL query
-    const filters: any = { limit: pageSize, offset };
+    const filters: any = { limit: pageSize, offset, orderBy: 'agentId', orderDirection: 'desc' };
     if (chainId) filters.chainId = parseInt(chainId);
     if (id) filters.agentId = id;
     if (address) filters.agentOwner = address.toLowerCase();
     if (name) filters.agentName = name.toLowerCase();
 
     const query = `
-      query GetAgents($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String, $limit: Int, $offset: Int) {
-        agents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName, limit: $limit, offset: $offset) {
+      query GetAgents($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String, $limit: Int, $offset: Int, $orderBy: String, $orderDirection: String) {
+        agents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName, limit: $limit, offset: $offset, orderBy: $orderBy, orderDirection: $orderDirection) {
           chainId
           agentId
           agentAddress
@@ -82,23 +91,37 @@ export async function GET(req: Request) {
     `;
 
     const data = await queryGraphQL(query, filters);
+    console.info("++++++++++++++++++++ GET MAIN QUERY data: ", JSON.stringify(data, null, 2));
+    console.info("++++++++++++++++++++ GET filters: ", filters);
 
     if (!data) {
       // Return empty data if GraphQL is not available
+      console.warn("⚠️ No data returned from GraphQL query");
       return NextResponse.json({ rows: [], total: 0, page, pageSize });
     }
 
     const rows = data.agents || [];
+    console.info("++++++++++++++++++++ GET rows count: ", rows.length);
+    if (rows.length > 0) {
+      console.info("++++++++++++++++++++ GET first row sample: ", JSON.stringify(rows[0], null, 2));
+    }
 
     // Get total count (using a separate query for simplicity)
+    // Don't pass orderBy/orderDirection to count query - it doesn't need them
+    const countFilters: any = { limit: 10000, offset: 0 };
+    if (chainId) countFilters.chainId = parseInt(chainId);
+    if (id) countFilters.agentId = id;
+    if (address) countFilters.agentOwner = address.toLowerCase();
+    if (name) countFilters.agentName = name.toLowerCase();
+    
     const countQuery = `
-      query GetAgentsCount($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String) {
-        agents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName, limit: 10000, offset: 0) {
+      query GetAgentsCount($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String, $limit: Int, $offset: Int) {
+        agents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName, limit: $limit, offset: $offset) {
           agentId
         }
       }
     `;
-    const countData = await queryGraphQL(countQuery, filters);
+    const countData = await queryGraphQL(countQuery, countFilters);
     const total = countData?.agents?.length || rows.length;
 
     return NextResponse.json({ rows, total, page, pageSize });

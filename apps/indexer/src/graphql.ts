@@ -32,15 +32,17 @@ const schema = buildSchema(`
       agentName: String
       limit: Int
       offset: Int
+      orderBy: String
+      orderDirection: String
     ): [Agent!]!
     
     agent(chainId: Int!, agentId: String!): Agent
     
-    agentsByChain(chainId: Int!, limit: Int, offset: Int): [Agent!]!
+    agentsByChain(chainId: Int!, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
     
-    agentsByOwner(agentOwner: String!, chainId: Int, limit: Int, offset: Int): [Agent!]!
+    agentsByOwner(agentOwner: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
     
-    searchAgents(query: String!, chainId: Int, limit: Int, offset: Int): [Agent!]!
+    searchAgents(query: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
   }
 `);
 
@@ -88,6 +90,21 @@ function buildWhereClause(filters: {
   return { where, params };
 }
 
+// Helper function to build ORDER BY clause
+function buildOrderByClause(orderBy?: string, orderDirection?: string): string {
+  // Valid columns for ordering
+  const validColumns = ['agentId', 'agentName', 'createdAtTime', 'createdAtBlock', 'agentOwner'];
+  
+  // Default to agentId ASC if not specified
+  const column = orderBy && validColumns.includes(orderBy) ? orderBy : 'agentId';
+  const direction = (orderDirection?.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
+  
+  // Cast agentId to integer for proper numeric sorting
+  const orderColumn = column === 'agentId' ? 'CAST(agentId AS INTEGER)' : column;
+  
+  return `ORDER BY ${orderColumn} ${direction}`;
+}
+
 const root = {
   agents: (args: {
     chainId?: number;
@@ -96,15 +113,31 @@ const root = {
     agentName?: string;
     limit?: number;
     offset?: number;
+    orderBy?: string;
+    orderDirection?: string;
   }) => {
-    const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0 } = args;
-    const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
-    
-    const query = `SELECT * FROM agents ${where} ORDER BY createdAtTime DESC LIMIT ? OFFSET ?`;
-    const allParams = [...params, limit, offset];
-    
-    const rows = db.prepare(query).all(...allParams) as any[];
-    return rows;
+    try {
+      const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0, orderBy, orderDirection } = args;
+      console.log('🔍 agents resolver called with args:', { chainId, agentId, agentOwner, agentName, limit, offset, orderBy, orderDirection });
+      
+      const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      
+      console.log('📋 SQL orderByClause:', orderByClause);
+      const query = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
+      const allParams = [...params, limit, offset];
+      
+      console.log('🔎 Executing SQL:', query);
+      console.log('📊 SQL params:', allParams);
+
+      const rows = db.prepare(query).all(...allParams) as any[];
+ 
+      console.log(`✅ agents resolver returning ${rows.length} rows`);
+      return rows;
+    } catch (error) {
+      console.error('❌ Error in agents resolver:', error);
+      throw error;
+    }
   },
 
   agent: (args: { chainId: number; agentId: string }) => {
@@ -113,52 +146,87 @@ const root = {
     return row || null;
   },
 
-  agentsByChain: (args: { chainId: number; limit?: number; offset?: number }) => {
-    const { chainId, limit = 100, offset = 0 } = args;
-    const rows = db
-      .prepare('SELECT * FROM agents WHERE chainId = ? ORDER BY createdAtTime DESC LIMIT ? OFFSET ?')
-      .all(chainId, limit, offset) as any[];
-    return rows;
+  agentsByChain: (args: { chainId: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
+    try {
+      const { chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
+      console.log('📋 agentsByChain resolver called with args:', args);
+      
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      const query = `SELECT * FROM agents WHERE chainId = ? ${orderByClause} LIMIT ? OFFSET ?`;
+      
+      console.log('🔎 Executing SQL:', query);
+      console.log('📊 SQL params:', [chainId, limit, offset]);
+      
+      const rows = db.prepare(query).all(chainId, limit, offset) as any[];
+      console.log(`✅ agentsByChain resolver returning ${rows.length} rows`);
+      return rows;
+    } catch (error) {
+      console.error('❌ Error in agentsByChain resolver:', error);
+      throw error;
+    }
   },
 
-  agentsByOwner: (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number }) => {
-    const { agentOwner, chainId, limit = 100, offset = 0 } = args;
-    
-    let query = 'SELECT * FROM agents WHERE agentOwner = ?';
-    const params: any[] = [agentOwner];
-    
-    if (chainId !== undefined) {
-      query += ' AND chainId = ?';
-      params.push(chainId);
+  agentsByOwner: (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
+    try {
+      const { agentOwner, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
+      console.log('📋 agentsByOwner resolver called with args:', args);
+      
+      let query = 'SELECT * FROM agents WHERE agentOwner = ?';
+      const params: any[] = [agentOwner];
+      
+      if (chainId !== undefined) {
+        query += ' AND chainId = ?';
+        params.push(chainId);
+      }
+      
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      query += ` ${orderByClause} LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+      
+      console.log('🔎 Executing SQL:', query);
+      console.log('📊 SQL params:', params);
+      
+      const rows = db.prepare(query).all(...params) as any[];
+      console.log(`✅ agentsByOwner resolver returning ${rows.length} rows`);
+      return rows;
+    } catch (error) {
+      console.error('❌ Error in agentsByOwner resolver:', error);
+      throw error;
     }
-    
-    query += ' ORDER BY createdAtTime DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-    
-    const rows = db.prepare(query).all(...params) as any[];
-    return rows;
   },
 
-  searchAgents: (args: { query: string; chainId?: number; limit?: number; offset?: number }) => {
-    const { query: searchQuery, chainId, limit = 100, offset = 0 } = args;
-    const searchPattern = `%${searchQuery}%`;
-    
-    let sqlQuery = `
-      SELECT * FROM agents 
-      WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)
-    `;
-    const params: any[] = [searchPattern, searchPattern, searchPattern, searchPattern];
-    
-    if (chainId !== undefined) {
-      sqlQuery += ' AND chainId = ?';
-      params.push(chainId);
+  searchAgents: (args: { query: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
+    try {
+      const { query: searchQuery, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
+      console.log('📋 searchAgents resolver called with args:', args);
+      
+      const searchPattern = `%${searchQuery}%`;
+      
+      let sqlQuery = `
+        SELECT * FROM agents 
+        WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)
+      `;
+      const params: any[] = [searchPattern, searchPattern, searchPattern, searchPattern];
+      
+      if (chainId !== undefined) {
+        sqlQuery += ' AND chainId = ?';
+        params.push(chainId);
+      }
+      
+      const orderByClause = buildOrderByClause(orderBy, orderDirection);
+      sqlQuery += ` ${orderByClause} LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+      
+      console.log('🔎 Executing SQL:', sqlQuery);
+      console.log('📊 SQL params:', params);
+      
+      const rows = db.prepare(sqlQuery).all(...params) as any[];
+      console.log(`✅ searchAgents resolver returning ${rows.length} rows`);
+      return rows;
+    } catch (error) {
+      console.error('❌ Error in searchAgents resolver:', error);
+      throw error;
     }
-    
-    sqlQuery += ' ORDER BY createdAtTime DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-    
-    const rows = db.prepare(sqlQuery).all(...params) as any[];
-    return rows;
   },
 };
 
@@ -173,6 +241,14 @@ export function createGraphQLServer(port: number = 4000) {
   const app = express();
 
   app.use(express.json());
+
+  // Request logging middleware (after body parsing)
+  app.use((req, res, next) => {
+    if (req.path === '/graphql' && req.body) {
+      console.log(`📥 GraphQL Request 1: ${req.body.operationName || 'query'}`, req.body.variables || {});
+    }
+    next();
+  });
 
   // GraphQL endpoint
   app.all('/graphql', handler);
@@ -227,7 +303,7 @@ export function createGraphQLServer(port: number = 4000) {
 
   const server = app.listen(port, () => {
     console.log(`🚀 GraphQL server running at http://localhost:${port}/graphql`);
-    console.log(`📊 GraphiQL playground available at http://localhost:${port}/graphiql`);
+    console.log(`📊 GraphiQL 1 playground available at http://localhost:${port}/graphiql`);
   });
 
   return server;

@@ -38,15 +38,17 @@ const schema = buildSchema(`
       agentName: String
       limit: Int
       offset: Int
+      orderBy: String
+      orderDirection: String
     ): [Agent!]!
     
     agent(chainId: Int!, agentId: String!): Agent
     
-    agentsByChain(chainId: Int!, limit: Int, offset: Int): [Agent!]!
+    agentsByChain(chainId: Int!, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
     
-    agentsByOwner(agentOwner: String!, chainId: Int, limit: Int, offset: Int): [Agent!]!
+    agentsByOwner(agentOwner: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
     
-    searchAgents(query: String!, chainId: Int, limit: Int, offset: Int): [Agent!]!
+    searchAgents(query: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
   }
 `);
 
