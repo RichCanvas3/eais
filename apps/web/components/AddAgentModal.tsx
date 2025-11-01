@@ -108,19 +108,6 @@ export function AddAgentModal({ open, onClose }: Props) {
   // Use consistent parameter for ENS client - this ensures correct chain configuration
   const agentENSClientForChain = useAgentENSClientFor(selectedChainIdHex || '0xaa36a7');
   
-  // Debug logging to see which chain the ENS client is configured for
-  React.useEffect(() => {
-    console.log('🔍 ENS Client debug effect triggered');
-    console.log('🔍 agentENSClientForChain:', !!agentENSClientForChain);
-    console.log('🔍 selectedChainIdHex:', selectedChainIdHex);
-    
-    if (agentENSClientForChain) {
-      console.log('🔍 ENS Client configured for chain:', selectedChainIdHex || '0xaa36a7');
-      console.log('🔍 ENS Client available:', !!agentENSClientForChain);
-    } else {
-      console.log('🔍 No ENS client available');
-    }
-  }, [agentENSClientForChain, selectedChainIdHex]);
 
   // All useEffect hooks after useContext hooks
   React.useEffect(() => {

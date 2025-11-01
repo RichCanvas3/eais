@@ -69,7 +69,7 @@ export default function Page() {
                   size="small" 
                   sx={{ borderColor: 'divider', color: 'text.secondary' }}
                 >
-                  {accessCodeLoading ? 'Loading...' : 'Get Indexer GraphQL Access Code'}
+                  {accessCodeLoading ? 'Loading...' : 'Get ERC-8004 GraphQL access code'}
                 </Button>
                 <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small" sx={{ borderColor: 'divider', color: 'text.secondary' }}>
                   Stats

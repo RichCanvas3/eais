@@ -1746,8 +1746,6 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 								<TableCell>Identity ID</TableCell>
 								<TableCell>A2A</TableCell>
 								{discoverMatches && <TableCell>Trust Score</TableCell>}
-								<TableCell>Mine</TableCell>
-								{eoa && <TableCell></TableCell>}
 							</TableRow>
 						</TableHead>
 					<TableBody>
@@ -1756,14 +1754,14 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
+                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center">
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
                             <TableRow>
-                                <TableCell colSpan={eoa ? (discoverMatches ? 9 : 8) : (discoverMatches ? 8 : 7)} align="center">
+                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center">
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -2064,38 +2062,6 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 									)}
 								</TableCell>
 							)}
-
-								<TableCell>
-									{owned[row.agentId] ? <Chip label="Mine" color="primary" size="small" /> : null}
-								</TableCell>
-								{eoa && (
-									<TableCell>
-										<Button size="small" onClick={() => openFeedbackFor(row)} sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}>
-											Feedback
-										</Button>
-										<IconButton
-											size="small"
-											sx={{ 
-												p: 0.5,
-												color: 'primary.main',
-												'&:hover': {
-													color: 'primary.dark',
-													backgroundColor: 'action.hover'
-												}
-											}}
-											title={`Give feedback to ${row.agentName?.replace(/\/$/, '')}`}
-											onClick={() => {
-												const cleanDomain = row.agentName?.replace(/\/$/, '');
-												const url = cleanDomain.startsWith('http') ? cleanDomain : `http://${cleanDomain}`;
-												window.open(url, '_blank');
-											}}
-										>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-												<path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M11,16.5L18,9.5L16.5,8L11,13.5L7.5,10L6,11.5L11,16.5Z" />
-											</svg>
-										</IconButton>
-									</TableCell>
-								)}
 							</TableRow>
 						))}
 					</TableBody>
