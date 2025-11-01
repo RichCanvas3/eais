@@ -192,20 +192,9 @@ const graphiqlHTML = `<!DOCTYPE html>
       ReactDOM.render(
         React.createElement(GraphiQL, { 
           fetcher: graphQLFetcher,
-          defaultQuery: \`# First, get your access code (replace YOUR_ADDRESS with your wallet address):
-mutation {
-  createAccessCode(address: "YOUR_ADDRESS") {
-    accessCode
-    address
-  }
-}
+          defaultQuery: 
 
-# Then click the "Headers" button at the bottom and add:
-# {
-#   "Authorization": "Bearer YOUR_ACCESS_CODE"
-# }
-# 
-# Example query (requires access code):
+
 query {
   agentsByChain(chainId: 11155111, limit: 10) {
     agentId

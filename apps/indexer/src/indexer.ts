@@ -1,6 +1,6 @@
 import { createPublicClient, http, webSocket, type Address, decodeEventLog } from "viem";
 import { db, getCheckpoint, setCheckpoint } from "./db";
-import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, IDENTITY_API_URL, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, OP_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
+import { RPC_WS_URL, CONFIRMATIONS, START_BLOCK, LOGS_CHUNK_SIZE, BACKFILL_MODE, ETH_SEPOLIA_GRAPHQL_URL, BASE_SEPOLIA_GRAPHQL_URL, OP_SEPOLIA_GRAPHQL_URL, GRAPHQL_API_KEY, GRAPHQL_POLL_MS } from "./env";
 import { ethers } from 'ethers';
 import { ERC8004Client, EthersAdapter } from '@erc8004/sdk';
 
@@ -68,7 +68,9 @@ function toDecString(x: bigint | number | string) {
 
 async function tryReadTokenURI(client: ERC8004Client, tokenId: bigint): Promise<string | null> {
   try {
+    console.info("............tryReadTokenURI: tokenId: ", tokenId)
     const uri = await client.identity.getTokenURI(tokenId);
+    console.info("............tryReadTokenURI: uri: ", uri)
     return uri ?? null;
   } catch {
     return null;
@@ -144,12 +146,14 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
     const cid = extractCid(tokenURI);
     if (cid) {
       console.info("............fetchIpfsJson: cid: ", cid)
-      console.info("............fetchIpfsJson: IDENTITY_API_URL: ", IDENTITY_API_URL)
-      const resp = await fetchFn(`${IDENTITY_API_URL}/api/web3storage/download/${cid}`);
+      // Fetch directly from IPFS gateway (Web3.Storage)
+      const ipfsUrl = `https://${cid}.ipfs.w3s.link`;
+      console.info("............fetchIpfsJson: fetching from IPFS gateway: ", ipfsUrl)
+      const resp = await fetchFn(ipfsUrl);
       if (resp?.ok) {
         const json = await resp.json();
-        console.info("............fetchIpfsJson: json: ", JSON.stringify(json?.data))
-        return json?.data ?? null;
+        console.info("............fetchIpfsJson: json: ", JSON.stringify(json))
+        return json ?? null;
       }
     }
     if (/^https?:\/\//i.test(tokenURI)) {
@@ -763,7 +767,85 @@ function watch() {
 }
   */
 
+// Parse command-line arguments
+function parseArgs() {
+  const args: { agentId?: string } = {};
+  const argv = process.argv.slice(2);
+  
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--agentId' || arg === '--agent-id') {
+      args.agentId = argv[i + 1];
+      i++;
+    }
+  }
+  
+  return args;
+}
+
+// Process a specific agentId across all chains, ignoring checkpoints
+async function processSingleAgentId(agentId: string) {
+  const agentIdBigInt = BigInt(agentId);
+  console.log(`🔄 Processing agentId ${agentId} across all chains (ignoring checkpoints)...`);
+  
+  const clients = [
+    { name: 'ETH Sepolia', client: erc8004EthSepoliaClient, chainId: 11155111 },
+    { name: 'Base Sepolia', client: erc8004BaseSepoliaClient, chainId: 84532 },
+  ];
+  
+  if (erc8004OpSepoliaClient) {
+    clients.push({ name: 'Optimism Sepolia', client: erc8004OpSepoliaClient, chainId: 11155420 });
+  }
+  
+  for (const { name, client, chainId } of clients) {
+    try {
+      console.log(`\n📋 Processing ${name} (chainId: ${chainId})...`);
+      
+      // Check if agent exists by trying to get owner
+      try {
+        const owner = await client.identity.getOwner(agentIdBigInt);
+        const tokenURI = await tryReadTokenURI(client, agentIdBigInt);
+        
+        // Get current block number for timestamp (use a recent block or current)
+        const publicClient = (client as any).adapter?.provider;
+        let blockNumber = 0n;
+        try {
+          const block = await publicClient?.getBlockNumber?.() || await publicClient?.getBlock?.('latest');
+          blockNumber = block?.number ? BigInt(block.number) : 0n;
+        } catch {
+          // If we can't get block number, use 0
+          blockNumber = 0n;
+        }
+        
+        if (owner && owner !== '0x0000000000000000000000000000000000000000') {
+          console.log(`  ✅ Agent ${agentId} exists on ${name}, owner: ${owner}`);
+          await upsertFromTransfer(owner.toLowerCase(), agentIdBigInt, blockNumber || 0n, tokenURI, chainId);
+          console.log(`  ✅ Successfully processed agentId ${agentId} on ${name}`);
+        } else {
+          console.log(`  ⚠️  Agent ${agentId} does not exist or is burned on ${name}`);
+        }
+      } catch (error: any) {
+        console.log(`  ⚠️  Agent ${agentId} not found on ${name}: ${error?.message || error}`);
+      }
+    } catch (error: any) {
+      console.error(`  ❌ Error processing ${name}:`, error?.message || error);
+    }
+  }
+  
+  console.log(`\n✅ Finished processing agentId ${agentId}`);
+}
+
 (async () => {
+  const args = parseArgs();
+  
+  // If agentId is specified, process only that agent
+  if (args.agentId) {
+    console.log(`🎯 Single agent mode: processing agentId ${args.agentId}`);
+    await processSingleAgentId(args.agentId);
+    process.exit(0);
+  }
+  
+  // Normal indexing mode
   // Check if database has any data - if not, reset checkpoint to 0
   try {
     const agentCount = await db.prepare('SELECT COUNT(*) as count FROM agents').get() as { count: number };

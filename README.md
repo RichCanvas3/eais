@@ -159,8 +159,7 @@ Defaults to port `4000`. Endpoints:
 Set the base URL for the web app to reach the service:
 
 ```
-NEXT_PUBLIC_IDENTITY_API_URL=http://localhost:4000
-```
+
 
 Or set `NEXT_PUBLIC_API_URL` as a fallback. The web client (`apps/web/service/identityService.ts`) will use these to call the service.
 

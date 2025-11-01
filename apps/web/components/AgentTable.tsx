@@ -295,11 +295,11 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 					if (uri) {
 						const u = String(uri).trim();
 						if (/^ipfs:\/\//i.test(u)) {
-							// Resolve via identity-service download
+							// Resolve via local Next.js API download endpoint
 							try {
 								const cid = u.slice('ipfs://'.length).split('/')[0]?.trim();
 								if (cid) {
-									const res = await fetch(`${IpfsService.apiBase}/api/web3storage/download/${cid}`);
+									const res = await fetch(`/api/web3storage/download/${cid}`);
 									fetched = await res.json().catch(() => null);
 								}
 							} catch {}
@@ -642,7 +642,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						try {
 							const rest = u.slice('ipfs://'.length);
 							const cid = rest.split('/')[0]?.trim();
-							if (cid) return `${IpfsService.apiBase}/api/web3storage/download/${cid}`;
+							if (cid) return `/api/web3storage/download/${cid}`;
 						} catch {}
 						return null;
 					}

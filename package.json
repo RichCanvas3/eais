@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "dev:indexer": "pnpm --filter erc8004-indexer dev",
+    "dev:indexer:agent": "pnpm --filter erc8004-indexer dev:agent",
     "dev:indexer:graphql": "pnpm --filter erc8004-indexer dev:graphql",
     "dev:web": "pnpm --filter erc8004-web dev",
     "dev:validator": "pnpm --filter erc8004-validator dev",

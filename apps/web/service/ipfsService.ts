@@ -1,5 +1,5 @@
-// Lightweight client for the external IPFS/Web3.Storage service
-// Endpoints expected (from server):
+// Lightweight client for the Next.js Web3.Storage API endpoints
+// Endpoints available locally:
 // - POST   /api/web3storage/upload            { data, filename? }
 // - GET    /api/web3storage/download/:cid
 // - POST   /api/web3storage/credentials/save  { credentials, did }
@@ -9,17 +9,9 @@
 
 type JsonRecord = Record<string, unknown> | unknown[] | null;
 
-function getApiBaseUrl(): string {
-  // Prefer a dedicated IPFS API base; fall back to a generic API base; then localhost
-  const fromEnv =
-    (process.env.NEXT_PUBLIC_IDENTITY_API_URL as string | undefined) ||
-    (process.env.NEXT_PUBLIC_API_URL as string | undefined);
-  return fromEnv && fromEnv.trim() !== "" ? fromEnv : "http://localhost:4000";
-}
-
 async function httpJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const base = getApiBaseUrl();
-  const url = path.startsWith("http") ? path : `${base}${path}`;
+  // Use relative paths for Next.js API routes
+  const url = path.startsWith("http") ? path : path;
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -41,12 +33,15 @@ async function httpJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 class IpfsService {
   static get apiBase(): string {
-    return getApiBaseUrl();
+    // Return empty string since we're using relative paths now
+    return "";
   }
 
   // Upload arbitrary JSON; returns CID and public gateway URL
   static async uploadJson(params: { data: JsonRecord; filename?: string }): Promise<{ cid: string; url: string }> {
     const payload = { data: params.data, filename: params.filename ?? "data.json" };
+
+    console.info("&&&&&&&&&&& call next ipfs upload service: ");
     const out = await httpJson<{ success: boolean; cid: string; url: string }>(
       "/api/web3storage/upload",
       { method: "POST", body: JSON.stringify(payload) }

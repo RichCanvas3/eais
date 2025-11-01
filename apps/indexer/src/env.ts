@@ -33,7 +33,7 @@ export const DB_PATH           = process.env.DB_PATH ?? "./data/registry.db"; //
 export const START_BLOCK       = BigInt(process.env.START_BLOCK ?? 0);
 export const LOGS_CHUNK_SIZE   = BigInt(process.env.LOGS_CHUNK_SIZE ?? 10);
 export const BACKFILL_MODE     = (process.env.BACKFILL_MODE ?? 'logs') as 'logs' | 'ids';
-export const IDENTITY_API_URL      = process.env.IDENTITY_API_URL  ?? 'http://localhost:4000';
+
 export const ETH_SEPOLIA_GRAPHQL_URL       = process.env.ETH_SEPOLIA_GRAPHQL_URL || '';
 export const BASE_SEPOLIA_GRAPHQL_URL       = process.env.BASE_SEPOLIA_GRAPHQL_URL || '';
 export const OP_SEPOLIA_GRAPHQL_URL       = process.env.OP_SEPOLIA_GRAPHQL_URL || '';

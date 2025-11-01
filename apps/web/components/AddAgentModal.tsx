@@ -1115,7 +1115,10 @@ export function AddAgentModal({ open, onClose }: Props) {
         if (typeof (resolvedMeta.registrations as any)?.then === 'function') {
           resolvedMeta.registrations = await (resolvedMeta.registrations as Promise<any[]>);
         }
+
+        console.info("@@@@@@@@@@@@@@@@@@@ resolvedMeta: ", resolvedMeta)
         const upload = await IpfsService.uploadJson({ data: resolvedMeta, filename: `agent_${agentNameLower}.json` });
+        console.info("@@@@@@@@@@@@@@@@@@@ upload: ", upload)
         tokenUri = upload.url;
       } catch (e) {
         console.warn('IPFS upload failed, proceeding without tokenUri', e);
