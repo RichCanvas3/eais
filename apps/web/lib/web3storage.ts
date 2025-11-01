@@ -16,7 +16,11 @@ export async function initializeWeb3Storage() {
     web3StorageClient = await create();
     
     console.log('Logging in to Web3.Storage...');
-    await web3StorageClient.login(process.env.WEB3_STORAGE_EMAIL);
+    const email = process.env.WEB3_STORAGE_EMAIL;
+    if (!email || !email.includes('@')) {
+      throw new Error('Invalid email format');
+    }
+    await web3StorageClient.login(email as `${string}@${string}`);
     
     console.log('Getting available spaces...');
     const spaces = await web3StorageClient.spaces();

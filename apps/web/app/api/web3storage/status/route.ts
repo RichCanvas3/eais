@@ -15,7 +15,11 @@ export async function GET(request: NextRequest) {
     }
     
     const client = await create();
-    await client.login(process.env.WEB3_STORAGE_EMAIL);
+    const email = process.env.WEB3_STORAGE_EMAIL;
+    if (!email || !email.includes('@')) {
+      throw new Error('Invalid email format');
+    }
+    await client.login(email as `${string}@${string}`);
     const spaces = await client.spaces();
     
     return NextResponse.json({

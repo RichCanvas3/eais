@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { ethers } from 'ethers';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener, LinearProgress, Box } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { createAgentAdapter, 
   createAIAgentIdentity as adapterCreateAIAgentIdentity, 
@@ -41,6 +41,8 @@ export function AddAgentModal({ open, onClose }: Props) {
   const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string>('0xaa36a7');
   const [org, setOrg] = React.useState('8004-agent');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [mintingProgress, setMintingProgress] = React.useState(0);
+  const [mintingStartTime, setMintingStartTime] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
@@ -971,6 +973,8 @@ export function AddAgentModal({ open, onClose }: Props) {
     if (!agentName.trim()) { setError('agent name is required'); return; }
     setError(null);
     setIsSubmitting(true);
+    setMintingProgress(0);
+    setMintingStartTime(Date.now());
     try {
 
       // create ens agent name
@@ -1137,6 +1141,8 @@ export function AddAgentModal({ open, onClose }: Props) {
 
 
       setIsSubmitting(false);
+      setMintingProgress(100);
+      setMintingStartTime(null);
       onClose();
       
       /*
@@ -1217,17 +1223,42 @@ export function AddAgentModal({ open, onClose }: Props) {
       */
     } catch (err: any) {
       setIsSubmitting(false);
+      setMintingProgress(0);
+      setMintingStartTime(null);
       setError(err?.message ?? 'Failed to submit');
     }
   }
 
+  // Progress tracking: simulate 2 minutes (120 seconds) of processing
+  React.useEffect(() => {
+    if (!isSubmitting || !mintingStartTime) {
+      return;
+    }
+
+    const updateProgress = () => {
+      const elapsed = (Date.now() - mintingStartTime) / 1000; // seconds
+      const totalTime = 120; // 2 minutes
+      const progress = Math.min(95, (elapsed / totalTime) * 100); // Cap at 95% until actual completion
+      setMintingProgress(progress);
+    };
+
+    const interval = setInterval(updateProgress, 100); // Update every 100ms for smooth animation
+    updateProgress(); // Initial update
+
+    return () => clearInterval(interval);
+  }, [isSubmitting, mintingStartTime]);
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" sx={{ '& .MuiDialog-paper': { minHeight: '600px' } }}>
+    <>
+      <style>{`
+        @keyframes minting-slide {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+      <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" sx={{ '& .MuiDialog-paper': { minHeight: '600px' } }}>
       <DialogTitle>
         Create Agent Identity
-        <Typography variant="caption" color="text.secondary" display="block">
-          Connected EOA: {eoaAddress ?? 'Not connected'}
-        </Typography>
       </DialogTitle>
       <DialogContent sx={{ overflow: 'visible' }}>
         <Stack spacing={2}>
@@ -1271,8 +1302,7 @@ export function AddAgentModal({ open, onClose }: Props) {
             </select>
           </Stack>
           
-          <TextField label="Org" placeholder="8004-agent.eth" value={org} onChange={(e) => setOrg(e.target.value)} fullWidth autoFocus />
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 5, wordBreak: 'break-all', minHeight: '20px' }}>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ wordBreak: 'break-all', minHeight: '20px' }}>
             {org ? (
               orgStatusLoading ? 'Org: checking…' : orgStatusError ? `Org: error — ${orgStatusError}` : orgStatus?.exists ? (
                 (() => {
@@ -1529,6 +1559,51 @@ export function AddAgentModal({ open, onClose }: Props) {
             </Typography>
           )}
           {error && <Typography variant="body2" color="error">{error}</Typography>}
+          
+          {/* Minting Progress Bar */}
+          {isSubmitting && (
+            <Box sx={{ mt: 3, mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    background: 'linear-gradient(90deg, #1976d2 0%, #42a5f5 50%, #1976d2 100%)',
+                    backgroundSize: '200% auto',
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    animation: 'minting-slide 2s linear infinite',
+                  }}
+                >
+                  🎨 Minting...
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {Math.round(mintingProgress)}%
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={mintingProgress} 
+                sx={{ 
+                  height: 8, 
+                  borderRadius: 4,
+                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 4,
+                    background: 'linear-gradient(90deg, #1976d2 0%, #42a5f5 25%, #90caf9 50%, #42a5f5 75%, #1976d2 100%)',
+                    backgroundSize: '200% auto',
+                    animation: 'minting-slide 2s linear infinite',
+                  }
+                }} 
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', fontStyle: 'italic' }}>
+                Creating your agent identity on-chain... This may take up to 2 minutes
+              </Typography>
+            </Box>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -1545,6 +1620,7 @@ export function AddAgentModal({ open, onClose }: Props) {
         )}>Create Agent Identity</Button>
       </DialogActions>
     </Dialog>
+    </>
   );
 }
 
