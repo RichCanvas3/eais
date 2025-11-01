@@ -1,7 +1,6 @@
 'use client';
 import * as React from 'react';
 import { createWeb3Auth } from '@/lib/web3auth';
-import { switchToSepoliaNetwork, isSepoliaNetwork } from '@/lib/metamask-utils';
 
 type Web3AuthContextValue = {
   address: string | null;
@@ -52,13 +51,7 @@ export function Web3AuthProvider({ children, clientId, chainIdHex, rpcUrl }: Pro
   const login = React.useCallback(async () => {
     if (!web3auth) return;
     try {
-      // First, try to ensure we're on the correct network
-      const isSepolia = await isSepoliaNetwork();
-      if (!isSepolia) {
-        console.log('Switching to Sepolia network...');
-        await switchToSepoliaNetwork();
-      }
-
+      // Connect using Web3Auth connect() - will show OpenLogin modal with social providers
       const p = await web3auth.connect();
       setProvider(p);
       try {
@@ -69,33 +62,6 @@ export function Web3AuthProvider({ children, clientId, chainIdHex, rpcUrl }: Pro
       }
     } catch (error) {
       console.error('Error connecting to Web3Auth:', error);
-      
-      // If MetaMask fails due to network issues, try to fix the network first
-      if (error && typeof error === 'object' && 'message' in error && 
-          typeof error.message === 'string' && error.message.includes('nativeCurrency.symbol')) {
-        console.log('Detected network conflict, attempting to resolve...');
-        try {
-          await switchToSepoliaNetwork();
-          // Retry connection after network fix
-          const p = await web3auth.connect();
-          setProvider(p);
-          const accounts = await p.request({ method: 'eth_accounts' });
-          setAddress(accounts?.[0] ?? null);
-          return;
-        } catch (retryError) {
-          console.error('Retry after network fix failed:', retryError);
-        }
-      }
-      
-      // If MetaMask fails, try to connect to OpenLogin as fallback
-      try {
-        const p = await web3auth.connectTo('openlogin');
-        setProvider(p);
-        const accounts = await p.request({ method: 'eth_accounts' });
-        setAddress(accounts?.[0] ?? null);
-      } catch (fallbackError) {
-        console.error('Error with fallback connection:', fallbackError);
-      }
     }
   }, [web3auth]);
 

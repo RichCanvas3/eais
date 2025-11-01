@@ -13,21 +13,26 @@ export default function Page() {
   
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h5" fontWeight={600}>Agentic Trust - Agent Explorer</Typography>
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust Layer</Typography>
+            <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
+          </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isLoggedIn && (
-              <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small">
-                View Stats
+              <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small" sx={{ borderColor: 'divider', color: 'text.secondary' }}>
+                Stats
               </Button>
             )}
-            <Button variant="contained" onClick={isLoggedIn ? logout : login} disableElevation size="small">
-              {isLoggedIn ? 'Disconnect' : 'Login'}
+            <Button variant="outlined" onClick={isLoggedIn ? logout : login} disableElevation size="small" sx={{ borderColor: 'divider', color: 'text.primary' }}>
+              {isLoggedIn ? 'Sign Out' : 'Sign In'}
             </Button>
           </Box>
         </Box>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>Discover, evaluate, and connect with AI agents in the agentic ecosystem.</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: '800px' }}>
+          Browse and manage ERC-8004 compliant agent identities across multiple blockchain networks.
+        </Typography>
       </Box>
       
       {isLoggedIn ? (
@@ -35,78 +40,95 @@ export default function Page() {
           <AgentTable />
         </Paper>
       ) : (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h3" fontWeight={600} sx={{ mb: 3, color: 'primary.main' }}>
-            Create and Manage your Agent Identities
-          </Typography>
+        <Box sx={{ py: 6 }}>
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Typography variant="h4" fontWeight={500} color="text.primary" sx={{ mb: 2 }}>
+              ERC-8004 Agent Explorer
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: '600px', mx: 'auto' }}>
+              Browse registered agent identities on Ethereum Sepolia, Base Sepolia, and Optimism Sepolia.
+            </Typography>
 
-          <Button 
-            variant="contained" 
-            size="large" 
-            onClick={login} 
-            disableElevation
-            sx={{ px: 4, py: 1.5, fontSize: '1.1rem' }}
-          >
-            Get Started with Social Login
-          </Button>
+            <Button 
+              variant="outlined" 
+              size="medium" 
+              onClick={login} 
+              disableElevation
+              sx={{ 
+                px: 4, 
+                py: 1.5, 
+                borderColor: 'text.primary',
+                color: 'text.primary',
+                '&:hover': {
+                  borderColor: 'text.primary',
+                  bgcolor: 'action.hover'
+                }
+              }}
+            >
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                <Typography component="span" sx={{ textTransform: 'none' }}>Sign In to Continue</Typography>
+                <Typography component="span" variant="caption" fontStyle="italic" color="text.secondary" sx={{ textTransform: 'none' }}>use your social login</Typography>
+              </Box>
+            </Button>
+          </Box>
           
-          <Grid container spacing={3} sx={{ mt: 6, maxWidth: '1200px', mx: 'auto' }}>
+          <Grid container spacing={2} sx={{ maxWidth: '1000px', mx: 'auto', mt: 4 }}>
             <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Social Login, or Wallet
+              <Card elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                <CardContent sx={{ p: '0 !important' }}>
+                  <Typography variant="subtitle1" fontWeight={500} sx={{ mb: 1, color: 'text.primary' }}>
+                    Social Authentication
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Connect with your social account or wallet for seamless agent identity management
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                    Sign in using Google, Apple, Twitter, or other social providers. No crypto wallet required.
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Multi-Chain
+              <Card elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                <CardContent sx={{ p: '0 !important' }}>
+                  <Typography variant="subtitle1" fontWeight={500} sx={{ mb: 1, color: 'text.primary' }}>
+                    On-Chain Identities
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Manage your agents across multiple blockchain networks with unified control
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Strongly Named
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Create human-readable agent names with ENS integration for easy identification
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                    Each agent has a unique blockchain address with cryptographically verifiable ownership.
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Uniquely Addressable & Onchain Verifiable
+              <Card elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                <CardContent sx={{ p: '0 !important' }}>
+                  <Typography variant="subtitle1" fontWeight={500} sx={{ mb: 1, color: 'text.primary' }}>
+                    ENS Integration
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Each agent has a unique blockchain address with verifiable cryptographic signatures
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                    Human-readable names via Ethereum Name Service for easier identification and discovery.
                   </Typography>
                 </CardContent>
               </Card>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Agent Discovery - Trust Graph
+              <Card elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                <CardContent sx={{ p: '0 !important' }}>
+                  <Typography variant="subtitle1" fontWeight={500} sx={{ mb: 1, color: 'text.primary' }}>
+                    Multi-Chain Support
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Discover and connect with agents through cross-chain subgraphs and naming services
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                    Manage agents across Ethereum L1 and L2 networks from a single interface.
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card elevation={0} sx={{ p: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                <CardContent sx={{ p: '0 !important' }}>
+                  <Typography variant="subtitle1" fontWeight={500} sx={{ mb: 1, color: 'text.primary' }}>
+                    Indexer GraphQL Access
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                    Query agent data via GraphQL API. Get your access token.
                   </Typography>
                 </CardContent>
               </Card>
