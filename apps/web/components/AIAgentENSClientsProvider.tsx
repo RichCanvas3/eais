@@ -15,28 +15,29 @@ export function useAgentENSClients(): ENSClientsByChain {
 }
 
 // Convenience hook to get an ENS client for a specific chain, with fallbacks
+// Memoized to avoid re-computing on every render
 export function useAgentENSClientFor(chainIdHex?: string): AIAgentENSClient | null {
   const clients = useAgentENSClients();
-  // Lazy import to avoid circular deps
-  const { useAgentENSClient } = require('./AIAgentENSClientProvider') as typeof import('./AIAgentENSClientProvider');
   
-  if (chainIdHex && clients[chainIdHex]) {
-    console.log(`🔍 Switching to ENS client for chain: ${chainIdHex}`);
-    return clients[chainIdHex];
-  }
+  // Create stable dependencies: chainIdHex and the actual client references
+  const targetClient = chainIdHex ? clients[chainIdHex] : null;
+  const firstChainId = React.useMemo(() => Object.keys(clients)[0] || null, [clients]);
+  const firstClient = firstChainId ? clients[firstChainId] : null;
   
-  const first = Object.keys(clients)[0];
-  if (first) {
-    console.log(`🔍 Using first available ENS client: ${first}`);
-    return clients[first];
-  }
-  
-  try {
-    return useAgentENSClient?.() ?? null;
-  } catch {
-    console.log('🔍 No ENS client available');
+  // Use useMemo to only recompute when the actual client references change
+  return React.useMemo(() => {
+    if (targetClient) {
+      return targetClient;
+    }
+    
+    if (firstClient) {
+      return firstClient;
+    }
+    
+    // No fallback - return null if no chain-specific clients are available
+    // The caller should handle the null case appropriately
     return null;
-  }
+  }, [targetClient, firstClient]);
 }
 
 type ENSChainConfig = {

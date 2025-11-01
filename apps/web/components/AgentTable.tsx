@@ -300,7 +300,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 							try {
 								const cid = u.slice('ipfs://'.length).split('/')[0]?.trim();
 								if (cid) {
-									const res = await fetch(`/api/web3storage/download/${cid}`);
+									const res = await fetch(`/api/ipfs/download/${cid}`);
 									fetched = await res.json().catch(() => null);
 								}
 							} catch {}
@@ -643,7 +643,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						try {
 							const rest = u.slice('ipfs://'.length);
 							const cid = rest.split('/')[0]?.trim();
-							if (cid) return `/api/web3storage/download/${cid}`;
+							if (cid) return `/api/ipfs/download/${cid}`;
 						} catch {}
 						return null;
 					}

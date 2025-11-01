@@ -1,11 +1,11 @@
-// Lightweight client for the Next.js Web3.Storage API endpoints
+// Lightweight client for the Next.js IPFS API endpoints
 // Endpoints available locally:
-// - POST   /api/web3storage/upload            { data, filename? }
-// - GET    /api/web3storage/download/:cid
-// - POST   /api/web3storage/credentials/save  { credentials, did }
-// - GET    /api/web3storage/credentials/:did
-// - DELETE /api/web3storage/credentials/:did
-// - GET    /api/web3storage/status
+// - POST   /api/ipfs/upload            { data, filename? }
+// - GET    /api/ipfs/download/:cid
+// - POST   /api/ipfs/credentials/save  { credentials, did }
+// - GET    /api/ipfs/credentials/:did
+// - DELETE /api/ipfs/credentials/:did
+// - GET    /api/ipfs/status
 
 type JsonRecord = Record<string, unknown> | unknown[] | null;
 
@@ -43,7 +43,7 @@ class IpfsService {
 
     console.info("&&&&&&&&&&& call next ipfs upload service: ");
     const out = await httpJson<{ success: boolean; cid: string; url: string }>(
-      "/api/web3storage/upload",
+      "/api/ipfs/upload",
       { method: "POST", body: JSON.stringify(payload) }
     );
     return { cid: out.cid, url: out.url };
@@ -51,14 +51,14 @@ class IpfsService {
 
   // Download JSON by CID
   static async downloadJson(cid: string): Promise<JsonRecord> {
-    const out = await httpJson<{ success: boolean; data: JsonRecord }>(`/api/web3storage/download/${cid}`);
+    const out = await httpJson<{ success: boolean; data: JsonRecord }>(`/api/ipfs/download/${cid}`);
     return out.data ?? null;
   }
 
   // Save credentials bundle under a DID
   static async saveCredentials(params: { credentials: JsonRecord; did: string }): Promise<{ cid: string; url: string }> {
     const out = await httpJson<{ success: boolean; cid: string; url: string }>(
-      "/api/web3storage/credentials/save",
+      "/api/ipfs/credentials/save",
       { method: "POST", body: JSON.stringify({ credentials: params.credentials, did: params.did }) }
     );
     return { cid: out.cid, url: out.url };
@@ -66,19 +66,19 @@ class IpfsService {
 
   // Retrieve credentials for a DID (server currently returns [])
   static async getCredentials(did: string): Promise<JsonRecord> {
-    const out = await httpJson<{ success: boolean; data: JsonRecord }>(`/api/web3storage/credentials/${did}`);
+    const out = await httpJson<{ success: boolean; data: JsonRecord }>(`/api/ipfs/credentials/${did}`);
     return out.data ?? null;
   }
 
   // Delete credentials for a DID (logical delete; server may be a no-op)
   static async deleteCredentials(did: string): Promise<boolean> {
-    const out = await httpJson<{ success: boolean }>(`/api/web3storage/credentials/${did}`, { method: "DELETE" });
+    const out = await httpJson<{ success: boolean }>(`/api/ipfs/credentials/${did}`, { method: "DELETE" });
     return Boolean(out.success);
   }
 
   // Service configuration and current spaces (diagnostics)
   static async getStatus(): Promise<{ configured: boolean; email?: string; spaceDid?: string; availableSpaces?: string[]; targetSpaceExists?: boolean; error?: string }> {
-    return await httpJson(`/api/web3storage/status`);
+    return await httpJson(`/api/ipfs/status`);
   }
 
 
