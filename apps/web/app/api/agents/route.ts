@@ -19,12 +19,21 @@ async function queryGraphQL(query: string, variables: any = {}) {
 
     // Get secret access code for server-to-server authentication
     const secretAccessCode = process.env.GRAPHQL_SECRET_ACCESS_CODE;
+    console.info("++++++++++++++++++++ queryGraphQL auth check:", {
+      hasSecretAccessCode: !!secretAccessCode,
+      secretAccessCodeLength: secretAccessCode?.length || 0,
+      secretAccessCodePreview: secretAccessCode ? `${secretAccessCode.substring(0, 8)}...` : 'none'
+    });
+    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     
     if (secretAccessCode) {
       headers['Authorization'] = `Bearer ${secretAccessCode}`;
+      console.info("++++++++++++++++++++ queryGraphQL Authorization header set");
+    } else {
+      console.warn("⚠️ GRAPHQL_SECRET_ACCESS_CODE not configured! Requests will fail.");
     }
 
     const res = await fetch(GRAPHQL_URL, {

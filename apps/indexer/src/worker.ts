@@ -236,6 +236,7 @@ const corsHeaders = {
 
 interface Env {
   DB: any; // D1Database type will be available at runtime
+  GRAPHQL_SECRET_ACCESS_CODE?: string; // Secret access code for server-to-server authentication
 }
 
 export default {
@@ -314,18 +315,21 @@ export default {
           }
 
           // Check secret access code from environment variable (for server-to-server)
-          const secretAccessCode = (env as any).GRAPHQL_SECRET_ACCESS_CODE;
+          const secretAccessCode = env.GRAPHQL_SECRET_ACCESS_CODE;
           if (secretAccessCode && accessCode === secretAccessCode) {
             // Secret access code is valid, continue
+            console.log('[Auth] Validated secret access code');
           } else {
             // Validate regular user access code
             const isValid = await validateAccessCode(env.DB, accessCode);
             if (!isValid) {
+              console.log(`[Auth] Invalid access code. Secret code configured: ${!!secretAccessCode}, Received code length: ${accessCode.length}`);
               return Response.json(
                 { errors: [{ message: 'Invalid access code. Please get your access code via the createAccessCode mutation.' }] },
                 { status: 401, headers: corsHeaders }
               );
             }
+            console.log('[Auth] Validated user access code');
           }
         }
         
