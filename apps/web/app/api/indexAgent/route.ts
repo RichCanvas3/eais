@@ -14,9 +14,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the GraphQL endpoint from environment variable
-    const graphqlUrl = process.env.NEXT_PUBLIC_INDEXER_GRAPHQL_URL || process.env.INDEXER_GRAPHQL_URL;
+    // Get the GraphQL endpoint from environment variable (same as other API routes)
+    const graphqlUrl = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL;
     if (!graphqlUrl) {
+      console.error('GraphQL endpoint not configured. Set GRAPHQL_API_URL or NEXT_PUBLIC_GRAPHQL_API_URL');
       return NextResponse.json(
         { error: 'GraphQL endpoint not configured' },
         { status: 500 }

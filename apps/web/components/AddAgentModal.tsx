@@ -34,9 +34,10 @@ import { privateKeyToAccount } from 'viem/accounts';
 type Props = {
   open: boolean;
   onClose: () => void;
+  onAgentIndexed?: () => void; // Callback to refresh table after indexing
 };
 
-export function AddAgentModal({ open, onClose }: Props) {
+export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
   // All useState hooks first
   const [selectedChainIdHex, setSelectedChainIdHex] = React.useState<string>('0xaa36a7');
   const [org, setOrg] = React.useState('8004-agent');
@@ -93,6 +94,7 @@ export function AddAgentModal({ open, onClose }: Props) {
   const [agentChecking, setAgentChecking] = React.useState(false);
   const [agentCreating, setAgentCreating] = React.useState(false);
   const [agentError, setAgentError] = React.useState<string | null>(null);
+  const [indexing, setIndexing] = React.useState(false);
   
   // All useContext hooks after useState
   const { provider, address: eoaAddress } = useWeb3Auth();
@@ -951,6 +953,47 @@ export function AddAgentModal({ open, onClose }: Props) {
     return () => { cancelled = true; };
   }, [org]);
 
+  // Handler to index agent 781
+  async function handleIndexAgent781() {
+    setIndexing(true);
+    setError(null);
+    try {
+      const chainId = parseInt(selectedChainIdHex || '0xaa36a7', 16);
+      
+      console.log(`🔄 Indexing agent 781 on chain ${chainId}...`);
+      const indexResponse = await fetch('/api/indexAgent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agentId: '781',
+          chainId: chainId,
+        }),
+      });
+
+      if (indexResponse.ok) {
+        const indexData = await indexResponse.json();
+        console.log('✅ Agent 781 indexed successfully:', indexData);
+        
+        // Close dialog and refresh table
+        onClose();
+        if (onAgentIndexed) {
+          onAgentIndexed();
+        }
+      } else {
+        const errorData = await indexResponse.json();
+        console.error('❌ Failed to index agent 781:', errorData);
+        setError(`Failed to index agent: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (indexError: any) {
+      console.error('❌ Error indexing agent 781:', indexError?.message || indexError);
+      setError(`Error indexing agent: ${indexError?.message || 'Unknown error'}`);
+    } finally {
+      setIndexing(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
 
     console.log('********************* handleSubmit', e);
@@ -1623,9 +1666,18 @@ export function AddAgentModal({ open, onClose }: Props) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+        <Button onClick={onClose} disabled={isSubmitting || indexing}>Cancel</Button>
+        <Button 
+          onClick={handleIndexAgent781} 
+          variant="outlined" 
+          disabled={isSubmitting || indexing}
+          sx={{ mr: 1 }}
+        >
+          {indexing ? 'Indexing...' : 'Index Agent 781'}
+        </Button>
         <Button onClick={handleSubmit} variant="contained" disableElevation disabled={Boolean(
           isSubmitting ||
+          indexing ||
           !provider ||
           agentIdentityExists === true ||
           !agentName.trim() ||

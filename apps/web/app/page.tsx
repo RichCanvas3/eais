@@ -188,7 +188,10 @@ export default function Page() {
         </Box>
       )}
       
-      <AddAgentModal open={open} onClose={() => setOpen(false)} />
+      <AddAgentModal open={open} onClose={() => setOpen(false)} onAgentIndexed={() => {
+        // Table will auto-refresh when navigating to it
+        window.location.reload();
+      }} />
       <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
       
       <Dialog open={accessCodeOpen} onClose={() => setAccessCodeOpen(false)} maxWidth="sm" fullWidth>

@@ -2995,6 +2995,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 					// Refresh the table after agent creation
 					fetchData(data.page);
 				}}
+				onAgentIndexed={() => {
+					// Refresh the table after agent indexing
+					fetchData(data.page);
+				}}
 			/>
 
 			{/* DID:Web Modal */}
