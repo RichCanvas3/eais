@@ -1,0 +1,33 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-6e25fb3d343cd835.js",
+      "static/chunks/779-a0fb54cbf7446cf1.js",
+      "static/chunks/main-app-5ccca29e22e1b0cf.js",
+      "static/chunks/app/_not-found/page-ae5fdb746a78f7f2.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-6e25fb3d343cd835.js",
+      "static/chunks/779-a0fb54cbf7446cf1.js",
+      "static/chunks/main-app-5ccca29e22e1b0cf.js",
+      "static/chunks/web3auth-9c493b2b96059507.js",
+      "static/chunks/viem-e6002c2c765b8ae9.js",
+      "static/chunks/ethers-20ad48dfb78bb60f.js",
+      "static/chunks/mui-12b493f94492316f.js",
+      "static/chunks/commons-3d5cabe0ebad523f.js",
+      "static/chunks/app/layout-9a749fcac143d9b4.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-6e25fb3d343cd835.js",
+      "static/chunks/779-a0fb54cbf7446cf1.js",
+      "static/chunks/main-app-5ccca29e22e1b0cf.js",
+      "static/chunks/web3auth-9c493b2b96059507.js",
+      "static/chunks/viem-e6002c2c765b8ae9.js",
+      "static/chunks/ethers-20ad48dfb78bb60f.js",
+      "static/chunks/mui-12b493f94492316f.js",
+      "static/chunks/commons-3d5cabe0ebad523f.js",
+      "static/chunks/503-687661ebda2f965c.js",
+      "static/chunks/app/page-e83259b1eef40cd4.js"
+    ]
+  }
+}
