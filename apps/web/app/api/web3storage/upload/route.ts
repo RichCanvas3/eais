@@ -7,7 +7,14 @@ export async function POST(request: NextRequest) {
   console.log('Handling Web3.Storage upload request');
   
   try {
-    const client = await initializeWeb3Storage();
+    // Initialize with timeout protection at the route level
+    const initPromise = initializeWeb3Storage();
+    const initTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Web3.Storage initialization timeout (60s)')), 60000); // 60 second timeout
+    });
+    
+    const client = await Promise.race([initPromise, initTimeout]) as Awaited<ReturnType<typeof initializeWeb3Storage>>;
+    
     if (!client) {
       return NextResponse.json(
         { error: 'Web3.Storage not available' },
@@ -33,8 +40,13 @@ export async function POST(request: NextRequest) {
       await client.setCurrentSpace(targetSpace.did());
     }
     
-    console.log('📤 Uploading test file...');
-    const cid = await client.uploadFile(file);
+    console.log('📤 Uploading file...');
+    // Upload with timeout protection
+    const uploadPromise = client.uploadFile(file);
+    const uploadTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Web3.Storage upload timeout (120s)')), 120000); // 120 second timeout
+    });
+    const cid = await Promise.race([uploadPromise, uploadTimeout]) as Awaited<ReturnType<typeof client.uploadFile>>;
 
     console.log('Successfully uploaded to Web3.Storage:', cid.toString());
     return NextResponse.json({ 
@@ -44,9 +56,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error uploading to Web3.Storage:', error);
+    const errorMessage = error?.message || 'Internal server error';
+    
+    // Return appropriate status code for timeouts
+    const statusCode = errorMessage.includes('timeout') ? 504 : 500;
+    
     return NextResponse.json(
-      { error: error?.message || 'Internal server error' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     );
   }
 }

@@ -43,7 +43,7 @@ function getStoreLocation(): string {
 }
 
 export async function initializeWeb3Storage() {
-  if (web3StorageInitialized) return web3StorageClient;
+  if (web3StorageInitialized && web3StorageClient) return web3StorageClient;
   
   try {
     if (!process.env.WEB3_STORAGE_EMAIL || !process.env.WEB3_STORAGE_SPACE_DID) {
@@ -59,9 +59,20 @@ export async function initializeWeb3Storage() {
     const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
     
     if (isServerless) {
-      // In serverless, use in-memory store (will re-authenticate each invocation)
-      store = new StoreMemory();
-      console.log('Using in-memory store for serverless environment');
+      // In serverless, use /tmp for store to cache credentials across warm requests
+      try {
+        const tmpDir = '/tmp/.w3access';
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+        // Use file store in /tmp for credential persistence across warm requests
+        store = new StoreConf({ profile: 'default' });
+        console.log('Using /tmp store for serverless environment (credentials cached)');
+      } catch (e: any) {
+        console.warn('Failed to create /tmp store, using in-memory store:', e?.message || e);
+        store = new StoreMemory();
+        console.log('Falling back to in-memory store (slower, will re-authenticate each request)');
+      }
     } else {
       // In local development, try to use file store
       try {
@@ -76,17 +87,35 @@ export async function initializeWeb3Storage() {
       }
     }
     
-    web3StorageClient = await create({ store });
+    // Create client with timeout protection
+    const clientPromise = create({ store });
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Web3.Storage client creation timeout')), 15000); // 15 second timeout
+    });
+    
+    web3StorageClient = await Promise.race([clientPromise, timeoutPromise]) as Awaited<ReturnType<typeof create>>;
     
     console.log('Logging in to Web3.Storage...');
     const email = process.env.WEB3_STORAGE_EMAIL;
     if (!email || !email.includes('@')) {
       throw new Error('Invalid email format');
     }
-    await web3StorageClient.login(email as `${string}@${string}`);
+    
+    // Login with timeout
+    const loginPromise = web3StorageClient.login(email as `${string}@${string}`);
+    const loginTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Web3.Storage login timeout')), 20000); // 20 second timeout
+    });
+    await Promise.race([loginPromise, loginTimeout]);
     
     console.log('Getting available spaces...');
-    const spaces = await web3StorageClient.spaces();
+    // Get spaces with timeout
+    const spacesPromise = web3StorageClient.spaces();
+    const spacesTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Web3.Storage spaces fetch timeout')), 20000); // 20 second timeout
+    });
+    const spaces = await Promise.race([spacesPromise, spacesTimeout]) as Awaited<ReturnType<typeof web3StorageClient.spaces>>;
+    
     console.log(`Found ${spaces.length} spaces`);
     
     // Check if the configured space is available
@@ -115,6 +144,9 @@ export async function initializeWeb3Storage() {
     }
   } catch (error: any) {
     console.error('Error initializing Web3.Storage:', error?.message || error);
+    // Reset initialization state on error so we can retry
+    web3StorageInitialized = false;
+    web3StorageClient = null;
     return null;
   }
 }
