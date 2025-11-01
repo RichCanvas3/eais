@@ -78,6 +78,28 @@ async function initializeSchema() {
     // D1 schema should already exist from migrations
     // Skip initialization - tables should be created via wrangler d1 execute
     console.log('📡 D1 database - assuming schema already exists from migrations');
+    
+    // Safety check: Try to create access_codes table if it doesn't exist (for development)
+    try {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS access_codes (
+          address TEXT PRIMARY KEY,
+          accessCode TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          lastUsedAt INTEGER
+        );
+      `);
+      console.log('✅ access_codes table verified/created in D1');
+    } catch (error: any) {
+      // If table already exists, that's fine. Otherwise log warning.
+      if (!error?.message?.includes('already exists') && !error?.message?.includes('duplicate')) {
+        console.warn('⚠️  Could not create access_codes table in D1. Run migration manually:');
+        console.warn('   wrangler d1 execute erc8004-indexer --file=./migrations/0002_add_access_codes.sql');
+        console.warn('   Error:', error?.message || error);
+      } else {
+        console.log('✅ access_codes table already exists in D1');
+      }
+    }
     return;
   }
 
@@ -133,6 +155,13 @@ async function initializeSchema() {
         supportedTrust TEXT,
         rawJson TEXT,
         updatedAtTime INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS access_codes (
+        address TEXT PRIMARY KEY,
+        accessCode TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        lastUsedAt INTEGER
       );
     `);
   } catch (error) {

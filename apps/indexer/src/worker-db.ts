@@ -134,6 +134,77 @@ export function createDBQueries(db: any) {
       const result = await db.prepare(sqlQuery).bind(...params).all();
       return result.results || [];
     },
+
+    getAccessCode: async (args: { address: string }) => {
+      const { address } = args;
+      const result = await db
+        .prepare('SELECT * FROM access_codes WHERE address = ?')
+        .bind(address.toLowerCase())
+        .first();
+      return result || null;
+    },
+
+    createAccessCode: async (args: { address: string }) => {
+      const { address } = args;
+      const normalizedAddress = address.toLowerCase();
+      
+      // Check if access code already exists
+      const existing = await db
+        .prepare('SELECT * FROM access_codes WHERE address = ?')
+        .bind(normalizedAddress)
+        .first();
+      
+      if (existing) {
+        return existing;
+      }
+      
+      // Generate new access code (32 bytes = 64 hex characters)
+      // Use crypto.randomUUID() and combine multiple UUIDs for 64 hex chars, or use crypto.subtle for random bytes
+      // For Cloudflare Workers, we can use crypto.randomUUID() multiple times
+      const uuid1 = crypto.randomUUID().replace(/-/g, '');
+      const uuid2 = crypto.randomUUID().replace(/-/g, '');
+      const uuid3 = crypto.randomUUID().replace(/-/g, '').substring(0, 8);
+      const accessCode = (uuid1 + uuid2 + uuid3).substring(0, 64);
+      
+      const timestamp = Math.floor(Date.now() / 1000);
+      
+      // Insert new access code
+      await db
+        .prepare('INSERT INTO access_codes (address, accessCode, createdAt) VALUES (?, ?, ?)')
+        .bind(normalizedAddress, accessCode, timestamp)
+        .run();
+      
+      return {
+        address: normalizedAddress,
+        accessCode,
+        createdAt: timestamp,
+      };
+    },
   };
+}
+
+// Helper function to validate access code (for Workers)
+export async function validateAccessCode(db: any, accessCode: string | null | undefined): Promise<boolean> {
+  if (!accessCode) return false;
+  try {
+    const row = await db
+      .prepare('SELECT accessCode FROM access_codes WHERE accessCode = ?')
+      .bind(accessCode)
+      .first();
+    
+    if (row) {
+      // Update lastUsedAt
+      const timestamp = Math.floor(Date.now() / 1000);
+      await db
+        .prepare('UPDATE access_codes SET lastUsedAt = ? WHERE accessCode = ?')
+        .bind(timestamp, accessCode)
+        .run();
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error validating access code:', error);
+    return false;
+  }
 }
 
