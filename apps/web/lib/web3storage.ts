@@ -1,7 +1,46 @@
 import { create } from '@web3-storage/w3up-client';
+import { StoreConf, StoreMemory } from '@web3-storage/w3up-client/stores';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 let web3StorageClient: Awaited<ReturnType<typeof create>> | null = null;
 let web3StorageInitialized = false;
+
+// Get a writable store location for serverless environments
+function getStoreLocation(): string {
+  // In Vercel/serverless, use /tmp which is writable
+  const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+  if (isServerless) {
+    const tmpDir = '/tmp/.w3access';
+    // Ensure directory exists
+    try {
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+    } catch (e) {
+      console.warn('Failed to create /tmp/.w3access:', e);
+      throw e;
+    }
+    return tmpDir;
+  }
+  // For local development, use temp directory or default location
+  try {
+    const homeDir = os.homedir();
+    const defaultDir = path.join(homeDir, '.config', 'w3access');
+    if (!fs.existsSync(defaultDir)) {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    }
+    return defaultDir;
+  } catch (e) {
+    // Fallback to project directory
+    const fallbackDir = path.join(process.cwd(), '.w3access');
+    if (!fs.existsSync(fallbackDir)) {
+      fs.mkdirSync(fallbackDir, { recursive: true });
+    }
+    return fallbackDir;
+  }
+}
 
 export async function initializeWeb3Storage() {
   if (web3StorageInitialized) return web3StorageClient;
@@ -13,7 +52,31 @@ export async function initializeWeb3Storage() {
     }
 
     console.log('Initializing Web3.Storage client...');
-    web3StorageClient = await create();
+    
+    // Use in-memory store for serverless (credentials don't need to persist)
+    // Use file store for local development
+    let store: StoreConf | StoreMemory;
+    const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+    
+    if (isServerless) {
+      // In serverless, use in-memory store (will re-authenticate each invocation)
+      store = new StoreMemory();
+      console.log('Using in-memory store for serverless environment');
+    } else {
+      // In local development, try to use file store
+      try {
+        const storeLocation = getStoreLocation();
+        // StoreConf uses profile name, not path - create a profile directory
+        store = new StoreConf({ profile: 'default' });
+        console.log(`Using file store for local development`);
+      } catch (e: any) {
+        console.warn('Failed to create file store, using in-memory store:', e?.message || e);
+        store = new StoreMemory();
+        console.log('Using in-memory store (credentials will not persist)');
+      }
+    }
+    
+    web3StorageClient = await create({ store });
     
     console.log('Logging in to Web3.Storage...');
     const email = process.env.WEB3_STORAGE_EMAIL;

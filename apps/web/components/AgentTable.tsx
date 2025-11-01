@@ -35,7 +35,7 @@ import { useAgentIdentityClientFor, useAgentIdentityClients } from './AIAgentIde
 import { useAgentENSClient } from './AIAgentENSClientProvider';
 import { useAgentENSClientFor } from './AIAgentENSClientsProvider';
 import { useOrgIdentityClient } from './OrgIdentityClientProvider';
-import { getExplorerUrl, getExplorerName, getIdentityRegistry, getBundlerUrl, getRpcUrl, getChainConfig, getChainIdHex, getViemChain, getNetworkType } from '../config/chains';
+import { getExplorerUrl, getExplorerName, getIdentityRegistry, getBundlerUrl, getRpcUrl, getChainConfig, getChainIdHex, getViemChain, getNetworkType, CHAIN_CONFIGS } from '../config/chains';
 
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
@@ -63,6 +63,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number }>({ rows: [], total: 0, page: 1, pageSize: 50 });
 	const [mineOnly, setMineOnly] = React.useState(false);
+	const [selectedChainIdFilter, setSelectedChainIdFilter] = React.useState<number | null>(null);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
     const { provider, address: eoa } = useWeb3Auth();
 
@@ -960,7 +961,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			const nameFilter = overrides?.name ?? domain;
 			const addressFilter = overrides?.address ?? address;
 			const idFilter = overrides?.agentId ?? agentId;
-			const chainIdFilter = overrides?.chainId;
+			const chainIdFilter = overrides?.chainId ?? selectedChainIdFilter;
 			
 			if (nameFilter) url.searchParams.set("name", nameFilter);
 			if (addressFilter) url.searchParams.set("address", addressFilter);
@@ -1066,13 +1067,21 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 		fetchData(1);
 	}
 
+	// Auto-refresh when chain filter changes
+	React.useEffect(() => {
+		// Skip initial mount - let the existing useEffect handle that
+		fetchData(1);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedChainIdFilter]);
+
 		function clearFilters() {
 		setDomain("");
 		setAddress("");
 		setAgentId("");
 		setMineOnly(false);
+		setSelectedChainIdFilter(null);
 			// Force-refresh immediately with cleared filters (state updates are async)
-			fetchData(1, { name: "", address: "", agentId: "" });
+			fetchData(1, { name: "", address: "", agentId: "", chainId: undefined });
 	}
 
 	async function runDiscover() {
@@ -1652,13 +1661,39 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 					{/* Search Form */}
 				<Box component="form" onSubmit={handleSubmit}>
 						<Grid container spacing={2}>
-							<Grid item xs={12} md={3}>
+							<Grid item xs={12} md={2}>
+								<TextField
+									fullWidth
+									select
+									label="Chain"
+									value={selectedChainIdFilter ?? ''}
+									onChange={(e) => {
+										const value = e.target.value;
+										setSelectedChainIdFilter(value === '' ? null : parseInt(value));
+									}}
+									size="small"
+									InputLabelProps={{
+										shrink: true,
+									}}
+									SelectProps={{
+										native: true,
+									}}
+								>
+									<option value="">All Chains</option>
+									{CHAIN_CONFIGS.map((config) => (
+										<option key={config.chainId} value={config.chainId}>
+											{config.chainName}
+										</option>
+									))}
+								</TextField>
+							</Grid>
+							<Grid item xs={12} md={2}>
 								<TextField fullWidth label="address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
 							</Grid>
-						<Grid item xs={12} md={3}>
+						<Grid item xs={12} md={2}>
 							<TextField fullWidth label="name" placeholder="Filter by name (ENS or metadata)" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
 						</Grid>
-						<Grid item xs={12} md={3}>
+						<Grid item xs={12} md={2}>
 							<TextField fullWidth label="id" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
 						</Grid>
 						<Grid item xs={12} md={1}>
@@ -1673,8 +1708,8 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				</Grid>
 			</Box>
 
-			{/* Discover below search */}
-			<Box component="form" onSubmit={(e) => { e.preventDefault(); runDiscover(); }}>
+			{/* Discover below search - Hidden for now */}
+			<Box component="form" onSubmit={(e) => { e.preventDefault(); runDiscover(); }} sx={{ display: 'none' }}>
 				<Grid container spacing={2} alignItems="center">
 					<Grid item xs={12} md={9}>
 						<TextField fullWidth label="discover agents" placeholder="Describe what you're looking for…" value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} size="small" />
