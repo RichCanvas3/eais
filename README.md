@@ -1,9 +1,9 @@
-# Agentic Trust Layer - Agent Explorer
+# Agentic Trust - Agent Explorer
 
 ![ERC-8004 Identity Overview](docs/images/ERC8004overview.png)
 ![ERC-8004 Reputation Overview](docs/images/FeedbackFlow.png)
 
-## 🛡️ Agentic Trust Layer
+## 🛡️ Agentic Trust
 
 ERC-8004 provides a standardized way to create, manage, and authenticate autonomous agent identities on Ethereum, building on the **ERC-8004 Trustless Agents** specification.
 

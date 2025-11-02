@@ -35,6 +35,13 @@ async function createWorkersIndexAgentResolver(db: any, env?: any) {
   const baseSepoliaRegistry = env?.BASE_SEPOLIA_IDENTITY_REGISTRY;
   const opSepoliaRegistry = env?.OP_SEPOLIA_IDENTITY_REGISTRY;
 
+  // Log configuration status for debugging
+  console.log('🔧 Chain configuration check:', {
+    'ETH Sepolia': { rpc: !!ethSepoliaRpc, registry: !!ethSepoliaRegistry },
+    'Base Sepolia': { rpc: !!baseSepoliaRpc, registry: !!baseSepoliaRegistry },
+    'Optimism Sepolia': { rpc: !!opSepoliaRpc, registry: !!opSepoliaRegistry },
+  });
+
   if (ethSepoliaRpc && ethSepoliaRegistry) {
     chains.push({
       rpcUrl: ethSepoliaRpc,
@@ -113,6 +120,17 @@ async function createWorkersIndexAgentResolver(db: any, env?: any) {
     console.warn('⚠️ Failed to create backfill clients (backfill will be disabled):', error);
   }
 
+  // Warn if no chains are configured
+  if (chains.length === 0) {
+    console.error('❌ No chains configured! Please set the following environment variables in Cloudflare Workers:');
+    console.error('   Required for ETH Sepolia: ETH_SEPOLIA_RPC_URL (or ETH_SEPOLIA_RPC_HTTP_URL) and ETH_SEPOLIA_IDENTITY_REGISTRY');
+    console.error('   Required for Base Sepolia: BASE_SEPOLIA_RPC_URL (or BASE_SEPOLIA_RPC_HTTP_URL) and BASE_SEPOLIA_IDENTITY_REGISTRY');
+    console.error('   Optional for Optimism Sepolia: OP_SEPOLIA_RPC_URL (or OP_SEPOLIA_RPC_HTTP_URL) and OP_SEPOLIA_IDENTITY_REGISTRY');
+    console.error('   These can be set as environment variables in wrangler.toml [vars] or as secrets via: wrangler secret put <NAME>');
+  } else {
+    console.log(`✅ Configured ${chains.length} chain(s) for indexing`);
+  }
+
   // Enable backfill on Workers
   // WARNING: This may timeout on large backfills due to Workers' 30s request limit
   // The backfill will still run but may be interrupted if it takes too long
@@ -160,6 +178,17 @@ const corsHeaders = sharedCorsHeaders;
 interface Env {
   DB: any; // D1Database type will be available at runtime
   GRAPHQL_SECRET_ACCESS_CODE?: string; // Secret access code for server-to-server authentication
+  // Chain configuration - RPC URLs
+  ETH_SEPOLIA_RPC_URL?: string;
+  ETH_SEPOLIA_RPC_HTTP_URL?: string;
+  BASE_SEPOLIA_RPC_URL?: string;
+  BASE_SEPOLIA_RPC_HTTP_URL?: string;
+  OP_SEPOLIA_RPC_URL?: string;
+  OP_SEPOLIA_RPC_HTTP_URL?: string;
+  // Chain configuration - Registry addresses
+  ETH_SEPOLIA_IDENTITY_REGISTRY?: string;
+  BASE_SEPOLIA_IDENTITY_REGISTRY?: string;
+  OP_SEPOLIA_IDENTITY_REGISTRY?: string;
 }
 
 export default {

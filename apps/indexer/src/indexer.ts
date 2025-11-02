@@ -24,7 +24,7 @@ const ethSepoliathersAdapter = new EthersAdapter(ethSepliaEthersProvider); // No
 const erc8004EthSepoliaClient = new ERC8004Client({
   adapter: ethSepoliathersAdapter,
   addresses: {
-    identityRegistry: ETH_SEPOLIA_IDENTITY_REGISTRY,
+    identityRegistry: ETH_SEPOLIA_IDENTITY_REGISTRY!,
     reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
     validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
     chainId: 11155111, // Eth Sepolia
@@ -38,7 +38,7 @@ const baseSepoliathersAdapter = new EthersAdapter(baseSepliaEthersProvider); // 
 const erc8004BaseSepoliaClient = new ERC8004Client({
   adapter: baseSepoliathersAdapter,
   addresses: {
-    identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY,
+    identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY!,
     reputationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
     validationRegistry: '0x0000000000000000000000000000000000000000', // Not used by indexer
     chainId: 84532, // Base Sepolia (L2)
@@ -164,7 +164,13 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
   return null;
 }
 
-export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigint, tokenURI: string | null, chainId: number) {
+export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigint, tokenURI: string | null, chainId: number, dbOverride?: any) {
+  // Use provided db override (for Workers) or fall back to module-level db (for local)
+  const dbInstance = dbOverride || db;
+  
+  if (!dbInstance) {
+    throw new Error('Database instance required for upsertFromTransfer. In Workers, db must be passed via dbOverride parameter');
+  }
   console.info("............upsertFromTransfer: tokenURI: ", tokenURI)
   const agentId = toDecString(tokenId);
   const ownerAddress = to;
@@ -218,7 +224,7 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
     console.info("............insert into table: chainId: ", chainId)
     console.info("............insert into table: block: ", blockNumber)
     const currentTime = Math.floor(Date.now() / 1000);
-    await db.prepare(`
+    await dbInstance.prepare(`
       INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(chainId, agentId) DO UPDATE SET
@@ -274,7 +280,7 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
         console.info("............update into table: a2aEndpoint: ", a2aEndpoint)
         console.info("............update into table: ensEndpoint: ", ensEndpoint)
         const updateTime = Math.floor(Date.now() / 1000);
-        await db.prepare(`
+        await dbInstance.prepare(`
           UPDATE agents SET
             type = COALESCE(type, ?),
             agentName = CASE 
@@ -324,7 +330,7 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
           agentId,
         );
 
-        await recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId });
+        await recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'MetadataFetched', { tokenId: agentId }, dbInstance);
       } catch (error) {
         console.info("........... error updating a2aEndpoint", error)
       }
@@ -336,8 +342,8 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
     console.info("remove from list")
     try {
       const agentId = toDecString(tokenId);
-      await db.prepare("DELETE FROM agents WHERE chainId = ? AND agentId = ?").run(chainId, agentId);
-      await recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId });
+      await dbInstance.prepare("DELETE FROM agents WHERE chainId = ? AND agentId = ?").run(chainId, agentId);
+      await recordEvent({ transactionHash: `token:${agentId}`, logIndex: 0, blockNumber }, 'Burned', { tokenId: agentId }, dbInstance);
     } catch {}
   }
 }
@@ -538,10 +544,18 @@ export async function upsertFromTokenGraph(item: any, chainId: number) {
   );
 }
 
-async function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: string) {
+async function recordEvent(ev: any, type: string, args: any, agentIdForEventOrDb?: string | any, dbOverride?: any) {
+  // Support both old signature (agentIdForEvent as string) and new signature (dbOverride)
+  const agentIdForEvent = typeof agentIdForEventOrDb === 'string' ? agentIdForEventOrDb : undefined;
+  const dbInstance = dbOverride || (typeof agentIdForEventOrDb !== 'string' ? agentIdForEventOrDb : undefined) || db;
+  
+  if (!dbInstance) {
+    throw new Error('Database instance required for recordEvent. In Workers, db must be passed via dbOverride parameter');
+  }
+  
   const id = `${ev.transactionHash}:${ev.logIndex}`;
   const agentId = agentIdForEvent ?? (args?.agentId !== undefined ? toDecString(args.agentId) : (args?.tokenId !== undefined ? toDecString(args.tokenId) : "0"));
-  await db.prepare(`INSERT OR IGNORE INTO events(id, agentId, type, blockNumber, logIndex, txHash, data)
+  await dbInstance.prepare(`INSERT OR IGNORE INTO events(id, agentId, type, blockNumber, logIndex, txHash, data)
               VALUES(?, ?, ?, ?, ?, ?, ?)`).run(
     id,
     agentId,
@@ -553,7 +567,13 @@ async function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: s
   );
 }
 
-export async function backfill(client: ERC8004Client) {
+export async function backfill(client: ERC8004Client, dbOverride?: any) {
+  // Use provided db override (for Workers) or fall back to module-level db (for local)
+  const dbInstance = dbOverride || db;
+  
+  if (!dbInstance) {
+    throw new Error('Database instance required for backfill. In Workers, db must be passed via env.DB');
+  }
 
   const chainId = await client.getChainId();
 
@@ -581,7 +601,10 @@ export async function backfill(client: ERC8004Client) {
     return;
   }
 
-  const last = await getCheckpoint(chainId);
+  // Use dbInstance directly instead of getCheckpoint (which uses global db)
+  const checkpointKey = chainId ? `lastProcessed_${chainId}` : 'lastProcessed';
+  const lastRow = await dbInstance.prepare("SELECT value FROM checkpoints WHERE key=?").get(checkpointKey) as { value?: string } | undefined;
+  const last = lastRow?.value ? BigInt(lastRow.value) : 0n;
 
 
   console.info("............backfill: query: ", graphqlUrl, "for chain:", chainId)
@@ -659,8 +682,10 @@ export async function backfill(client: ERC8004Client) {
     console.info("&&&&&&&&&&&& upsertFromTransfer: tokenId: ", tokenId)
     console.info("&&&&&&&&&&&& upsertFromTransfer: blockNum: ", blockNum)
     console.info("&&&&&&&&&&&& upsertFromTransfer: uri: ", uri)
-    await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId); 
-    await setCheckpoint(blockNum, chainId);
+    await upsertFromTransfer(toAddr, tokenId, blockNum, uri, chainId, dbInstance); 
+    // Use dbInstance directly for checkpoint instead of setCheckpoint
+    const checkpointKey = chainId ? `lastProcessed_${chainId}` : 'lastProcessed';
+    await dbInstance.prepare("INSERT INTO checkpoints(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(checkpointKey, String(blockNum));
   }
 
 

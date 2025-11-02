@@ -136,7 +136,7 @@ export default function Page() {
         <Box sx={{ display: { xs: 'none', sm: 'flex' }, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-              <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust Layer</Typography>
+              <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust</Typography>
               <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
             </Box>
             {isLoggedIn && (

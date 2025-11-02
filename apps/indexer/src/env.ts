@@ -33,19 +33,24 @@ if (isNodeEnvironment) {
 }
 
 function must(name: string) {
+  // In Workers, process.env may not exist or be empty - return empty string instead of throwing
+  // The actual values come from the env parameter passed to the Worker
+  if (!isNodeEnvironment) {
+    return '';
+  }
   const v = process.env[name];
   if (!v) throw new Error(`Missing env: ${name}`);
   return v;
 }
 
-export const ETH_SEPOLIA_IDENTITY_REGISTRY = process.env.ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
-export const ETH_SEPOLIA_RPC_HTTP_URL      = must("ETH_SEPOLIA_RPC_HTTP_URL");
+export const ETH_SEPOLIA_IDENTITY_REGISTRY = isNodeEnvironment ? (process.env.ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`) : undefined;
+export const ETH_SEPOLIA_RPC_HTTP_URL      = isNodeEnvironment ? must("ETH_SEPOLIA_RPC_HTTP_URL") : '';
 
-export const BASE_SEPOLIA_IDENTITY_REGISTRY = process.env.BASE_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
-export const BASE_SEPOLIA_RPC_HTTP_URL      = must("BASE_SEPOLIA_RPC_HTTP_URL");
+export const BASE_SEPOLIA_IDENTITY_REGISTRY = isNodeEnvironment ? (process.env.BASE_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`) : undefined;
+export const BASE_SEPOLIA_RPC_HTTP_URL      = isNodeEnvironment ? must("BASE_SEPOLIA_RPC_HTTP_URL") : '';
 
-export const OP_SEPOLIA_IDENTITY_REGISTRY = process.env.OP_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
-export const OP_SEPOLIA_RPC_HTTP_URL      = process.env.OP_SEPOLIA_RPC_HTTP_URL || '';
+export const OP_SEPOLIA_IDENTITY_REGISTRY = isNodeEnvironment ? (process.env.OP_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`) : undefined;
+export const OP_SEPOLIA_RPC_HTTP_URL      = isNodeEnvironment ? (process.env.OP_SEPOLIA_RPC_HTTP_URL || '') : '';
 
 export const RPC_WS_URL        = process.env.RPC_WS_URL; // optional
 export const CONFIRMATIONS     = Number(process.env.CONFIRMATIONS ?? 12);
@@ -61,6 +66,7 @@ export const GRAPHQL_POLL_MS   = Number(process.env.GRAPHQL_POLL_MS ?? 120000);
 export const GRAPHQL_SERVER_PORT = Number(process.env.GRAPHQL_SERVER_PORT ?? 4000);
 
 // Cloudflare D1 configuration (required for all environments)
-export const CLOUDFLARE_ACCOUNT_ID = must("CLOUDFLARE_ACCOUNT_ID");
-export const CLOUDFLARE_D1_DATABASE_ID = must("CLOUDFLARE_D1_DATABASE_ID");
-export const CLOUDFLARE_API_TOKEN = must("CLOUDFLARE_API_TOKEN");
+// Only enforce in Node.js (local dev), not in Workers
+export const CLOUDFLARE_ACCOUNT_ID = isNodeEnvironment ? must("CLOUDFLARE_ACCOUNT_ID") : '';
+export const CLOUDFLARE_D1_DATABASE_ID = isNodeEnvironment ? must("CLOUDFLARE_D1_DATABASE_ID") : '';
+export const CLOUDFLARE_API_TOKEN = isNodeEnvironment ? must("CLOUDFLARE_API_TOKEN") : '';

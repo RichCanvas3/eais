@@ -1,17 +1,36 @@
 import { CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_API_TOKEN } from "./env";
 import { createD1Database } from "./db-d1";
 
-// Always use Cloudflare D1 database (for both local and production)
-if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_D1_DATABASE_ID || !CLOUDFLARE_API_TOKEN) {
-  throw new Error('D1 configuration incomplete. Please set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, and CLOUDFLARE_API_TOKEN');
-}
+// Check if we're in Node.js environment (for local development)
+const isNodeEnvironment = typeof process !== 'undefined' && 
+                          typeof process.env === 'object' &&
+                          typeof import.meta !== 'undefined' && 
+                          import.meta.url &&
+                          import.meta.url.startsWith('file:');
 
-console.log('📡 Using Cloudflare D1 database');
-const db = createD1Database({
-  accountId: CLOUDFLARE_ACCOUNT_ID,
-  databaseId: CLOUDFLARE_D1_DATABASE_ID,
-  apiToken: CLOUDFLARE_API_TOKEN,
-});
+// In Workers, D1 is provided via env.DB binding, not via these env vars
+// Only create D1 connection in Node.js (local development)
+let db: any;
+
+if (isNodeEnvironment) {
+  // Always use Cloudflare D1 database (for local development)
+  if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_D1_DATABASE_ID || !CLOUDFLARE_API_TOKEN) {
+    throw new Error('D1 configuration incomplete. Please set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, and CLOUDFLARE_API_TOKEN');
+  }
+
+  console.log('📡 Using Cloudflare D1 database (local Node.js)');
+  db = createD1Database({
+    accountId: CLOUDFLARE_ACCOUNT_ID,
+    databaseId: CLOUDFLARE_D1_DATABASE_ID,
+    apiToken: CLOUDFLARE_API_TOKEN,
+  });
+} else {
+  // In Workers, db will be provided via env.DB - this is just a placeholder
+  // The actual db instance should be passed from the Worker's env parameter
+  console.log('📡 D1 database will be provided via env.DB (Workers environment)');
+  // Create a dummy db object to prevent import errors, but it shouldn't be used
+  db = null;
+}
 
 export { db };
 
@@ -31,6 +50,12 @@ async function initializeSchema() {
   // D1 schema should already exist from migrations
   // Skip initialization - tables should be created via wrangler d1 execute
   console.log('📡 D1 database - assuming schema already exists from migrations');
+  
+  // In Workers, db will be null - skip initialization
+  if (!db) {
+    console.log('📡 Skipping schema initialization in Workers (db provided via env.DB)');
+    return;
+  }
   
   // Safety check: Try to create access_codes table if it doesn't exist (for development)
   try {

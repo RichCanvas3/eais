@@ -56,6 +56,15 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
       const processingErrors: string[] = [];
       const backfillErrors: string[] = [];
 
+      // Check if chains are configured
+      if (config.chains.length === 0) {
+        return {
+          success: false,
+          message: `No chains configured for indexing. Please set environment variables: ETH_SEPOLIA_RPC_HTTP_URL, ETH_SEPOLIA_IDENTITY_REGISTRY, BASE_SEPOLIA_RPC_HTTP_URL, BASE_SEPOLIA_IDENTITY_REGISTRY, etc.`,
+          processedChains: [],
+        };
+      }
+
       // Dynamically import ethers if needed (for Workers environment)
       const ethersModule = await import('ethers');
       const { ethers } = ethersModule;
@@ -89,12 +98,17 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
         });
       }
 
+      let otherMessageText = "other stuff: " + JSON.stringify(chainsToProcess) + " ";
+
       // Process each chain
       for (const { name, provider, client, chainId: cId } of chainsToProcess) {
+
+        otherMessageText += "chain: " + name + " ";
         try {
           // Check if agent exists by trying to get owner
           const owner = await client.identity.getOwner(agentIdBigInt);
           console.log("............owner: ", owner, "agentIdBigInt: ", agentIdBigInt);
+          otherMessageText += "agent: " + agentIdBigInt + " on chain: " + name + " owner: " + owner + " ";
           const tokenURI = await client.identity.getTokenURI(agentIdBigInt).catch(() => null);
           
           // Get current block number
@@ -110,6 +124,7 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
             console.log(`⚠️ Agent ${agentId} exists on ${name} but has zero owner (burned/uninitialized)`);
           }
         } catch (error: any) {
+          otherMessageText += "error: " + error + " ";
           // Check if this is a "not found" error (ERC721 token doesn't exist) vs other errors
           const errorMessage = error?.message || String(error);
           const isNotFoundError = errorMessage.includes('ERC721NonexistentToken') ||
@@ -140,7 +155,8 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
         const { backfill } = await import('./indexer');
         for (const backfillClient of config.backfillClients) {
           try {
-            await backfill(backfillClient);
+            // Pass db from config (for Workers) or undefined (for local, uses global db)
+            await backfill(backfillClient, config.db);
           } catch (error: any) {
             const errorMessage = error?.message || String(error);
             const fullError = error?.stack ? `${errorMessage}\n${error.stack}` : errorMessage;
@@ -189,7 +205,7 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
           if (processingErrors.length > 0) {
             message = `Agent ${agentId} not found on any configured chain, but encountered processing errors.${errorText}`;
           } else {
-            message = `Agent ${agentId} not found on any configured chain.${errorText}`;
+            message = `Agent ${agentId} not found on any configured chain.${errorText}, other text:` + otherMessageText;
           }
         }
       }

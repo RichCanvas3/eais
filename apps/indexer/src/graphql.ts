@@ -69,13 +69,13 @@ const validateAccessCode = (accessCode: string | null | undefined) => validateAc
 const chains: ChainConfig[] = [
   {
     rpcUrl: ETH_SEPOLIA_RPC_HTTP_URL,
-    registryAddress: ETH_SEPOLIA_IDENTITY_REGISTRY,
+    registryAddress: ETH_SEPOLIA_IDENTITY_REGISTRY!,
     chainId: 11155111,
     chainName: 'ETH Sepolia',
   },
   {
     rpcUrl: BASE_SEPOLIA_RPC_HTTP_URL,
-    registryAddress: BASE_SEPOLIA_IDENTITY_REGISTRY,
+    registryAddress: BASE_SEPOLIA_IDENTITY_REGISTRY!,
     chainId: 84532,
     chainName: 'Base Sepolia',
   },
@@ -95,7 +95,7 @@ const backfillClients: ERC8004Client[] = [
   new ERC8004Client({
     adapter: new EthersAdapter(new ethers.JsonRpcProvider(ETH_SEPOLIA_RPC_HTTP_URL)),
     addresses: {
-      identityRegistry: ETH_SEPOLIA_IDENTITY_REGISTRY,
+      identityRegistry: ETH_SEPOLIA_IDENTITY_REGISTRY!,
       reputationRegistry: '0x0000000000000000000000000000000000000000',
       validationRegistry: '0x0000000000000000000000000000000000000000',
       chainId: 11155111,
@@ -104,7 +104,7 @@ const backfillClients: ERC8004Client[] = [
   new ERC8004Client({
     adapter: new EthersAdapter(new ethers.JsonRpcProvider(BASE_SEPOLIA_RPC_HTTP_URL)),
     addresses: {
-      identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY,
+      identityRegistry: BASE_SEPOLIA_IDENTITY_REGISTRY!,
       reputationRegistry: '0x0000000000000000000000000000000000000000',
       validationRegistry: '0x0000000000000000000000000000000000000000',
       chainId: 84532,
