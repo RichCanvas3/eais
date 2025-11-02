@@ -34,7 +34,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 type Props = {
   open: boolean;
   onClose: () => void;
-  onAgentIndexed?: () => void; // Callback to refresh table after indexing
+  onAgentIndexed?: (agentName: string) => void; // Callback to refresh table after indexing
 };
 
 export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
@@ -1192,6 +1192,11 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
       setMintingProgress(100);
       setMintingStartTime(null);
       onClose();
+      
+      // Call onAgentIndexed callback with the agent name to filter on it
+      if (onAgentIndexed && agentNameLower) {
+        onAgentIndexed(agentNameLower);
+      }
       
       /*
       try {

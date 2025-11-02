@@ -55,7 +55,7 @@ export type Agent = {
   ensEndpoint?: string | null;
 };
 
-type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: () => void; refreshKey?: number };
+type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: (agentName?: string) => void; refreshKey?: number };
 
 export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onAddAgentClose, onAgentIndexed: externalOnAgentIndexed, refreshKey }: AgentTableProps) {
 	const theme = useTheme();
@@ -1630,6 +1630,21 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		}
 	}
 
+	// Compute filtered rows once to avoid recalculating
+	const filteredRowsForDisplay = React.useMemo(() => 
+		data.rows.filter((row) => {
+			const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+			const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+			const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+			const dbName = row.agentName || '';
+			const fetchedName = metadataNames[row.agentId] || null;
+			const displayName = dbName || fetchedName || null;
+			const hasName = displayName || ens;
+			return inDiscover && (!mineOnly || owned[row.agentId]) && hasName;
+		}), [data.rows, discoverMatches, mineOnly, owned, metadataAccounts, metadataNames, agentEnsNames]
+	);
+	const showCardViewForDesktop = filteredRowsForDisplay.length <= 4 && !isMobile;
+
 	return (
 		<Stack spacing={1}>
 			<Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
@@ -1833,12 +1848,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				</Stack>
 			</Paper>
 
-			{/* Mobile Card View */}
-			<Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-				{!isLoading && data.rows.filter((row) => {
-					const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
-					return inDiscover && (!mineOnly || owned[row.agentId]);
-				}).length === 0 && (
+			{/* Mobile & Desktop Card View (when 4 or fewer agents) */}
+			<Box sx={{ display: showCardViewForDesktop ? { xs: 'none', sm: 'block' } : { xs: 'block', sm: 'none' } }}>
+				{!isLoading && filteredRowsForDisplay.length === 0 && (
 					<Paper variant="outlined" sx={{ p: 3, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px', textAlign: 'center' }}>
 						<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 					</Paper>
@@ -1848,17 +1860,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						<Typography variant="body2" color="text.secondary">Loading…</Typography>
 					</Paper>
 				)}
-				<Stack spacing={2}>
-					{data.rows.filter((row) => {
-						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
-						const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
-						const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
-						const dbName = row.agentName || '';
-						const fetchedName = metadataNames[row.agentId] || null;
-						const displayName = dbName || fetchedName || null;
-						const hasName = displayName || ens;
-						return inDiscover && (!mineOnly || owned[row.agentId]) && hasName;
-					}).sort((a, b) => {
+				<Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, flexWrap: { xs: 'nowrap', md: 'wrap' }, gap: 2 }}>
+					{filteredRowsForDisplay.sort((a, b) => {
 						if (discoverMatches && discoverTrustScores[a.agentId] && discoverTrustScores[b.agentId]) {
 							return discoverTrustScores[b.agentId].score - discoverTrustScores[a.agentId].score;
 						}
@@ -1877,13 +1880,15 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						
 						return (
 							<Card 
-								key={`${row.chainId}-${row.agentId}`} 
+								key={`${row.chainId}-${row.agentId}`}
 								variant="outlined" 
 								sx={{ 
 									borderColor: '#d0d7de', 
 									bgcolor: '#ffffff', 
 									borderRadius: '6px',
 									cursor: { xs: 'pointer', sm: 'default' },
+									width: { xs: '100%', md: '400px' },
+									flexShrink: 0,
 									'&:hover': {
 										backgroundColor: { xs: '#f6f8fa', sm: '#ffffff' },
 										boxShadow: { xs: 1, sm: 0 },
@@ -1972,7 +1977,25 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 										{/* A2A Endpoint */}
 										{row.a2aEndpoint && (
-											<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.75rem' }}>
+											<Typography 
+												component="a" 
+												href={row.a2aEndpoint} 
+												target="_blank" 
+												rel="noopener noreferrer"
+												onClick={(e) => e.stopPropagation()}
+												variant="body2" 
+												color="primary" 
+												sx={{ 
+													fontFamily: 'ui-monospace, monospace', 
+													fontSize: '0.75rem',
+													textDecoration: 'underline',
+													cursor: 'pointer',
+													'&:hover': {
+														textDecoration: 'none',
+														color: 'primary.dark',
+													},
+												}}
+											>
 												A2A: {row.a2aEndpoint}
 											</Typography>
 										)}
@@ -2104,15 +2127,15 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							</Card>
 						);
 					})}
-				</Stack>
+				</Box>
 			</Box>
 
-			{/* Desktop Table View */}
+			{/* Desktop Table View (only when more than 4 agents) */}
 			<TableContainer 
 				component={Paper} 
 				variant="outlined" 
 				sx={{ 
-					display: { xs: 'none', sm: 'block' },
+					display: showCardViewForDesktop ? { xs: 'none', sm: 'none' } : { xs: 'none', sm: 'block' },
 					overflowX: 'auto', 
 					borderColor: '#d0d7de', 
 					bgcolor: '#ffffff', 
@@ -3476,14 +3499,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						// Internal state is being used - close it
 						setInternalAddAgentOpen(false);
 					}
-					// Refresh the table after agent creation
-					fetchData(data.page);
-					if (externalOnAgentIndexed) externalOnAgentIndexed();
+					// Note: onAgentIndexed will handle the refresh with the filter
 				}}
-				onAgentIndexed={() => {
-					// Refresh the table after agent indexing
-					fetchData(data.page);
-					if (externalOnAgentIndexed) externalOnAgentIndexed();
+				onAgentIndexed={(agentName) => {
+					// Set the name filter to the newly created agent
+					if (agentName) {
+						setDomain(agentName);
+						// Refresh the table with the new agent name filter applied
+						fetchData(data.page, { name: agentName });
+					} else {
+						// Refresh the table after agent indexing
+						fetchData(data.page);
+					}
+					if (externalOnAgentIndexed) externalOnAgentIndexed(agentName);
 				}}
 			/>
 
