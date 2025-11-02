@@ -2,7 +2,9 @@
  * Shared GraphQL schema for both local (Express) and Cloudflare Workers implementations
  */
 
-export const graphQLSchema = `
+import { buildSchema, GraphQLSchema } from 'graphql';
+
+export const graphQLSchemaString = `
   type Agent {
     chainId: Int!
     agentId: String!
@@ -71,3 +73,9 @@ export const graphQLSchema = `
   }
 `;
 
+/**
+ * Build GraphQL schema from shared schema string
+ */
+export function buildGraphQLSchema(): GraphQLSchema {
+  return buildSchema(graphQLSchemaString);
+}
