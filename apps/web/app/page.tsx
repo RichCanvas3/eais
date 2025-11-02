@@ -1,7 +1,7 @@
 "use client";
 import { AgentTable } from "@/components/AgentTable";
 import { StatsPanel } from "@/components/StatsPanel";
-import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton } from '@mui/material';
+import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, Link } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import * as React from 'react';
 import { AddAgentModal } from '@/components/AddAgentModal';
@@ -61,16 +61,33 @@ export default function Page() {
               <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
             </Box>
             {isLoggedIn && (
-              <Button 
-                variant="outlined" 
-                onClick={handleGetAccessCode} 
-                disabled={accessCodeLoading}
-                disableElevation 
-                size="small" 
-                sx={{ alignSelf: 'flex-start', borderColor: 'divider', color: 'text.secondary' }}
-              >
-                {accessCodeLoading ? 'Loading...' : 'Get ERC-8004 GraphQL access code'}
-              </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleGetAccessCode} 
+                  disabled={accessCodeLoading}
+                  disableElevation 
+                  size="small" 
+                  sx={{ alignSelf: 'flex-start', borderColor: 'divider', color: 'text.secondary' }}
+                >
+                  {accessCodeLoading ? 'Loading...' : 'Get ERC-8004 GraphQL access code'}
+                </Button>
+                <Link
+                  href="https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphiql"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ 
+                    fontSize: '0.875rem',
+                    color: 'text.secondary',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  }}
+                >
+                  GraphiQL
+                </Link>
+              </Box>
             )}
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
