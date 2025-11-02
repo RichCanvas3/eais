@@ -614,6 +614,7 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
           agentName: agentNameLabel,
           agentUrl: urlToSet,
           agentAccount: addressToUse as `0x${string}`,
+          agentDescription: description || undefined,
         });
 
         console.log("Agent name added to org successfully!");

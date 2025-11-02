@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { getAddress } from 'viem';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel, Avatar } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -10,6 +10,7 @@ import { toMetaMaskSmartAccount, Implementation, createDelegation, createCaveatB
 import { createPimlicoClient } from 'permissionless/clients/pimlico';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { AddAgentModal } from './AddAgentModal';
+import { EditAgentModal } from './EditAgentModal';
 import { DidWebModal } from './DidWebModal';
 import { DidAgentModal } from './DidAgentModal';
 import { TrustGraphModal } from './TrustGraphModal';
@@ -124,6 +125,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
 	const [sessionLoading, setSessionLoading] = React.useState(false);
 
+	// Edit agent modal state
+	const [editAgentOpen, setEditAgentOpen] = React.useState(false);
+	const [currentAgentForEdit, setCurrentAgentForEdit] = React.useState<Agent | null>(null);
+
 	// Feedback modal state
 	const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 	const [feedbackData, setFeedbackData] = React.useState<any[]>([]);
@@ -138,6 +143,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	// Agent ENS names and metadata
 	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
 	const [agentUrls, setAgentUrls] = React.useState<Record<string, string | null>>({});
+	const [agentAvatars, setAgentAvatars] = React.useState<Record<string, string | null>>({});
 	const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
 	const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
 	const [metadataNamesIsENS, setMetadataNamesIsENS] = React.useState<Record<string, boolean>>({});
@@ -590,6 +596,24 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		} catch (error) {
 			console.error(`Error fetching agent URL for ${agentName}:`, error);
 			setAgentUrls(prev => ({
+				...prev,
+				[agentName]: null
+			}));
+		}
+	}, [agentENSClient]);
+
+	// Function to fetch agent avatar from ENS
+	const fetchAgentAvatar = React.useCallback(async (agentName: string) => {
+		try {
+			if (!agentENSClient) return;
+			const avatar = await agentENSClient.getAgentImageByName(agentName);
+			setAgentAvatars(prev => ({
+				...prev,
+				[agentName]: avatar
+			}));
+		} catch (error) {
+			console.error(`Error fetching agent avatar for ${agentName}:`, error);
+			setAgentAvatars(prev => ({
 				...prev,
 				[agentName]: null
 			}));
@@ -1107,7 +1131,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedChainIdFilter]);
 
-	// Fetch agent URLs for agents with ENS names
+	// Fetch agent URLs and avatars for agents with ENS names
 	React.useEffect(() => {
 		if (!data?.rows || !agentENSClient) return;
 		
@@ -1119,9 +1143,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			if (ens && !(ens in agentUrls)) {
 				fetchAgentUrl(ens);
 			}
+			if (ens && !(ens in agentAvatars)) {
+				fetchAgentAvatar(ens);
+			}
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [data?.rows, agentENSClient, agentEnsNames, metadataAccounts, fetchAgentUrl]);
+	}, [data?.rows, agentENSClient, agentEnsNames, metadataAccounts]);
 
 	async function handleRefresh() {
 		setRefreshing(true);
@@ -1979,10 +2006,37 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									}
 								}}
 							>
-								<CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+								<CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, position: 'relative' }}>
+									{owned[row.agentId] && (
+										<IconButton
+											size="small"
+											sx={{
+												position: 'absolute',
+												top: 8,
+												right: 8,
+												color: 'text.secondary',
+												'&:hover': {
+													color: 'primary.main',
+													backgroundColor: 'rgba(25, 113, 194, 0.04)',
+												},
+											}}
+											onClick={(e) => {
+												e.stopPropagation();
+												setCurrentAgentForEdit(row);
+												setEditAgentOpen(true);
+											}}
+										>
+											<EditIcon sx={{ fontSize: '1rem' }} />
+										</IconButton>
+									)}
 									<Stack spacing={2}>
 										{/* Name */}
-										<Box>
+										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+											<Avatar 
+												src={agentAvatars[ens || ''] || undefined} 
+												alt={nameText} 
+												sx={{ width: 40, height: 40 }}
+											/>
 											{ens ? (
 												<Typography
 													component="a"
@@ -2135,29 +2189,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												}}>
 													description
 												</FormLabel>
-												<Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem', pr: 3 }}>
+												<Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
 													{row.description}
 												</Typography>
-												<IconButton
-													size="small"
-													sx={{
-														position: 'absolute',
-														top: 4,
-														right: 4,
-														padding: '4px',
-														color: 'text.secondary',
-														'&:hover': {
-															color: 'primary.main',
-															backgroundColor: 'rgba(25, 113, 194, 0.04)',
-														},
-													}}
-													onClick={(e) => {
-														e.stopPropagation();
-														// TODO: Open edit modal for description
-													}}
-												>
-													<EditIcon sx={{ fontSize: '0.75rem' }} />
-												</IconButton>
 											</Box>
 										)}
 
@@ -2195,7 +2229,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														fontSize: '0.75rem',
 														textDecoration: 'underline',
 														cursor: 'pointer',
-														pr: 3,
 														display: 'block',
 														wordBreak: 'break-all',
 														'&:hover': {
@@ -2206,26 +2239,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												>
 													{agentUrl}
 												</Typography>
-												<IconButton
-													size="small"
-													sx={{
-														position: 'absolute',
-														top: 4,
-														right: 4,
-														padding: '2px',
-														color: 'text.secondary',
-														'&:hover': {
-															color: 'primary.main',
-															backgroundColor: 'rgba(25, 113, 194, 0.04)',
-														},
-													}}
-													onClick={(e) => {
-														e.stopPropagation();
-														// TODO: Open edit modal for URL
-													}}
-												>
-													<EditIcon sx={{ fontSize: '0.75rem' }} />
-												</IconButton>
 											</Box>
 										)}
 
@@ -3769,6 +3782,13 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					}
 					if (externalOnAgentIndexed) externalOnAgentIndexed(agentName);
 				}}
+			/>
+
+			{/* Edit Agent Modal */}
+			<EditAgentModal
+				open={editAgentOpen}
+				onClose={() => setEditAgentOpen(false)}
+				agent={currentAgentForEdit}
 			/>
 
 			{/* DID:Web Modal */}

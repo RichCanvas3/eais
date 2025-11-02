@@ -485,6 +485,7 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
     agentName: string;          // e.g., 'my-agent'
     agentAddress: `0x${string}`; // AA address for the agent name
     agentUrl: string    //  URL
+    agentDescription?: string | null    // optional description
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] }> {
 
     console.log("AIAgentL2ENSDurenClient.prepareAddAgentNameToOrgCalls");
@@ -546,6 +547,11 @@ export class AIAgentL2ENSDurenClient extends AIAgentENSClient {
         //{ key: 'chain', value: chainName },
         //{ key: 'agent-account', value: agentAddress },
       ];
+      
+      // Add description if provided
+      if (params.agentDescription && params.agentDescription.trim() !== '') {
+        textRecords.push({ key: 'description', value: params.agentDescription.trim() });
+      }
 
       for (const record of textRecords) {
         const recordCall = await this.setResolverTextRecordDirect(

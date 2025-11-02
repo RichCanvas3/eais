@@ -270,9 +270,10 @@ export async function addAgentNameToOrg(params: {
   agentAccountClient: any,
   agentName: string,
   agentUrl: string,
-  agentAccount: `0x${string}`
+  agentAccount: `0x${string}`,
+  agentDescription?: string
 }): Promise<`0x${string}`> {
-  const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount } = params;
+  const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount, agentDescription } = params;
 
   // 1. Add agent name to org within ENS
   console.log('********************* prepareAddAgentNameToOrgCalls');
@@ -349,7 +350,8 @@ export async function addAgentNameToOrg(params: {
       orgName: cleanOrgName,
       agentName: cleanAgentName,
       agentAddress: agentAccount,
-      agentUrl: agentUrl
+      agentUrl: agentUrl,
+      agentDescription: agentDescription
     });
 
     const userOpHash2 = await sendSponsoredUserOperation({
@@ -427,7 +429,8 @@ export async function addAgentNameToOrg(params: {
         orgName: cleanOrgName,
         agentName: cleanAgentName,
         agentAddress: agentAccountClient.address,
-        agentUrl: agentUrl
+        agentUrl: agentUrl,
+        agentDescription: agentDescription
       });
 
       for (const call of infoCalls) {

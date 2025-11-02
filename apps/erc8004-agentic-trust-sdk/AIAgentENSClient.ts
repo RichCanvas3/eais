@@ -134,8 +134,53 @@ export class AIAgentENSClient {
     agentName: string;          // e.g., 'my-agent'
     agentAddress: `0x${string}`; // AA address for the agent name
     agentUrl: string    //  URL
+    agentDescription?: string | null    // optional description
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[] }> {
     return { calls: [] };
+  }
+
+  async prepareSetNameImageCalls(
+    name: string,
+    imageUrl: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+    const node = namehash(name) as `0x${string}`;
+    const data = encodeFunctionData({
+      abi: PublicResolverABI.abi,
+      functionName: 'setText',
+      args: [node, "avatar", imageUrl]
+    });
+
+    if (this.publicClient) {
+      const resolver = this.getEnsResolverAddress();
+      console.info("++++++++++++++++++++ prepareSetNameImageCalls: chain", this.publicClient?.chain?.id);
+      console.info("++++++++++++++++++++ prepareSetNameImageCalls: resolver", resolver);
+      calls.push({ to: resolver, data: data as `0x${string}` });
+    }
+
+    return { calls };
+  }
+
+  async prepareSetNameDescriptionCalls(
+    name: string,
+    description: string
+  ): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[] }> {
+    const calls: { to: `0x${string}`; data: `0x${string}` }[] = [];
+    const node = namehash(name) as `0x${string}`;
+    const data = encodeFunctionData({
+      abi: PublicResolverABI.abi,
+      functionName: 'setText',
+      args: [node, "description", description]
+    });
+
+    if (this.publicClient) {
+      const resolver = this.getEnsResolverAddress();
+      console.info("++++++++++++++++++++ prepareSetNameDescriptionCalls: chain", this.publicClient?.chain?.id);
+      console.info("++++++++++++++++++++ prepareSetNameDescriptionCalls: resolver", resolver);
+      calls.push({ to: resolver, data: data as `0x${string}` });
+    }
+
+    return { calls };
   }
 
   async encodeSetNameAgentIdentity(name: string, agentIdentity: BigInt): Promise<`0x${string}`>  {
@@ -503,6 +548,98 @@ export class AIAgentENSClient {
   }
 
   /**
+   * Get the Agent Avatar/Image via ENS text record for a given ENS name.
+   */
+  async getAgentImageByName(name: string): Promise<string | null> {
+    const ensName = name.trim().toLowerCase();
+    if (!ensName) return null;
+
+    const node = namehash(ensName);
+
+    // resolver
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      // @ts-ignore - viem version compatibility issue
+      resolverAddr = await this.publicClient?.readContract({
+        address: this.ensRegistryAddress as `0x${string}`,
+        abi: [{
+            name: 'resolver',
+            type: 'function',
+            stateMutability: 'view',
+            inputs: [{ name: 'node', type: 'bytes32' }],
+            outputs: [{ name: '', type: 'address' }]
+        }],
+        functionName: 'resolver',
+        args: [node]
+      }) as `0x${string}` | null;
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+
+    try {
+      // @ts-ignore - viem version compatibility issue
+      const image = await this.publicClient?.readContract({
+        address: resolverAddr,
+        abi: PublicResolverABI.abi,
+        functionName: 'text',
+        args: [node, 'avatar']
+      }).catch(() => null) as string | null;
+
+      const trimmed = (image || '').trim();
+      return trimmed.length > 0 ? trimmed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get the Agent Description via ENS text record for a given ENS name.
+   */
+  async getAgentDescriptionByName(name: string): Promise<string | null> {
+    const ensName = name.trim().toLowerCase();
+    if (!ensName) return null;
+
+    const node = namehash(ensName);
+
+    // resolver
+    let resolverAddr: `0x${string}` | null = null;
+    try {
+      // @ts-ignore - viem version compatibility issue
+      resolverAddr = await this.publicClient?.readContract({
+        address: this.ensRegistryAddress as `0x${string}`,
+        abi: [{
+            name: 'resolver',
+            type: 'function',
+            stateMutability: 'view',
+            inputs: [{ name: 'node', type: 'bytes32' }],
+            outputs: [{ name: '', type: 'address' }]
+        }],
+        functionName: 'resolver',
+        args: [node]
+      }) as `0x${string}` | null;
+    } catch {}
+    if (!resolverAddr || resolverAddr === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+
+    try {
+      // @ts-ignore - viem version compatibility issue
+      const description = await this.publicClient?.readContract({
+        address: resolverAddr,
+        abi: PublicResolverABI.abi,
+        functionName: 'text',
+        args: [node, 'description']
+      }).catch(() => null) as string | null;
+
+      const trimmed = (description || '').trim();
+      return trimmed.length > 0 ? trimmed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Reverse lookup: account address -> ENS name via resolver.name(reverseNode)
    */
   async getAgentNameByAccount(account: `0x${string}`): Promise<string | null> {
@@ -565,6 +702,7 @@ export class AIAgentENSClient {
     agentName: string;                   // e.g., 'my-agent'
     agentAddress: `0x${string}`;     // AA address for the agent name
     agentUrl?: string | null                   // optional TTL (defaults to 0)
+    agentDescription?: string | null                   // optional description
   }): Promise<{ calls: { to: `0x${string}`; data: `0x${string}` }[]   }> {
 
     const RESOLVER_ABI = [
@@ -621,6 +759,15 @@ export class AIAgentENSClient {
         calls.push({ to: resolver as `0x${string}`, data: dataSetUrl });
       }
 
+      // 2b) Optionally set description text
+      if (params.agentDescription && params.agentDescription.trim() !== '') {
+        const dataSetDescription = this.encodeCall(
+          RESOLVER_ABI,
+          'setText(bytes32,string,string)',
+          [childNode, 'description', params.agentDescription.trim()]
+        ) as `0x${string}`;
+        calls.push({ to: resolver as `0x${string}`, data: dataSetDescription });
+      }
 
       // 3) Set reverse record
       const reverseNode = namehash(params.agentAddress.slice(2).toLowerCase() + '.addr.reverse');
