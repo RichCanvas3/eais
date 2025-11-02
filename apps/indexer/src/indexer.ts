@@ -66,7 +66,7 @@ function toDecString(x: bigint | number | string) {
 
 
 
-async function tryReadTokenURI(client: ERC8004Client, tokenId: bigint): Promise<string | null> {
+export async function tryReadTokenURI(client: ERC8004Client, tokenId: bigint): Promise<string | null> {
   try {
     console.info("............tryReadTokenURI: tokenId: ", tokenId)
     const uri = await client.identity.getTokenURI(tokenId);
@@ -164,7 +164,7 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
   return null;
 }
 
-async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigint, tokenURI: string | null, chainId: number) {
+export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumber: bigint, tokenURI: string | null, chainId: number) {
   console.info("............upsertFromTransfer: tokenURI: ", tokenURI)
   const agentId = toDecString(tokenId);
   const ownerAddress = to;
@@ -357,7 +357,7 @@ function parseCaip10Address(value: string | null | undefined): string | null {
   return null;
 }
 
-async function upsertFromTokenGraph(item: any, chainId: number) {
+export async function upsertFromTokenGraph(item: any, chainId: number) {
   const tokenId = BigInt(item?.id || 0);
   if (tokenId <= 0n) return;
   const agentId = toDecString(tokenId);
@@ -553,7 +553,7 @@ async function recordEvent(ev: any, type: string, args: any, agentIdForEvent?: s
   );
 }
 
-async function backfill(client: ERC8004Client) {
+export async function backfill(client: ERC8004Client) {
 
   const chainId = await client.getChainId();
 

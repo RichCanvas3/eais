@@ -18,6 +18,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 import IdentityRegistryABI from '@erc8004/sdk/abis/IdentityRegistry.json';
@@ -65,6 +66,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [mineOnly, setMineOnly] = React.useState(false);
 	const [selectedChainIdFilter, setSelectedChainIdFilter] = React.useState<number | null>(null);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
+	const [refreshing, setRefreshing] = React.useState(false);
     const { provider, address: eoa } = useWeb3Auth();
 
 	// Discover state
@@ -1076,7 +1078,39 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedChainIdFilter]);
 
-		function clearFilters() {
+	async function handleRefresh() {
+		setRefreshing(true);
+		try {
+			// Trigger full index by calling indexAgent with agentId 1
+			// This will index agent 1 and then trigger a full backfill for all chains
+			const indexResponse = await fetch('/api/indexAgent', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					agentId: '1',
+				}),
+			});
+
+			if (indexResponse.ok) {
+				const indexData = await indexResponse.json();
+				console.log('✅ Full index triggered successfully:', indexData);
+				
+				// Refresh the table data
+				await fetchData(data.page);
+			} else {
+				const errorData = await indexResponse.json();
+				console.error('❌ Failed to trigger full index:', errorData);
+			}
+		} catch (error: any) {
+			console.error('❌ Error triggering full index:', error?.message || error);
+		} finally {
+			setRefreshing(false);
+		}
+	}
+
+	function clearFilters() {
 		setDomain("");
 		setAddress("");
 		setAgentId("");
@@ -1726,6 +1760,22 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								>
 									Clear
 								</Button>
+								<IconButton 
+									size="small"
+									sx={{ 
+										borderColor: '#d0d7de',
+										color: '#24292f',
+										border: '1px solid',
+										'&:hover': {
+											borderColor: '#d0d7de',
+											backgroundColor: '#f6f8fa',
+										},
+									}} 
+									disabled={isLoading || refreshing} 
+									onClick={handleRefresh}
+								>
+									<RefreshIcon />
+								</IconButton>
 							</Stack>
 						</Grid>
 				</Grid>
@@ -1739,7 +1789,26 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					</Grid>
 					<Grid item xs={12} md={3}>
 						<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
-							<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={discoverLoading || !discoverQuery.trim()}>{discoverLoading ? 'Discovering…' : 'Discover'}</Button>
+							<Button 
+								type="submit" 
+								variant="contained" 
+								disableElevation 
+								sx={{ 
+									flex: 1,
+									backgroundColor: 'rgb(31, 136, 61)',
+									color: '#ffffff',
+									'&:hover': {
+										backgroundColor: 'rgb(26, 115, 51)',
+									},
+									'&:disabled': {
+										backgroundColor: 'rgba(31, 136, 61, 0.5)',
+										color: '#ffffff',
+									},
+								}} 
+								disabled={discoverLoading || !discoverQuery.trim()}
+							>
+								{discoverLoading ? 'Discovering…' : 'Discover'}
+							</Button>
 							<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={discoverLoading && !discoverMatches} onClick={clearDiscover}>Clear</Button>
 						</Stack>
 					</Grid>
@@ -2200,6 +2269,17 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					size="small" 
 					disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
 					onClick={updateIdentityRegistration}
+					sx={{
+						backgroundColor: 'rgb(31, 136, 61)',
+						color: '#ffffff',
+						'&:hover': {
+							backgroundColor: 'rgb(26, 115, 51)',
+						},
+						'&:disabled': {
+							backgroundColor: 'rgba(31, 136, 61, 0.5)',
+							color: '#ffffff',
+						},
+					}}
 				>
 					{identityUpdateLoading ? 'Updating…' : 'Update'}
 				</Button>
@@ -2647,7 +2727,23 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								</Paper>
 							))}
 							<Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-								<Button variant="contained" size="small" disabled={identityUpdateLoading} onClick={updateIdentityRegistration}>
+								<Button 
+									variant="contained" 
+									size="small" 
+									disabled={identityUpdateLoading} 
+									onClick={updateIdentityRegistration}
+									sx={{
+										backgroundColor: 'rgb(31, 136, 61)',
+										color: '#ffffff',
+										'&:hover': {
+											backgroundColor: 'rgb(26, 115, 51)',
+										},
+										'&:disabled': {
+											backgroundColor: 'rgba(31, 136, 61, 0.5)',
+											color: '#ffffff',
+										},
+									}}
+								>
 									{identityUpdateLoading ? 'Updating…' : 'Update'}
 								</Button>
 								<Button size="small" onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}>Reset</Button>

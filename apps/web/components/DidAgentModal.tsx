@@ -571,10 +571,20 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
             <Box mt={2} display="flex" gap={2}>
               <Button
                 variant="contained"
-                color="primary"
                 onClick={validateSignature}
                 disabled={!provider || !eoa}
                 startIcon={eip1271Result === 'success' ? <CheckCircleIcon /> : eip1271Result === 'failure' ? <ErrorIcon /> : undefined}
+                sx={{
+                  backgroundColor: 'rgb(31, 136, 61)',
+                  color: '#ffffff',
+                  '&:hover': {
+                    backgroundColor: 'rgb(26, 115, 51)',
+                  },
+                  '&:disabled': {
+                    backgroundColor: 'rgba(31, 136, 61, 0.5)',
+                    color: '#ffffff',
+                  },
+                }}
               >
                 EIP-1271 (Smart Account)
               </Button>

@@ -52,8 +52,8 @@ export default function Page() {
   };
   
   return (
-    <Container maxWidth="xl" sx={{ py: 2 }}>
-      <Box sx={{ mb: 1 }}>
+    <Container maxWidth="xl" sx={{ py: 0 }}>
+      <Box sx={{ mb: 1, mx: 2.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
@@ -119,15 +119,13 @@ export default function Page() {
       </Box>
       
       {isLoggedIn ? (
-        <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'transparent' }}>
-          <AgentTable 
+        <AgentTable 
             addAgentOpen={open}
             onAddAgentClose={() => setOpen(false)}
             onAgentIndexed={() => {
               // Table will refresh itself
             }}
           />
-        </Paper>
       ) : (
         <Box sx={{ py: 6 }}>
           <Box sx={{ textAlign: 'center', mb: 6 }}>

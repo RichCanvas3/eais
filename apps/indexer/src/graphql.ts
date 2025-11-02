@@ -1,7 +1,7 @@
 import { createHandler } from 'graphql-http/lib/use/express';
 import { buildSchema, GraphQLSchema } from 'graphql';
 import express from 'express';
-import { db, formatSQLTimestamp } from './db';
+import { db, formatSQLTimestamp, getCheckpoint, setCheckpoint } from './db';
 import crypto from 'crypto';
 import { ethers } from 'ethers';
 import { ERC8004Client, EthersAdapter } from '@erc8004/sdk';
@@ -11,8 +11,13 @@ import {
   OP_SEPOLIA_IDENTITY_REGISTRY,
   ETH_SEPOLIA_RPC_HTTP_URL, 
   BASE_SEPOLIA_RPC_HTTP_URL,
-  OP_SEPOLIA_RPC_HTTP_URL 
+  OP_SEPOLIA_RPC_HTTP_URL,
+  ETH_SEPOLIA_GRAPHQL_URL,
+  BASE_SEPOLIA_GRAPHQL_URL,
+  OP_SEPOLIA_GRAPHQL_URL,
+  GRAPHQL_API_KEY
 } from './env';
+import { backfill } from './indexer';
 
 // CORS configuration to allow Authorization header
 const cors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -469,11 +474,46 @@ const root = {
         }
       }
 
+      // After indexing the specific agent, trigger a full backfill for all chains
+      console.log('🔄 Triggering full index after agent indexing...');
+      try {
+        await backfill(erc8004EthSepoliaClient);
+      } catch (error: any) {
+        console.warn('⚠️ Error in ETH Sepolia backfill:', error?.message || error);
+      }
+      
+      try {
+        await backfill(erc8004BaseSepoliaClient);
+      } catch (error: any) {
+        console.warn('⚠️ Error in Base Sepolia backfill:', error?.message || error);
+      }
+      
+      if (OP_SEPOLIA_RPC_HTTP_URL && OP_SEPOLIA_IDENTITY_REGISTRY) {
+        try {
+          const opSepoliaProvider = new ethers.JsonRpcProvider(OP_SEPOLIA_RPC_HTTP_URL);
+          const opSepoliaAdapter = new EthersAdapter(opSepoliaProvider);
+          const erc8004OpSepoliaClient = new ERC8004Client({
+            adapter: opSepoliaAdapter,
+            addresses: {
+              identityRegistry: OP_SEPOLIA_IDENTITY_REGISTRY,
+              reputationRegistry: '0x0000000000000000000000000000000000000000',
+              validationRegistry: '0x0000000000000000000000000000000000000000',
+              chainId: 11155420,
+            }
+          });
+          await backfill(erc8004OpSepoliaClient);
+        } catch (error: any) {
+          console.warn('⚠️ Error in Optimism Sepolia backfill:', error?.message || error);
+        }
+      }
+      
+      console.log('✅ Full index completed');
+
       return {
         success: processedChains.length > 0,
         message: processedChains.length > 0
-          ? `Successfully indexed agent ${agentId} on ${processedChains.join(', ')}`
-          : `Agent ${agentId} not found on any chain`,
+          ? `Successfully indexed agent ${agentId} on ${processedChains.join(', ')} and triggered full index`
+          : `Agent ${agentId} not found on any chain, but triggered full index`,
         processedChains,
       };
     } catch (error: any) {

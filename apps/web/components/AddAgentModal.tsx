@@ -94,7 +94,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
   const [agentChecking, setAgentChecking] = React.useState(false);
   const [agentCreating, setAgentCreating] = React.useState(false);
   const [agentError, setAgentError] = React.useState<string | null>(null);
-  const [indexing, setIndexing] = React.useState(false);
   
   // All useContext hooks after useState
   const { provider, address: eoaAddress } = useWeb3Auth();
@@ -953,46 +952,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
     return () => { cancelled = true; };
   }, [org]);
 
-  // Handler to index agent 781
-  async function handleIndexAgent781() {
-    setIndexing(true);
-    setError(null);
-    try {
-      const chainId = parseInt(selectedChainIdHex || '0xaa36a7', 16);
-      
-      console.log(`🔄 Indexing agent 781 on chain ${chainId}...`);
-      const indexResponse = await fetch('/api/indexAgent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          agentId: '781',
-          chainId: chainId,
-        }),
-      });
-
-      if (indexResponse.ok) {
-        const indexData = await indexResponse.json();
-        console.log('✅ Agent 781 indexed successfully:', indexData);
-        
-        // Close dialog and refresh table
-        onClose();
-        if (onAgentIndexed) {
-          onAgentIndexed();
-        }
-      } else {
-        const errorData = await indexResponse.json();
-        console.error('❌ Failed to index agent 781:', errorData);
-        setError(`Failed to index agent: ${errorData.error || 'Unknown error'}`);
-      }
-    } catch (indexError: any) {
-      console.error('❌ Error indexing agent 781:', indexError?.message || indexError);
-      setError(`Error indexing agent: ${indexError?.message || 'Unknown error'}`);
-    } finally {
-      setIndexing(false);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
 
@@ -1288,7 +1247,7 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
     }
   }
 
-  // Progress tracking: simulate 2 minutes (120 seconds) of processing
+  // Progress tracking: simulate 1 minute (60 seconds) of processing
   React.useEffect(() => {
     if (!isSubmitting || !mintingStartTime) {
       return;
@@ -1296,7 +1255,7 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
 
     const updateProgress = () => {
       const elapsed = (Date.now() - mintingStartTime) / 1000; // seconds
-      const totalTime = 120; // 2 minutes
+      const totalTime = 60; // 1 minute
       const progress = Math.min(95, (elapsed / totalTime) * 100); // Cap at 95% until actual completion
       setMintingProgress(progress);
     };
@@ -1659,33 +1618,42 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
                 }} 
               />
               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', fontStyle: 'italic' }}>
-                Creating your agent identity on-chain... This may take up to 2 minutes
+                Creating your agent identity on-chain...
               </Typography>
             </Box>
           )}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={isSubmitting || indexing}>Cancel</Button>
+        <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
         <Button 
-          onClick={handleIndexAgent781} 
-          variant="outlined" 
-          disabled={isSubmitting || indexing}
-          sx={{ mr: 1 }}
+          onClick={handleSubmit} 
+          variant="contained" 
+          disableElevation 
+          disabled={Boolean(
+            isSubmitting ||
+            !provider ||
+            agentIdentityExists === true ||
+            !agentName.trim() ||
+            !agentUrlEdit ||
+            !/^https?:\/\//i.test(agentUrlEdit) ||
+            (ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase()) ||
+            (agentExists === true && agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000')
+          )}
+          sx={{
+            backgroundColor: 'rgb(31, 136, 61)',
+            color: '#ffffff',
+            '&:hover': {
+              backgroundColor: 'rgb(26, 115, 51)',
+            },
+            '&:disabled': {
+              backgroundColor: 'rgba(31, 136, 61, 0.5)',
+              color: '#ffffff',
+            },
+          }}
         >
-          {indexing ? 'Indexing...' : 'Index Agent 781'}
+          Create Agent Identity
         </Button>
-        <Button onClick={handleSubmit} variant="contained" disableElevation disabled={Boolean(
-          isSubmitting ||
-          indexing ||
-          !provider ||
-          agentIdentityExists === true ||
-          !agentName.trim() ||
-          !agentUrlEdit ||
-          !/^https?:\/\//i.test(agentUrlEdit) ||
-          (ensAgentOwnerEoa && eoaAddress && ensAgentOwnerEoa.toLowerCase() !== eoaAddress.toLowerCase()) ||
-          (agentExists === true && agentAccount && agentAccount !== '0x0000000000000000000000000000000000000000')
-        )}>Create Agent Identity</Button>
       </DialogActions>
     </Dialog>
     </>
