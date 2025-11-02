@@ -55,9 +55,9 @@ export type Agent = {
   ensEndpoint?: string | null;
 };
 
-type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: () => void };
+type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: () => void; refreshKey?: number };
 
-export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onAddAgentClose, onAgentIndexed: externalOnAgentIndexed }: AgentTableProps) {
+export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onAddAgentClose, onAgentIndexed: externalOnAgentIndexed, refreshKey }: AgentTableProps) {
 	const theme = useTheme();
 	const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 	const [domain, setDomain] = React.useState("");
@@ -1002,6 +1002,13 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	}
 
 	React.useEffect(() => { fetchData(); }, []);
+	
+	// Refresh when refreshKey changes
+	React.useEffect(() => {
+		if (refreshKey !== undefined && refreshKey > 0) {
+			fetchData(data.page);
+		}
+	}, [refreshKey]);
 
     React.useEffect(() => {
         (async () => {
@@ -2046,27 +2053,51 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											>
 												INFO
 											</Button>
-											<Button 
-												size="small" 
-												onClick={(e) => {
-													e.stopPropagation();
-													openIdentityJson(row);
-												}}
-												disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false}
-												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
-											>
-												Reg
-											</Button>
-											<Button 
-												size="small" 
-												onClick={(e) => {
-													e.stopPropagation();
-													viewOrCreateCard(row);
-												}} 
-												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
-											>
-												Card
-											</Button>
+											{owned[row.agentId] && (
+												<>
+													<Button 
+														size="small" 
+														onClick={(e) => {
+															e.stopPropagation();
+															openIdentityJson(row);
+														}}
+														disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false}
+														sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+													>
+														Reg
+													</Button>
+													<Button 
+														size="small" 
+														onClick={(e) => {
+															e.stopPropagation();
+															viewOrCreateCard(row);
+														}} 
+														sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+													>
+														Card
+													</Button>
+													<Button 
+														size="small" 
+														onClick={(e) => {
+															e.stopPropagation();
+															openDidWebModal(row);
+														}}
+														sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+													>
+														DID:Web
+													</Button>
+													<Button 
+														size="small" 
+														onClick={(e) => {
+															e.stopPropagation();
+															openDidAgentModal(row);
+														}}
+														sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+													>
+														DID:Agent
+													</Button>
+												</>
+											)}
 										</Stack>
 									</Stack>
 								</CardContent>
@@ -2351,39 +2382,43 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											>
 												INFO
 											</Button>
-                                            <Tooltip title={row.metadataURI || 'No registration URI'}>
-                                                <span>
-                                                    <Button 
-                                                        size="small" 
-                                                        onClick={() => openIdentityJson(row)}
-                                                        disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
-                                                        sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-                                                    >
-                                                        Reg
-                                                    </Button>
-                                                </span>
-                                            </Tooltip>
-											<Button 
-												size="small" 
-												onClick={() => viewOrCreateCard(row)}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-											>
-												Card
-											</Button>
-											<Button 
-												size="small" 
-												onClick={() => openDidWebModal(row)}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-											>
-												DID:Web
-											</Button>
-											<Button 
-												size="small" 
-												onClick={() => openDidAgentModal(row)}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-											>
-												DID:Agent
-											</Button>
+											{owned[row.agentId] && (
+												<>
+													<Tooltip title={row.metadataURI || 'No registration URI'}>
+														<span>
+															<Button 
+																size="small" 
+																onClick={() => openIdentityJson(row)}
+																disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
+																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+															>
+																Reg
+															</Button>
+														</span>
+													</Tooltip>
+													<Button 
+														size="small" 
+														onClick={() => viewOrCreateCard(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														Card
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openDidWebModal(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														DID:Web
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openDidAgentModal(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														DID:Agent
+													</Button>
+												</>
+											)}
 										{owned[row.agentId] && (
 											<Button 
 												size="small" 
@@ -2501,12 +2536,45 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 										<Box key={idx} sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}>
 											<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
 												<Typography variant="caption">Endpoint #{idx + 1}</Typography>
-												<IconButton size="small" onClick={() => removeEndpointRow(idx)}><DeleteIcon fontSize="inherit" /></IconButton>
+												<IconButton 
+													size="small" 
+													disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+													onClick={() => removeEndpointRow(idx)}
+												>
+													<DeleteIcon fontSize="inherit" />
+												</IconButton>
 											</Stack>
 											<Grid container spacing={1}>
-												<Grid item xs={12} sm={6}><TextField fullWidth size="small" label="name" value={ep.name} onChange={(e) => handleEndpointFieldChange(idx, 'name', e.target.value)} /></Grid>
-												<Grid item xs={12} sm={6}><TextField fullWidth size="small" label="version" value={ep.version || ''} onChange={(e) => handleEndpointFieldChange(idx, 'version', e.target.value)} /></Grid>
-												<Grid item xs={12}><TextField fullWidth size="small" label="endpoint" value={ep.endpoint} onChange={(e) => handleEndpointFieldChange(idx, 'endpoint', e.target.value)} /></Grid>
+												<Grid item xs={12} sm={6}>
+													<TextField 
+														fullWidth 
+														size="small" 
+														label="name" 
+														value={ep.name} 
+														disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+														onChange={(e) => handleEndpointFieldChange(idx, 'name', e.target.value)} 
+													/>
+												</Grid>
+												<Grid item xs={12} sm={6}>
+													<TextField 
+														fullWidth 
+														size="small" 
+														label="version" 
+														value={ep.version || ''} 
+														disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+														onChange={(e) => handleEndpointFieldChange(idx, 'version', e.target.value)} 
+													/>
+												</Grid>
+												<Grid item xs={12}>
+													<TextField 
+														fullWidth 
+														size="small" 
+														label="endpoint" 
+														value={ep.endpoint} 
+														disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+														onChange={(e) => handleEndpointFieldChange(idx, 'endpoint', e.target.value)} 
+													/>
+												</Grid>
 											</Grid>
 										</Box>
 									))}

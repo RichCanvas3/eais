@@ -95,10 +95,43 @@ export default function Page() {
       alert('Failed to get access code. Please try again.');
     }
   };
+
+  const [refreshKey, setRefreshKey] = React.useState(0);
+  const [refreshingIndexer, setRefreshingIndexer] = React.useState(false);
+
+  const handleRefreshIndexer = async () => {
+    setRefreshingIndexer(true);
+    try {
+      // Call indexAgent API with agentId '1' to trigger a full index
+      const response = await fetch('/api/indexAgent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ agentId: '1' }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to refresh indexer');
+      }
+
+      const data = await response.json();
+      console.log('Indexer refresh completed:', data);
+      
+      // Refresh the table
+      setRefreshKey(prev => prev + 1);
+    } catch (error: any) {
+      console.error('Error refreshing indexer:', error);
+      alert(error?.message || 'Failed to refresh indexer. Please try again.');
+    } finally {
+      setRefreshingIndexer(false);
+    }
+  };
   
   return (
     <Container maxWidth="xl" sx={{ py: 0 }}>
-      <Box sx={{ mb: 1, mx: { xs: 1.5, sm: 2.5 }, mt: { xs: 2, sm: 0 } }}>
+      <Box sx={{ mb: 1, mx: { xs: 1.5, sm: 2.5 }, mt: { xs: 2, sm: 2 } }}>
         {/* Desktop Header */}
         <Box sx={{ display: { xs: 'none', sm: 'flex' }, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -124,6 +157,27 @@ export default function Page() {
                   }}
                 >
                   GraphQL
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={handleRefreshIndexer}
+                  disabled={refreshingIndexer}
+                  disableElevation
+                  size="small"
+                  sx={{ 
+                    borderColor: 'divider',
+                    color: 'text.secondary',
+                    fontSize: '0.875rem',
+                    '&:hover': {
+                      borderColor: 'divider',
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                    },
+                    '&:disabled': {
+                      opacity: 0.6,
+                    },
+                  }}
+                >
+                  {refreshingIndexer ? 'Refreshing...' : 'Refresh Indexer'}
                 </Button>
               </Box>
             )}
@@ -197,6 +251,27 @@ export default function Page() {
                 >
                   GraphQL
                 </Button>
+                <Button
+                  variant="outlined"
+                  onClick={handleRefreshIndexer}
+                  disabled={refreshingIndexer}
+                  disableElevation
+                  size="small"
+                  sx={{ 
+                    borderColor: 'divider',
+                    color: 'text.secondary',
+                    fontSize: '0.75rem',
+                    '&:hover': {
+                      borderColor: 'divider',
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                    },
+                    '&:disabled': {
+                      opacity: 0.6,
+                    },
+                  }}
+                >
+                  {refreshingIndexer ? 'Refreshing...' : 'Refresh Indexer'}
+                </Button>
               </Box>
             )}
           </Box>
@@ -258,6 +333,7 @@ export default function Page() {
             onAgentIndexed={() => {
               // Table will refresh itself
             }}
+            refreshKey={refreshKey}
           />
       ) : (
         <Box sx={{ py: 6 }}>

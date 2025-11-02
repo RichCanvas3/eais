@@ -398,20 +398,30 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
       const chainIdHex = selectedChainIdHex || '0xaa36a7';
       const rpcUrl = effectiveRpcUrl;
 
-      // Add and switch to the chain
-      await eip1193.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: chainIdHex,
-          chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
-          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-          rpcUrls: [rpcUrl]
-        }]
-      });
-      await eip1193.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: chainIdHex }]
-      });
+      // Try to switch to the chain first
+      try {
+        await eip1193.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: chainIdHex }]
+        });
+      } catch (switchError: any) {
+        // If the chain doesn't exist (code 4902), try to add it
+        if (switchError.code === 4902) {
+          await eip1193.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: chainIdHex,
+              chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
+              nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+              rpcUrls: [rpcUrl]
+            }]
+          });
+        } else {
+          // If switch failed for another reason (like chain exists but symbol mismatch), just try switching again
+          // or rethrow if it's a different error
+          throw switchError;
+        }
+      }
 
       // Add delay to allow wallet to adapt to chain switch
       await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
@@ -508,20 +518,30 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         const chainIdHex = selectedChainIdHex || '0xaa36a7';
         const rpcUrl = effectiveRpcUrl;
 
-        // Add and switch to the chain
-        await eip1193.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: chainIdHex,
-            chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls: [rpcUrl]
-          }]
-        });
-        await eip1193.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: chainIdHex }]
-        });
+        // Try to switch to the chain first
+        try {
+          await eip1193.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: chainIdHex }]
+          });
+        } catch (switchError: any) {
+          // If the chain doesn't exist (code 4902), try to add it
+          if (switchError.code === 4902) {
+            await eip1193.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: chainIdHex,
+                chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
+                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                rpcUrls: [rpcUrl]
+              }]
+            });
+          } else {
+            // If switch failed for another reason (like chain exists but symbol mismatch), just try switching again
+            // or rethrow if it's a different error
+            throw switchError;
+          }
+        }
 
         // Add delay to allow wallet to adapt to chain switch
         console.log('********************* 2222222222222222 Waiting for wallet to adapt to chain switch...');
@@ -986,20 +1006,30 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         const chainIdHex = selectedChainIdHex || '0xaa36a7';
         const rpcUrl = effectiveRpcUrl;
 
-        // Add and switch to the chain
-        await eip1193.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: chainIdHex,
-            chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls: [rpcUrl]
-          }]
-        });
-        await eip1193.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: chainIdHex }]
-        });
+        // Try to switch to the chain first
+        try {
+          await eip1193.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: chainIdHex }]
+          });
+        } catch (switchError: any) {
+          // If the chain doesn't exist (code 4902), try to add it
+          if (switchError.code === 4902) {
+            await eip1193.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: chainIdHex,
+                chainName: getChainConfigByHex(chainIdHex)?.chainName || "ETH Sepolia",
+                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                rpcUrls: [rpcUrl]
+              }]
+            });
+          } else {
+            // If switch failed for another reason (like chain exists but symbol mismatch), just try switching again
+            // or rethrow if it's a different error
+            throw switchError;
+          }
+        }
 
         // Add delay to allow wallet to adapt to chain switch
         console.log('********************* 3333333333333333 Waiting for wallet to adapt to chain switch...');
