@@ -50,10 +50,10 @@ async function queryGraphQL(query: string, variables: any = {}) {
 
 export async function GET() {
   try {
-    // Get all agents grouped by chain
+    // Get all agents grouped by chain, ordered by agentId DESC to get highest first
     const query = `
       query GetStats {
-        agents(limit: 10000, offset: 0) {
+        agents(limit: 10000, offset: 0, orderBy: "agentId", orderDirection: "desc") {
           chainId
           agentId
           agentName
@@ -70,6 +70,7 @@ export async function GET() {
 
     if (!data || !data.agents) {
       // Return empty stats if GraphQL is not available
+      console.warn('Stats API: No data returned from GraphQL');
       return NextResponse.json({
         summary: {
           totalAgents: 0,
@@ -124,16 +125,33 @@ export async function GET() {
       };
     });
 
-    // Get top agents (sorted by agentId)
-    const topAgents = agents
-      .slice(0, 10)
+    // Get the highest agentId from each chain
+    const topAgentsByChain: Record<number, any> = {};
+    const maxAgentIds: Record<number, number> = {};
+    agents.forEach((agent: any) => {
+      const chainId = agent.chainId;
+      const agentIdNum = parseInt(agent.agentId, 10);
+      
+      if (!topAgentsByChain[chainId] || agentIdNum > parseInt(topAgentsByChain[chainId].agentId, 10)) {
+        topAgentsByChain[chainId] = agent;
+        maxAgentIds[chainId] = agentIdNum;
+      }
+    });
+    
+    // Log max agentIds for debugging
+    console.log('Stats API: Max agentIds per chain:', maxAgentIds);
+    console.log('Stats API: Total agents received:', agents.length);
+    
+    // Convert to array and sort by chainId
+    const topAgents = Object.values(topAgentsByChain)
       .map((agent: any) => ({
         chainId: agent.chainId,
         chainName: getChainName(agent.chainId),
         agentId: agent.agentId,
         agentName: agent.agentName || 'Unnamed',
         ensName: agent.ensEndpoint || null
-      }));
+      }))
+      .sort((a, b) => a.chainId - b.chainId);
 
     return NextResponse.json({
       summary: {

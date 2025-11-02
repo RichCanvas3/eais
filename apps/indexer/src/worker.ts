@@ -206,10 +206,7 @@ const graphiqlHTML = `<!DOCTYPE html>
       ReactDOM.render(
         React.createElement(GraphiQL, { 
           fetcher: graphQLFetcher,
-          defaultQuery: 
-
-
-query {
+          defaultQuery: \`query {
   agentsByChain(chainId: 11155111, limit: 10) {
     agentId
     agentName
