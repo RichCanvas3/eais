@@ -1893,18 +1893,30 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									<Stack spacing={1.5}>
 										{/* Header: Chain and ID */}
 										<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-											<Chip 
-												label={chainConfig?.chainName?.charAt(0).toUpperCase() || '?'}
-												size="small"
-												color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
-												sx={{ 
-													fontFamily: 'ui-monospace, monospace', 
-													fontSize: '0.6rem',
-													minWidth: '24px',
-													height: '24px',
-												}}
-												title={chainConfig?.chainName || `Chain ${row.chainId}`}
-											/>
+											{(() => {
+												const getChainDisplayName = (chainId: number): string => {
+													switch (chainId) {
+														case 11155111: return 'eth-sepolia';
+														case 84532: return 'base-sepolia';
+														case 11155420: return 'op-sepolia';
+														default: return `chain-${chainId}`;
+													}
+												};
+												
+												return (
+													<Typography 
+														variant="body2" 
+														sx={{ 
+															fontFamily: 'ui-monospace, monospace',
+															fontSize: '0.75rem',
+															color: '#24292f',
+															fontWeight: 500,
+														}}
+													>
+														{getChainDisplayName(row.chainId)}
+													</Typography>
+												);
+											})()}
 											{registryAddress ? (
 												<Typography
 													component="a"
@@ -2136,44 +2148,30 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 										}}
 									>
 										<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
-											<Box sx={{ display: { xs: 'flex', sm: 'block' }, justifyContent: 'center', alignItems: 'center' }}>
-												{(() => {
-													const chainConfig = getChainConfig(row.chainId);
-													const isMobile = false; // We'll use responsive display instead
-													
-													// Mobile: show icon only
-													return (
-														<>
-															<Box sx={{ display: { xs: 'block', sm: 'none' } }}>
-																<Chip 
-																	label={chainConfig?.chainName?.charAt(0).toUpperCase() || '?'}
-																	size="small"
-																	color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
-																	sx={{ 
-																		fontFamily: 'ui-monospace, monospace', 
-																		fontSize: '0.6rem',
-																		minWidth: '24px',
-																		height: '24px',
-																		padding: 0,
-																		'& .MuiChip-label': {
-																			padding: '0 4px',
-																		},
-																	}}
-																	title={chainConfig?.chainName || `Chain ${row.chainId}`}
-																/>
-															</Box>
-															<Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-																<Chip 
-																	label={chainConfig?.chainName || `Chain ${row.chainId}`}
-																	size="small"
-																	color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
-																	sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}
-																/>
-															</Box>
-														</>
-													);
-												})()}
-											</Box>
+											{(() => {
+												// Map chainId to lowercase hyphenated format
+												const getChainDisplayName = (chainId: number): string => {
+													switch (chainId) {
+														case 11155111: return 'eth-sepolia';
+														case 84532: return 'base-sepolia';
+														case 11155420: return 'op-sepolia';
+														default: return `chain-${chainId}`;
+													}
+												};
+												
+												return (
+													<Typography 
+														variant="body2" 
+														sx={{ 
+															fontFamily: 'ui-monospace, monospace',
+															fontSize: { xs: '0.75rem', sm: '0.875rem' },
+															color: '#24292f',
+														}}
+													>
+														{getChainDisplayName(row.chainId)}
+													</Typography>
+												);
+											})()}
 										</TableCell>
 										<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
 											<Stack direction="row" spacing={0.25} alignItems="center">

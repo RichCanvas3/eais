@@ -1,7 +1,7 @@
 "use client";
 import { AgentTable } from "@/components/AgentTable";
 import { StatsPanel } from "@/components/StatsPanel";
-import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, Link } from '@mui/material';
+import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import * as React from 'react';
 import { AddAgentModal } from '@/components/AddAgentModal';
@@ -50,6 +50,51 @@ export default function Page() {
       // You could show a toast notification here
     }
   };
+
+  const handleOpenGraphQL = async () => {
+    if (!address) return;
+    
+    try {
+      // Get access code
+      const response = await fetch('/api/getAccessCode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get access code');
+      }
+
+      const data = await response.json();
+      const code = data.accessCode;
+
+      // Get GraphQL base URL from environment variable
+      const graphqlBaseUrl = process.env.NEXT_PUBLIC_GRAPHQL_API_URL || process.env.GRAPHQL_API_URL;
+      
+      if (!graphqlBaseUrl) {
+        throw new Error('GraphQL API URL not configured');
+      }
+
+      // Remove trailing slash and any existing /graphql or /graphiql path
+      let baseUrl = graphqlBaseUrl.trim().replace(/\/+$/, '').replace(/\/(graphql|graphiql)\/?$/i, '');
+      
+      // Ensure base URL has protocol
+      if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+        baseUrl = `https://${baseUrl}`;
+      }
+
+      // Construct GraphiQL URL
+      const graphiqlUrl = `${baseUrl}/graphiql`;
+      const urlWithCode = `${graphiqlUrl}?accessCode=${encodeURIComponent(code)}`;
+      window.open(urlWithCode, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      console.error('Error opening GraphQL:', error);
+      alert('Failed to get access code. Please try again.');
+    }
+  };
   
   return (
     <Container maxWidth="xl" sx={{ py: 0 }}>
@@ -63,31 +108,23 @@ export default function Page() {
             </Box>
             {isLoggedIn && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Button 
-                  variant="outlined" 
-                  onClick={handleGetAccessCode} 
-                  disabled={accessCodeLoading}
-                  disableElevation 
-                  size="small" 
-                  sx={{ alignSelf: 'flex-start', borderColor: 'divider', color: 'text.secondary' }}
-                >
-                  {accessCodeLoading ? 'Loading...' : 'Get GraphQL access code'}
-                </Button>
-                <Link
-                  href="https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphiql"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Button
+                  variant="outlined"
+                  onClick={handleOpenGraphQL}
+                  disableElevation
+                  size="small"
                   sx={{ 
-                    fontSize: '0.875rem',
+                    borderColor: 'divider',
                     color: 'text.secondary',
-                    textDecoration: 'none',
+                    fontSize: '0.875rem',
                     '&:hover': {
-                      textDecoration: 'underline',
+                      borderColor: 'divider',
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
                     },
                   }}
                 >
-                  ERC-8004 GraphiQL
-                </Link>
+                  GraphQL
+                </Button>
               </Box>
             )}
           </Box>
@@ -143,35 +180,23 @@ export default function Page() {
             </Typography>
             {isLoggedIn && (
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Button 
-                  variant="outlined" 
-                  onClick={handleGetAccessCode} 
-                  disabled={accessCodeLoading}
-                  disableElevation 
-                  size="small" 
+                <Button
+                  variant="outlined"
+                  onClick={handleOpenGraphQL}
+                  disableElevation
+                  size="small"
                   sx={{ 
-                    borderColor: 'divider', 
+                    borderColor: 'divider',
                     color: 'text.secondary',
                     fontSize: '0.75rem',
-                  }}
-                >
-                  {accessCodeLoading ? 'Loading...' : 'Code'}
-                </Button>
-                <Link
-                  href="https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphiql"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{ 
-                    fontSize: '0.75rem',
-                    color: 'text.secondary',
-                    textDecoration: 'none',
                     '&:hover': {
-                      textDecoration: 'underline',
+                      borderColor: 'divider',
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
                     },
                   }}
                 >
-                  GraphiQL
-                </Link>
+                  GraphQL
+                </Button>
               </Box>
             )}
           </Box>

@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 async function queryGraphQL(query: string, variables: any = {}) {
   // Get GraphQL endpoint URL from environment at runtime
-  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL;
+  const GRAPHQL_URL = (process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL) + '/graphql';
   
   try {
     if (!GRAPHQL_URL) {

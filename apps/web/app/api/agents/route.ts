@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 async function queryGraphQL(query: string, variables: any = {}) {
   // Get GraphQL endpoint URL from environment at runtime
-  const GRAPHQL_URL = process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL;
+  const GRAPHQL_URL = (process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL) + '/graphql';
   console.info("++++++++++++++++++++ queryGraphQL 0: GRAPHQL_URL", GRAPHQL_URL);
   try {
     console.info("++++++++++++++++++++ queryGraphQL 1: GRAPHQL_URL", GRAPHQL_URL);
@@ -110,8 +110,7 @@ export async function GET(req: Request) {
     `;
 
     const data = await queryGraphQL(query, filters);
-    console.info("++++++++++++++++++++ GET MAIN QUERY data: ", JSON.stringify(data, null, 2));
-    console.info("++++++++++++++++++++ GET filters: ", filters);
+
 
     if (!data) {
       // Return empty data if GraphQL is not available
