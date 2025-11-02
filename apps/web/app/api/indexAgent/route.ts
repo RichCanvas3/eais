@@ -59,6 +59,8 @@ export async function POST(request: NextRequest) {
         query: mutation,
         variables,
       }),
+      cache: 'no-store', // Disable Next.js fetch caching
+      next: { revalidate: 0 }, // Ensure no revalidation caching
     });
 
     if (!response.ok) {

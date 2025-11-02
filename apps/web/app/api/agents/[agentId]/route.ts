@@ -18,6 +18,8 @@ async function queryGraphQL(query: string, variables: any = {}) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query, variables }),
+      cache: 'no-store', // Disable Next.js fetch caching
+      next: { revalidate: 0 }, // Ensure no revalidation caching
     });
 
     if (!res.ok) {

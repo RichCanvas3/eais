@@ -40,6 +40,8 @@ async function queryGraphQL(query: string, variables: any = {}) {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(requestBody),
+      cache: 'no-store', // Disable Next.js fetch caching
+      next: { revalidate: 0 }, // Ensure no revalidation caching
     });
 
 
@@ -121,6 +123,9 @@ export async function GET(req: Request) {
     console.info("++++++++++++++++++++ GET rows count: ", rows.length);
     if (rows.length > 0) {
       console.info("++++++++++++++++++++ GET first row sample: ", JSON.stringify(rows[0], null, 2));
+      // Log max agentId to verify we're getting the latest
+      const maxAgentId = Math.max(...rows.map((r: any) => parseInt(r.agentId || '0', 10)));
+      console.info("++++++++++++++++++++ GET max agentId in results: ", maxAgentId);
     }
 
     // Get total count using the new countAgents query (more efficient)
