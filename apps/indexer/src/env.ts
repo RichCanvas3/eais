@@ -1,16 +1,36 @@
-import "dotenv/config";
-import dotenv from "dotenv";
-import { fileURLToPath } from "url";
-import path from "path";
+// Only load dotenv in Node.js (local development), not in Workers
+// Workers get env vars from wrangler.toml and Cloudflare dashboard
+// Check if we're in Node.js environment (has process and import.meta.url)
+const isNodeEnvironment = typeof process !== 'undefined' && 
+                          typeof process.env === 'object' &&
+                          typeof import.meta !== 'undefined' && 
+                          import.meta.url &&
+                          import.meta.url.startsWith('file:');
 
-// Load additional .env files to support monorepo root setups.
-// Precedence: package-local .env first, then repo-root .env fills in missing values.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-// Load package-local env: apps/indexer/.env
-dotenv.config({ path: path.resolve(__dirname, "../.env"), override: false });
-// Load repo-root env: ./.env
-dotenv.config({ path: path.resolve(__dirname, "../../../.env"), override: false });
+if (isNodeEnvironment) {
+  // Use synchronous require in try-catch to avoid bundling issues
+  // This code only runs in Node.js, not in Workers
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const dotenv = require("dotenv");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { fileURLToPath } = require("node:url");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("node:path");
+    
+    // Load additional .env files to support monorepo root setups.
+    // Precedence: package-local .env first, then repo-root .env fills in missing values.
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    // Load package-local env: apps/indexer/.env
+    dotenv.config({ path: path.resolve(__dirname, "../.env"), override: false });
+    // Load repo-root env: ./.env
+    dotenv.config({ path: path.resolve(__dirname, "../../../.env"), override: false });
+  } catch (error) {
+    // dotenv not available (e.g., in Workers) - this is fine
+    // Workers use env vars from wrangler.toml and Cloudflare dashboard
+  }
+}
 
 function must(name: string) {
   const v = process.env[name];

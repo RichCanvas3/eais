@@ -62,10 +62,65 @@ async function createWorkersIndexAgentResolver(db: any, env?: any) {
     });
   }
 
+  // Create ERC8004Client instances for backfill (dynamically import to avoid Workers compatibility issues)
+  const backfillClients: any[] = [];
+  try {
+    const { ethers } = await import('ethers');
+    const { ERC8004Client, EthersAdapter } = await import('@erc8004/sdk');
+    
+    if (ethSepoliaRpc && ethSepoliaRegistry) {
+      const provider = new ethers.JsonRpcProvider(ethSepoliaRpc);
+      const adapter = new EthersAdapter(provider);
+      backfillClients.push(new ERC8004Client({
+        adapter,
+        addresses: {
+          identityRegistry: ethSepoliaRegistry,
+          reputationRegistry: '0x0000000000000000000000000000000000000000',
+          validationRegistry: '0x0000000000000000000000000000000000000000',
+          chainId: 11155111,
+        }
+      }));
+    }
+    
+    if (baseSepoliaRpc && baseSepoliaRegistry) {
+      const provider = new ethers.JsonRpcProvider(baseSepoliaRpc);
+      const adapter = new EthersAdapter(provider);
+      backfillClients.push(new ERC8004Client({
+        adapter,
+        addresses: {
+          identityRegistry: baseSepoliaRegistry,
+          reputationRegistry: '0x0000000000000000000000000000000000000000',
+          validationRegistry: '0x0000000000000000000000000000000000000000',
+          chainId: 84532,
+        }
+      }));
+    }
+    
+    if (opSepoliaRpc && opSepoliaRegistry) {
+      const provider = new ethers.JsonRpcProvider(opSepoliaRpc);
+      const adapter = new EthersAdapter(provider);
+      backfillClients.push(new ERC8004Client({
+        adapter,
+        addresses: {
+          identityRegistry: opSepoliaRegistry,
+          reputationRegistry: '0x0000000000000000000000000000000000000000',
+          validationRegistry: '0x0000000000000000000000000000000000000000',
+          chainId: 11155420,
+        }
+      }));
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to create backfill clients (backfill will be disabled):', error);
+  }
+
+  // Enable backfill on Workers
+  // WARNING: This may timeout on large backfills due to Workers' 30s request limit
+  // The backfill will still run but may be interrupted if it takes too long
   return createIndexAgentResolver({
     db,
     chains,
-    triggerBackfill: false, // Workers don't trigger full backfill
+    triggerBackfill: backfillClients.length > 0, // Enable if clients are available
+    backfillClients: backfillClients.length > 0 ? backfillClients : undefined,
   });
 }
 

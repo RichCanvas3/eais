@@ -92,6 +92,7 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
         try {
           // Check if agent exists by trying to get owner
           const owner = await client.identity.getOwner(agentIdBigInt);
+          console.log("............owner: ", owner, "agentIdBigInt: ", agentIdBigInt);
           const tokenURI = await client.identity.getTokenURI(agentIdBigInt).catch(() => null);
           
           // Get current block number
@@ -107,6 +108,8 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
       }
 
       // Optionally trigger full backfill (only for local/Express)
+      // Note: Backfill runs regardless of whether the specific agent was found
+      // This allows "refresh indexer" to work even when the trigger agentId doesn't exist
       if (config.triggerBackfill && config.backfillClients) {
         console.log('🔄 Triggering full index after agent indexing...');
         // Dynamically import backfill to avoid circular dependencies
@@ -121,8 +124,11 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
         console.log('✅ Full index completed');
       }
 
+      // If backfill was triggered, consider it a success even if the specific agent wasn't found
+      const backfillTriggered = config.triggerBackfill && config.backfillClients && config.backfillClients.length > 0;
+      
       return {
-        success: processedChains.length > 0,
+        success: processedChains.length > 0 || backfillTriggered,
         message: processedChains.length > 0
           ? config.triggerBackfill
             ? `Successfully indexed agent ${agentId} on ${processedChains.join(', ')} and triggered full index`

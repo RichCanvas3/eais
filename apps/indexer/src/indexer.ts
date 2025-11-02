@@ -618,7 +618,7 @@ export async function backfill(client: ERC8004Client) {
 
 
 
-  const pageSize = 1000; // Increased page size to fetch more historical data
+  const pageSize = 100; // Reduced page size to avoid Workers timeout (30s limit)
   console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
   
 
