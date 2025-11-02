@@ -2087,7 +2087,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													</Typography>
 												);
 											})()}
-											<Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#24292f' }}>, </Typography>
 											<Typography
 												component="a"
 												href={`${getExplorerUrl(row.chainId)}/address/${row.agentAddress}#nfttransfers`}
@@ -2110,33 +2109,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											>
 												account
 											</Typography>
-											{registryAddress && (
-												<>
-													<Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#24292f' }}>, </Typography>
-													<Typography
-														component="a"
-														href={`${getExplorerUrl(row.chainId)}/address/${registryAddress}`}
-														target="_blank"
-														rel="noopener noreferrer"
-														variant="body2"
-														onClick={(e) => e.stopPropagation()}
-														sx={{
-															fontFamily: 'ui-monospace, monospace',
-															fontSize: '0.75rem',
-															color: 'primary.main',
-															textDecoration: 'underline',
-															cursor: 'pointer',
-															fontWeight: 500,
-															'&:hover': {
-																color: 'primary.dark',
-															},
-														}}
-														title={`View registry on ${getExplorerName(row.chainId)}`}
-													>
-														reg
-													</Typography>
-												</>
-											)}
+											
 										</Box>
 										
 
@@ -2256,48 +2229,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											</Box>
 										)}
 
-										{/* ENS URL - Only show on mobile, not desktop card view */}
-										{ens && !showCardViewForDesktop && (
-											<Typography 
-												component="a"
-												href={`https://sepolia.app.ens.domains/${ens as string}`}
-												target="_blank"
-												rel="noopener noreferrer"
-												onClick={(e) => e.stopPropagation()}
-												variant="caption" 
-												color="primary"
-												sx={{ 
-													fontFamily: 'ui-monospace, monospace',
-													fontSize: '0.7rem',
-													textDecoration: 'underline',
-													cursor: 'pointer',
-													display: 'block',
-													'&:hover': {
-														color: 'primary.dark',
-														textDecoration: 'none',
-													},
-												}}
-											>
-												ENS: {ens}
-											</Typography>
-										)}
-
-
-										{/* DID Key Path - Only show on mobile, not desktop card view */}
-										{!showCardViewForDesktop && (
-										<Typography 
-											variant="caption" 
-											color="text.secondary"
-											sx={{ 
-												fontFamily: 'ui-monospace, monospace',
-												fontSize: '0.7rem',
-												display: 'block',
-												wordBreak: 'break-all',
-											}}
-										>
-											DID: eip155:{row.chainId}:{acct}
-										</Typography>
-										)}
 
 										{/* Trust Score (if discover is active) */}
 										{discoverMatches && discoverTrustScores[row.agentId] && (
