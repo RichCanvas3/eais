@@ -1,9 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * Script to sync data from local SQLite database to Cloudflare D1
- * Run this periodically to keep D1 in sync with the indexer
+ * LEGACY: Script to sync data from old SQLite database to Cloudflare D1
+ * This is only for one-time migration. The indexer now uses D1 exclusively.
+ * 
+ * NOTE: This script requires better-sqlite3 to be installed temporarily for migration.
+ * After migration is complete, this script can be removed.
+ * 
+ * To use this script for one-time migration:
+ * 1. Temporarily install better-sqlite3: pnpm add better-sqlite3
+ * 2. Run this script
+ * 3. Remove better-sqlite3: pnpm remove better-sqlite3
  */
 
+// @ts-ignore - better-sqlite3 is optional for migration only
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import path from 'path';

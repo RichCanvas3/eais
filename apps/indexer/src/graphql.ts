@@ -5,6 +5,8 @@ import { db, formatSQLTimestamp, getCheckpoint, setCheckpoint } from './db';
 import crypto from 'crypto';
 import { ethers } from 'ethers';
 import { ERC8004Client, EthersAdapter } from '@erc8004/sdk';
+import { processAgentDirectly } from './process-agent';
+import { createGraphQLResolvers, validateAccessCode as validateAccessCodeShared } from './graphql-resolvers';
 import { 
   ETH_SEPOLIA_IDENTITY_REGISTRY, 
   BASE_SEPOLIA_IDENTITY_REGISTRY, 
@@ -104,7 +106,7 @@ const schema = buildSchema(`
   }
 `);
 
-// Helper function to parse JSON fields
+// Helper function to parse JSON fields (if still needed for indexAgent)
 function parseJsonField<T>(value: string | null | undefined): T | null {
   if (!value) return null;
   try {
@@ -114,279 +116,14 @@ function parseJsonField<T>(value: string | null | undefined): T | null {
   }
 }
 
-// Helper function to build WHERE clause dynamically
-function buildWhereClause(filters: {
-  chainId?: number;
-  agentId?: string;
-  agentOwner?: string;
-  agentName?: string;
-}): { where: string; params: any[] } {
-  const conditions: string[] = [];
-  const params: any[] = [];
+// Use shared validateAccessCode function
+const validateAccessCode = (accessCode: string | null | undefined) => validateAccessCodeShared(db, accessCode);
 
-  if (filters.chainId !== undefined) {
-    conditions.push(`chainId = ?`);
-    params.push(filters.chainId);
-  }
-
-  if (filters.agentId) {
-    conditions.push(`agentId = ?`);
-    params.push(filters.agentId);
-  }
-
-  if (filters.agentOwner) {
-    conditions.push(`agentOwner = ?`);
-    params.push(filters.agentOwner);
-  }
-
-  if (filters.agentName) {
-    conditions.push(`agentName LIKE ?`);
-    params.push(`%${filters.agentName}%`);
-  }
-
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  return { where, params };
-}
-
-// Helper function to build ORDER BY clause
-function buildOrderByClause(orderBy?: string, orderDirection?: string): string {
-  // Valid columns for ordering
-  const validColumns = ['agentId', 'agentName', 'createdAtTime', 'createdAtBlock', 'agentOwner'];
-  
-  // Default to agentId ASC if not specified
-  const column = orderBy && validColumns.includes(orderBy) ? orderBy : 'agentId';
-  const direction = (orderDirection?.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
-  
-  // Cast agentId to integer for proper numeric sorting
-  const orderColumn = column === 'agentId' ? 'CAST(agentId AS INTEGER)' : column;
-  
-  return `ORDER BY ${orderColumn} ${direction}`;
-}
-
-// Helper function to generate a secure access code
-function generateAccessCode(): string {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-// Helper function to validate access code
-async function validateAccessCode(accessCode: string | null | undefined): Promise<boolean> {
-  if (!accessCode) return false;
-  try {
-    const row = await db.prepare('SELECT accessCode FROM access_codes WHERE accessCode = ?').get(accessCode) as { accessCode?: string } | undefined;
-    if (row) {
-      // Update lastUsedAt
-      const timestamp = Math.floor(Date.now() / 1000);
-      await db.prepare('UPDATE access_codes SET lastUsedAt = ? WHERE accessCode = ?').run(timestamp, accessCode);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error('Error validating access code:', error);
-    return false;
-  }
-}
-
+// Get shared resolvers and add the indexAgent resolver
+const sharedResolvers = createGraphQLResolvers(db);
 const root = {
-  agents: (args: {
-    chainId?: number;
-    agentId?: string;
-    agentOwner?: string;
-    agentName?: string;
-    limit?: number;
-    offset?: number;
-    orderBy?: string;
-    orderDirection?: string;
-  }) => {
-    try {
-      const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0, orderBy, orderDirection } = args;
-      console.log('🔍 agents resolver called with args:', { chainId, agentId, agentOwner, agentName, limit, offset, orderBy, orderDirection });
-      
-    const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
-      const orderByClause = buildOrderByClause(orderBy, orderDirection);
-    
-      console.log('📋 SQL orderByClause:', orderByClause);
-      console.log('📋 SQL where clause:', where);
-      const query = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
-    const allParams = [...params, limit, offset];
-      
-      console.log('🔎 Executing SQL:', query);
-      console.log('📊 SQL params:', allParams);
-    
-    const rows = db.prepare(query).all(...allParams) as any[];
-    
-    // Log sample of results to debug ordering
-    if (rows.length > 0) {
-      const sampleIds = rows.slice(0, 5).map((r: any) => `${r.agentId} (chain: ${r.chainId})`).join(', ');
-      console.log(`📊 Sample agentIds (first 5): ${sampleIds}`);
-      if (rows.length >= 5) {
-        const lastIds = rows.slice(-5).map((r: any) => `${r.agentId} (chain: ${r.chainId})`).join(', ');
-        console.log(`📊 Sample agentIds (last 5): ${lastIds}`);
-      }
-    }
- 
-      console.log(`✅ agents resolver returning ${rows.length} rows`);
-    return rows;
-    } catch (error) {
-      console.error('❌ Error in agents resolver:', error);
-      throw error;
-    }
-  },
-
-  agent: (args: { chainId: number; agentId: string }) => {
-    const { chainId, agentId } = args;
-    const row = db.prepare('SELECT * FROM agents WHERE chainId = ? AND agentId = ?').get(chainId, agentId) as any;
-    return row || null;
-  },
-
-  agentsByChain: (args: { chainId: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
-    try {
-      const { chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
-      console.log('📋 agentsByChain resolver called with args:', args);
-      
-      const orderByClause = buildOrderByClause(orderBy, orderDirection);
-      const query = `SELECT * FROM agents WHERE chainId = ? ${orderByClause} LIMIT ? OFFSET ?`;
-      
-      console.log('🔎 Executing SQL:', query);
-      console.log('📊 SQL params:', [chainId, limit, offset]);
-      
-      const rows = db.prepare(query).all(chainId, limit, offset) as any[];
-      console.log(`✅ agentsByChain resolver returning ${rows.length} rows`);
-    return rows;
-    } catch (error) {
-      console.error('❌ Error in agentsByChain resolver:', error);
-      throw error;
-    }
-  },
-
-  agentsByOwner: (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
-    try {
-      const { agentOwner, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
-      console.log('📋 agentsByOwner resolver called with args:', args);
-    
-    let query = 'SELECT * FROM agents WHERE agentOwner = ?';
-    const params: any[] = [agentOwner];
-    
-    if (chainId !== undefined) {
-      query += ' AND chainId = ?';
-      params.push(chainId);
-    }
-    
-      const orderByClause = buildOrderByClause(orderBy, orderDirection);
-      query += ` ${orderByClause} LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-      
-      console.log('🔎 Executing SQL:', query);
-      console.log('📊 SQL params:', params);
-    
-    const rows = db.prepare(query).all(...params) as any[];
-      console.log(`✅ agentsByOwner resolver returning ${rows.length} rows`);
-    return rows;
-    } catch (error) {
-      console.error('❌ Error in agentsByOwner resolver:', error);
-      throw error;
-    }
-  },
-
-  searchAgents: (args: { query: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
-    try {
-      const { query: searchQuery, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
-      console.log('📋 searchAgents resolver called with args:', args);
-      
-    const searchPattern = `%${searchQuery}%`;
-    
-    let sqlQuery = `
-      SELECT * FROM agents 
-      WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)
-    `;
-    const params: any[] = [searchPattern, searchPattern, searchPattern, searchPattern];
-    
-    if (chainId !== undefined) {
-      sqlQuery += ' AND chainId = ?';
-      params.push(chainId);
-    }
-    
-      const orderByClause = buildOrderByClause(orderBy, orderDirection);
-      sqlQuery += ` ${orderByClause} LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-      
-      console.log('🔎 Executing SQL:', sqlQuery);
-      console.log('📊 SQL params:', params);
-    
-    const rows = db.prepare(sqlQuery).all(...params) as any[];
-      console.log(`✅ searchAgents resolver returning ${rows.length} rows`);
-    return rows;
-    } catch (error) {
-      console.error('❌ Error in searchAgents resolver:', error);
-      throw error;
-    }
-  },
-
-  getAccessCode: async (args: { address: string }) => {
-    try {
-      const { address } = args;
-      const row = await db.prepare('SELECT * FROM access_codes WHERE address = ?').get(address.toLowerCase()) as any;
-      return row || null;
-    } catch (error) {
-      console.error('❌ Error in getAccessCode resolver:', error);
-      throw error;
-    }
-  },
-
-  countAgents: (args: {
-    chainId?: number;
-    agentId?: string;
-    agentOwner?: string;
-    agentName?: string;
-  }) => {
-    try {
-      const { where, params } = buildWhereClause(args);
-      const query = `SELECT COUNT(*) as count FROM agents ${where}`;
-      console.log('🔢 countAgents SQL:', query, 'params:', params);
-      
-      const result = db.prepare(query).get(...params) as { count: number } | undefined;
-      const count = result?.count || 0;
-      console.log(`✅ countAgents returning: ${count}`);
-      return count;
-    } catch (error) {
-      console.error('❌ Error in countAgents resolver:', error);
-      throw error;
-    }
-  },
-
-  createAccessCode: async (args: { address: string }) => {
-    try {
-      const { address } = args;
-      const normalizedAddress = address.toLowerCase();
-      
-      // Check if access code already exists
-      let row = await db.prepare('SELECT * FROM access_codes WHERE address = ?').get(normalizedAddress) as any;
-      
-      if (row) {
-        // Return existing access code
-        return row;
-      }
-      
-      // Generate new access code
-      const accessCode = generateAccessCode();
-      const timestamp = Math.floor(Date.now() / 1000);
-      
-      // Insert new access code
-      await db.prepare('INSERT INTO access_codes (address, accessCode, createdAt) VALUES (?, ?, ?)').run(
-        normalizedAddress,
-        accessCode,
-        timestamp
-      );
-      
-      return {
-        address: normalizedAddress,
-        accessCode,
-        createdAt: timestamp,
-      };
-    } catch (error) {
-      console.error('❌ Error in createAccessCode resolver:', error);
-      throw error;
-    }
-  },
+  // Use all shared resolvers
+  ...sharedResolvers,
 
   indexAgent: async (args: { agentId: string; chainId?: number }) => {
     try {
@@ -466,7 +203,7 @@ const root = {
           
           if (owner && owner !== '0x0000000000000000000000000000000000000000') {
             // Import helper functions from indexer.ts logic (duplicated here for GraphQL)
-            await processAgentDirectly(owner.toLowerCase(), agentIdBigInt, blockNumber, tokenURI, cId);
+            await processAgentDirectly(owner.toLowerCase(), agentIdBigInt, blockNumber, tokenURI, cId, db);
             processedChains.push(name);
           }
         } catch (error: any) {
@@ -523,165 +260,7 @@ const root = {
   },
 };
 
-// Helper function to process an agent directly from chain (not from subgraph)
-// This duplicates logic from indexer.ts but makes it accessible from GraphQL
-async function processAgentDirectly(
-  ownerAddress: string,
-  tokenId: bigint,
-  blockNumber: bigint,
-  tokenURI: string | null,
-  chainId: number
-) {
-  const agentId = tokenId.toString();
-  const agentAddress = ownerAddress;
-  let agentName = '';
-
-  // Fetch metadata from tokenURI
-  let preFetchedMetadata: any = null;
-  let a2aEndpoint: string | null = null;
-  
-  if (tokenURI) {
-    try {
-      // Fetch from IPFS gateway
-      const cidMatch = tokenURI.match(/ipfs:\/\/([a-z0-9]+)/i) || tokenURI.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
-      if (cidMatch) {
-        const cid = cidMatch[1];
-        const ipfsUrl = `https://${cid}.ipfs.w3s.link`;
-        const resp = await fetch(ipfsUrl);
-        if (resp?.ok) {
-          preFetchedMetadata = await resp.json();
-          if (typeof preFetchedMetadata?.name === 'string' && preFetchedMetadata.name.trim()) {
-            agentName = preFetchedMetadata.name.trim();
-          }
-          const endpoints = Array.isArray(preFetchedMetadata.endpoints) ? preFetchedMetadata.endpoints : [];
-          const findEndpoint = (n: string) => {
-            const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
-            return e && typeof e.endpoint === 'string' ? e.endpoint : null;
-          };
-          a2aEndpoint = findEndpoint('A2A') || findEndpoint('a2a');
-        }
-      } else if (/^https?:\/\//i.test(tokenURI)) {
-        const resp = await fetch(tokenURI);
-        if (resp?.ok) {
-          preFetchedMetadata = await resp.json();
-          if (typeof preFetchedMetadata?.name === 'string' && preFetchedMetadata.name.trim()) {
-            agentName = preFetchedMetadata.name.trim();
-          }
-          const endpoints = Array.isArray(preFetchedMetadata.endpoints) ? preFetchedMetadata.endpoints : [];
-          const findEndpoint = (n: string) => {
-            const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
-            return e && typeof e.endpoint === 'string' ? e.endpoint : null;
-          };
-          a2aEndpoint = findEndpoint('A2A') || findEndpoint('a2a');
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to fetch metadata:', e);
-    }
-  }
-
-  if (ownerAddress !== '0x000000000000000000000000000000000000dEaD') {
-    const currentTime = Math.floor(Date.now() / 1000);
-    
-    // Insert or update agent
-    await db.prepare(`
-      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(chainId, agentId) DO UPDATE SET
-        agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
-        agentOwner=excluded.agentOwner,
-        agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
-        a2aEndpoint=COALESCE(excluded.a2aEndpoint, a2aEndpoint),
-        metadataURI=COALESCE(excluded.metadataURI, metadataURI)
-    `).run(
-      chainId,
-      agentId,
-      agentAddress,
-      ownerAddress,
-      agentName,
-      tokenURI,
-      a2aEndpoint,
-      Number(blockNumber),
-      currentTime
-    );
-
-    // Update metadata fields if available
-    if (preFetchedMetadata) {
-      try {
-        const meta = preFetchedMetadata;
-        const type = typeof meta.type === 'string' ? meta.type : null;
-        const name = typeof meta.name === 'string' ? meta.name : null;
-        const description = typeof meta.description === 'string' ? meta.description : null;
-        const image = meta.image == null ? null : String(meta.image);
-        const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
-        const findEndpoint = (n: string) => {
-          const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
-          return e && typeof e.endpoint === 'string' ? e.endpoint : null;
-        };
-        const a2aEp = findEndpoint('A2A') || findEndpoint('a2a');
-        const ensEndpoint = findEndpoint('ENS');
-        let agentAccountEndpoint = findEndpoint('agentAccount');
-        if (!agentAccountEndpoint || !/^eip155:/i.test(agentAccountEndpoint)) {
-          agentAccountEndpoint = `eip155:${chainId}:${ownerAddress}`;
-        }
-        const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
-        const updateTime = Math.floor(Date.now() / 1000);
-        
-        await db.prepare(`
-          UPDATE agents SET
-            type = COALESCE(type, ?),
-            agentName = CASE 
-              WHEN ? IS NOT NULL AND ? != '' THEN ? 
-              ELSE agentName 
-            END,
-            agentAddress = CASE
-              WHEN (agentAddress IS NULL OR agentAddress = '0x0000000000000000000000000000000000000000')
-                   AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
-              THEN ?
-              ELSE agentAddress
-            END,
-            description = CASE 
-              WHEN ? IS NOT NULL AND ? != '' THEN ? 
-              ELSE description 
-            END,
-            image = CASE 
-              WHEN ? IS NOT NULL AND ? != '' THEN ? 
-              ELSE image 
-            END,
-            a2aEndpoint = CASE 
-              WHEN ? IS NOT NULL AND ? != '' THEN ? 
-              ELSE a2aEndpoint 
-            END,
-            ensEndpoint = CASE 
-              WHEN ? IS NOT NULL AND ? != '' THEN ? 
-              ELSE ensEndpoint 
-            END,
-            agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
-            supportedTrust = COALESCE(?, supportedTrust),
-            rawJson = COALESCE(?, rawJson),
-            updatedAtTime = ?
-          WHERE chainId = ? AND agentId = ?
-        `).run(
-          type,
-          name, name, name,
-          agentAddress, agentAddress, agentAddress,
-          description, description, description,
-          image, image, image,
-          a2aEp, a2aEp, a2aEp,
-          ensEndpoint, ensEndpoint, ensEndpoint,
-          agentAccountEndpoint,
-          JSON.stringify(supportedTrust),
-          JSON.stringify(meta),
-          updateTime,
-          chainId,
-          agentId,
-        );
-      } catch (error) {
-        console.warn('Error updating metadata:', error);
-      }
-    }
-  }
-}
+// processAgentDirectly is now imported from './process-agent'
 
 // Create GraphQL handler
 // graphql-http's Express handler automatically reads from req.body when it's parsed

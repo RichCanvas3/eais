@@ -5,8 +5,138 @@
 import { graphql, type GraphQLSchema } from 'graphql';
 import { buildSchema } from 'graphql';
 
-// Import database query functions
-import { createDBQueries, validateAccessCode } from './worker-db.js';
+// Import shared functions
+import { createGraphQLResolvers, validateAccessCode } from './graphql-resolvers.js';
+import { processAgentDirectly } from './process-agent.js';
+
+/**
+ * Create database queries with Workers-specific indexAgent resolver
+ */
+function createDBQueries(db: any, env?: any) {
+  // Get shared resolvers (all except indexAgent)
+  const sharedResolvers = createGraphQLResolvers(db);
+  
+  return {
+    // Use all shared resolvers
+    ...sharedResolvers,
+
+    indexAgent: async (args: { agentId: string; chainId?: number }) => {
+      try {
+        const { agentId, chainId } = args;
+        const agentIdBigInt = BigInt(agentId);
+        const processedChains: string[] = [];
+
+        // Get environment variables for RPC URLs and registry addresses
+        const ethSepoliaRpc = env?.ETH_SEPOLIA_RPC_URL || env?.ETH_SEPOLIA_RPC_HTTP_URL;
+        const baseSepoliaRpc = env?.BASE_SEPOLIA_RPC_URL || env?.BASE_SEPOLIA_RPC_HTTP_URL;
+        const opSepoliaRpc = env?.OP_SEPOLIA_RPC_URL || env?.OP_SEPOLIA_RPC_HTTP_URL;
+        
+        const ethSepoliaRegistry = env?.ETH_SEPOLIA_IDENTITY_REGISTRY;
+        const baseSepoliaRegistry = env?.BASE_SEPOLIA_IDENTITY_REGISTRY;
+        const opSepoliaRegistry = env?.OP_SEPOLIA_IDENTITY_REGISTRY;
+
+        // Import ethers and ERC8004Client dynamically
+        const { ethers } = await import('ethers');
+        const { ERC8004Client, EthersAdapter } = await import('@erc8004/sdk');
+
+        // Initialize ERC8004 clients for each chain
+        const chainsToProcess: Array<{ name: string; provider: any; client: any; chainId: number }> = [];
+
+        if (ethSepoliaRpc && ethSepoliaRegistry) {
+          if (chainId === undefined || chainId === 11155111) {
+            const provider = new ethers.JsonRpcProvider(ethSepoliaRpc);
+            const adapter = new EthersAdapter(provider);
+            const client = new ERC8004Client({
+              adapter,
+              addresses: {
+                identityRegistry: ethSepoliaRegistry,
+                reputationRegistry: '0x0000000000000000000000000000000000000000',
+                validationRegistry: '0x0000000000000000000000000000000000000000',
+                chainId: 11155111,
+              }
+            });
+            chainsToProcess.push({ name: 'ETH Sepolia', provider, client, chainId: 11155111 });
+          }
+        }
+
+        if (baseSepoliaRpc && baseSepoliaRegistry) {
+          if (chainId === undefined || chainId === 84532) {
+            const provider = new ethers.JsonRpcProvider(baseSepoliaRpc);
+            const adapter = new EthersAdapter(provider);
+            const client = new ERC8004Client({
+              adapter,
+              addresses: {
+                identityRegistry: baseSepoliaRegistry,
+                reputationRegistry: '0x0000000000000000000000000000000000000000',
+                validationRegistry: '0x0000000000000000000000000000000000000000',
+                chainId: 84532,
+              }
+            });
+            chainsToProcess.push({ name: 'Base Sepolia', provider, client, chainId: 84532 });
+          }
+        }
+
+        if (opSepoliaRpc && opSepoliaRegistry) {
+          if (chainId === undefined || chainId === 11155420) {
+            const provider = new ethers.JsonRpcProvider(opSepoliaRpc);
+            const adapter = new EthersAdapter(provider);
+            const client = new ERC8004Client({
+              adapter,
+              addresses: {
+                identityRegistry: opSepoliaRegistry,
+                reputationRegistry: '0x0000000000000000000000000000000000000000',
+                validationRegistry: '0x0000000000000000000000000000000000000000',
+                chainId: 11155420,
+              }
+            });
+            chainsToProcess.push({ name: 'Optimism Sepolia', provider, client, chainId: 11155420 });
+          }
+        }
+
+        // Process each chain
+        for (const { name, provider, client, chainId: cId } of chainsToProcess) {
+          try {
+            // Check if agent exists by trying to get owner
+            const owner = await client.identity.getOwner(agentIdBigInt);
+            const tokenURI = await client.identity.getTokenURI(agentIdBigInt).catch(() => null);
+            
+            // Get current block number
+            let blockNumber = 0n;
+            try {
+              const block = await provider.getBlockNumber();
+              blockNumber = BigInt(block);
+            } catch {
+              blockNumber = 0n;
+            }
+            
+            if (owner && owner !== '0x0000000000000000000000000000000000000000') {
+              // Process agent directly
+              await processAgentDirectly(owner.toLowerCase(), agentIdBigInt, blockNumber, tokenURI, cId, db);
+              processedChains.push(name);
+            }
+          } catch (error: any) {
+            console.log(`⚠️ Agent ${agentId} not found on ${name}: ${error?.message || error}`);
+          }
+        }
+
+        return {
+          success: processedChains.length > 0,
+          message: processedChains.length > 0
+            ? `Successfully indexed agent ${agentId} on ${processedChains.join(', ')}`
+            : `Agent ${agentId} not found on any configured chain`,
+          processedChains,
+        };
+      } catch (error: any) {
+        console.error('❌ Error in indexAgent:', error);
+        return {
+          success: false,
+          message: `Error indexing agent: ${error?.message || error}`,
+          processedChains: [],
+        };
+      }
+    },
+  };
+}
 
 // GraphQL Schema (same as graphql.ts)
 const schema = buildSchema(`
@@ -484,7 +614,7 @@ export default {
             ? JSON.parse(url.searchParams.get('variables')!) 
             : {};
 
-          const dbQueries = createDBQueries(env.DB);
+          const dbQueries = createDBQueries(env.DB, env);
           const result = await graphql({
             schema,
             source: query,
@@ -504,7 +634,7 @@ export default {
             );
           }
 
-          const dbQueries = createDBQueries(env.DB);
+          const dbQueries = createDBQueries(env.DB, env);
           const result = await graphql({
             schema,
             source: query,

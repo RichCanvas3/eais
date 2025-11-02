@@ -1,6 +1,6 @@
 /**
  * Cloudflare D1 Database Adapter for Node.js
- * Provides a better-sqlite3 compatible interface for Cloudflare D1
+ * Provides a D1-compatible async interface for both Node.js and Cloudflare Workers
  */
 
 interface D1Config {

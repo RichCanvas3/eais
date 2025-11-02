@@ -112,8 +112,8 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
         // Check if it's marked as base64 encoded
         if (tokenURI.startsWith('data:application/json;base64,')) {
           try {
-            // Try base64 decode first
-            const jsonString = Buffer.from(jsonData, 'base64').toString('utf-8');
+            // Try base64 decode first (use atob for compatibility with Workers)
+            const jsonString = atob(jsonData);
             parsed = JSON.parse(jsonString);
           } catch (e) {
             // If base64 fails, try parsing as plain JSON (some URIs are mislabeled)

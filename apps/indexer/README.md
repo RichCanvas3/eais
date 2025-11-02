@@ -7,14 +7,22 @@ This folder currently includes a subgraph based indexing stack for local and rem
 ## Setup
 
 ### Local Development
-- Copy env:
+
+**Environment Variables Required:**
+The indexer now uses Cloudflare D1 for both local and production. You need to set:
+- `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID
+- `CLOUDFLARE_D1_DATABASE_ID` - Your D1 database ID  
+- `CLOUDFLARE_API_TOKEN` - Cloudflare API token with D1 permissions
+
+1. Copy env:
   ```bash
   cp .env.example .env
   ```
-- Install deps from repo root:
+2. Install deps from repo root:
   ```bash
   pnpm install
   ```
+3. Set D1 credentials in `.env` file
 
 ### Run Local GraphQL Server
 ```bash
@@ -103,7 +111,9 @@ pnpm dev:worker
 ```
 
 ## Notes
-- Local SQLite DB writes to: `DB_PATH` (default `apps/indexer/data/registry.db`)
+- **Database**: Uses Cloudflare D1 for both local development and production
+- **Local Development**: Requires D1 configuration (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_API_TOKEN) in `.env`
+- **Local D1**: Use `pnpm dev:worker:local` for local D1 (managed by Wrangler), or configure remote D1 credentials
 - Reads chain via `RPC_HTTP_URL`; optional `RPC_WS_URL`
 - GraphQL API requires access code authentication (except for `getAccessCode` and `createAccessCode` mutations)
 - Use `GRAPHQL_SECRET_ACCESS_CODE` environment variable for server-to-server authentication

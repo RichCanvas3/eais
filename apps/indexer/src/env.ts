@@ -29,7 +29,6 @@ export const OP_SEPOLIA_RPC_HTTP_URL      = process.env.OP_SEPOLIA_RPC_HTTP_URL 
 
 export const RPC_WS_URL        = process.env.RPC_WS_URL; // optional
 export const CONFIRMATIONS     = Number(process.env.CONFIRMATIONS ?? 12);
-export const DB_PATH           = process.env.DB_PATH ?? "./data/registry.db"; // Only used if USE_D1 is not true
 export const START_BLOCK       = BigInt(process.env.START_BLOCK ?? 0);
 export const LOGS_CHUNK_SIZE   = BigInt(process.env.LOGS_CHUNK_SIZE ?? 10);
 export const BACKFILL_MODE     = (process.env.BACKFILL_MODE ?? 'logs') as 'logs' | 'ids';
@@ -41,8 +40,7 @@ export const GRAPHQL_API_KEY   = process.env.GRAPHQL_API_KEY || '';
 export const GRAPHQL_POLL_MS   = Number(process.env.GRAPHQL_POLL_MS ?? 120000);
 export const GRAPHQL_SERVER_PORT = Number(process.env.GRAPHQL_SERVER_PORT ?? 4000);
 
-// Cloudflare D1 configuration
-export const USE_D1 = process.env.USE_D1 === 'true';
-export const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || '';
-export const CLOUDFLARE_D1_DATABASE_ID = process.env.CLOUDFLARE_D1_DATABASE_ID || '';
-export const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || '';
+// Cloudflare D1 configuration (required for all environments)
+export const CLOUDFLARE_ACCOUNT_ID = must("CLOUDFLARE_ACCOUNT_ID");
+export const CLOUDFLARE_D1_DATABASE_ID = must("CLOUDFLARE_D1_DATABASE_ID");
+export const CLOUDFLARE_API_TOKEN = must("CLOUDFLARE_API_TOKEN");
