@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { getAddress } from 'viem';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -58,6 +58,8 @@ export type Agent = {
 type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: () => void };
 
 export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onAddAgentClose, onAgentIndexed: externalOnAgentIndexed }: AgentTableProps) {
+	const theme = useTheme();
+	const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 	const [domain, setDomain] = React.useState("");
 	const [address, setAddress] = React.useState("");
 	const [agentId, setAgentId] = React.useState("");
@@ -1679,7 +1681,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							<TextField 
 								fullWidth 
 								label="name" 
-								placeholder="Filter by name (ENS or metadata)" 
+								placeholder={isMobile ? "Filter by name" : "Filter by name (ENS or metadata)"}
 								value={domain} 
 								onChange={(e) => setDomain(e.target.value)} 
 								size="small"
@@ -1730,14 +1732,14 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
 						</Grid>
 						<Grid item xs={12} md={2}>
-							<Stack direction="row" spacing={1} sx={{ height: '100%', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+							<Stack direction="row" spacing={1} sx={{ height: '100%', flexWrap: { xs: 'nowrap', sm: 'nowrap' } }}>
 								<Button 
 									type="submit" 
 									variant="contained" 
 									disableElevation 
 									sx={{ 
-										flex: { xs: '1 1 100%', sm: 1 },
-										minWidth: { xs: '100%', sm: 'auto' },
+										flex: { xs: 1, sm: 1 },
+										minWidth: { xs: 'auto', sm: 'auto' },
 										backgroundColor: 'rgb(31, 136, 61)',
 										color: '#ffffff',
 										'&:hover': {
@@ -1755,11 +1757,14 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								<Button 
 									type="button" 
 									variant="outlined" 
+									size="small"
 									sx={{ 
-										display: { xs: 'none', sm: 'flex' },
-										flex: { xs: '1 1 auto', sm: 1 }, 
+										flex: { xs: 0, sm: 1 },
+										minWidth: { xs: 'auto', sm: 'auto' },
+										px: { xs: 1, sm: 1.5 },
 										borderColor: '#d0d7de',
 										color: '#24292f',
+										whiteSpace: 'nowrap',
 										'&:hover': {
 											borderColor: '#d0d7de',
 											backgroundColor: '#f6f8fa',
@@ -2437,7 +2442,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
                 ) : identityJsonData ? (
 					<Grid container spacing={2}>
 						{/* Left: endpoints editor */}
-						<Grid item xs={12} md={6}>
+						<Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' } }}>
 						<Stack spacing={1}>
 								{identityUpdateError && (
 									<Box sx={{ p: 1, bgcolor: 'error.light', borderRadius: 1 }}>
@@ -2495,6 +2500,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
 					onClick={updateIdentityRegistration}
 					sx={{
+						display: { xs: 'none', sm: 'inline-flex' },
 						backgroundColor: 'rgb(31, 136, 61)',
 						color: '#ffffff',
 						'&:hover': {
@@ -2508,7 +2514,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				>
 					{identityUpdateLoading ? 'Updating…' : 'Update'}
 				</Button>
-				<Button onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}>Reset</Button>
+				<Button 
+					onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}
+					sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+				>
+					Reset
+				</Button>
 				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
 			</DialogActions>
 		</Dialog>
