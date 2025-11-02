@@ -1869,7 +1869,26 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						const registryAddress = getIdentityRegistry(row.chainId);
 						
 						return (
-							<Card key={`${row.chainId}-${row.agentId}`} variant="outlined" sx={{ borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
+							<Card 
+								key={`${row.chainId}-${row.agentId}`} 
+								variant="outlined" 
+								sx={{ 
+									borderColor: '#d0d7de', 
+									bgcolor: '#ffffff', 
+									borderRadius: '6px',
+									cursor: { xs: 'pointer', sm: 'default' },
+									'&:hover': {
+										backgroundColor: { xs: '#f6f8fa', sm: '#ffffff' },
+										boxShadow: { xs: 1, sm: 0 },
+									},
+								}}
+								onClick={(e) => {
+									// Only trigger on mobile, and not when clicking buttons/links
+									if (isMobile && !(e.target as HTMLElement).closest('button, a')) {
+										openAgentInfo(row);
+									}
+								}}
+							>
 								<CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
 									<Stack spacing={1.5}>
 										{/* Header: Chain and ID */}
@@ -1893,6 +1912,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													target="_blank"
 													rel="noopener noreferrer"
 													variant="body2"
+													onClick={(e) => e.stopPropagation()}
 													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}
 													title={`View NFT #${row.agentId} on ${getExplorerName(row.chainId)}`}
 												>
@@ -1912,6 +1932,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													target="_blank"
 													rel="noopener noreferrer"
 													variant="body1"
+													onClick={(e) => e.stopPropagation()}
 													sx={{ 
 														fontFamily: 'ui-monospace, monospace', 
 														color: 'primary.main', 
@@ -1948,12 +1969,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 										)}
 
 										{/* Actions */}
-										<Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+										<Stack 
+											direction="row" 
+											spacing={0.5} 
+											flexWrap="wrap" 
+											useFlexGap
+											onClick={(e) => e.stopPropagation()}
+										>
 											{owned[row.agentId] && (
 												<IconButton
 													size="small"
 													color="error"
-													onClick={async () => {
+													onClick={async (e) => {
+														e.stopPropagation();
 														try {
 															const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
 															if (!registry) throw new Error('Registry address not configured');
@@ -1996,18 +2024,35 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													<LocalFireDepartmentIcon fontSize="small" />
 												</IconButton>
 											)}
-											<Button size="small" onClick={() => openAgentInfo(row)} sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}>
+											<Button 
+												size="small" 
+												onClick={(e) => {
+													e.stopPropagation();
+													openAgentInfo(row);
+												}} 
+												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+											>
 												INFO
 											</Button>
 											<Button 
 												size="small" 
-												onClick={() => openIdentityJson(row)}
+												onClick={(e) => {
+													e.stopPropagation();
+													openIdentityJson(row);
+												}}
 												disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false}
 												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
 											>
 												Reg
 											</Button>
-											<Button size="small" onClick={() => viewOrCreateCard(row)} sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}>
+											<Button 
+												size="small" 
+												onClick={(e) => {
+													e.stopPropagation();
+													viewOrCreateCard(row);
+												}} 
+												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+											>
 												Card
 											</Button>
 										</Stack>
