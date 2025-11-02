@@ -70,7 +70,7 @@ export default function Page() {
                   size="small" 
                   sx={{ alignSelf: 'flex-start', borderColor: 'divider', color: 'text.secondary' }}
                 >
-                  {accessCodeLoading ? 'Loading...' : 'Get ERC-8004 GraphQL access code'}
+                  {accessCodeLoading ? 'Loading...' : 'Get access code'}
                 </Button>
                 <Link
                   href="https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphiql"
@@ -85,7 +85,7 @@ export default function Page() {
                     },
                   }}
                 >
-                  GraphiQL
+                  ERC-8004 GraphiQL
                 </Link>
               </Box>
             )}
