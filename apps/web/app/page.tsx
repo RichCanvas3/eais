@@ -6,6 +6,7 @@ import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import * as React from 'react';
 import { AddAgentModal } from '@/components/AddAgentModal';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import AddIcon from '@mui/icons-material/Add';
 
 export default function Page() {
   const { isLoggedIn, login, logout, address } = useWeb3Auth();
@@ -51,44 +52,81 @@ export default function Page() {
   };
   
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-            <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust Layer</Typography>
-            <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
+    <Container maxWidth="xl" sx={{ py: 2 }}>
+      <Box sx={{ mb: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust Layer</Typography>
+              <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
+            </Box>
             {isLoggedIn && (
-              <>
+              <Button 
+                variant="outlined" 
+                onClick={handleGetAccessCode} 
+                disabled={accessCodeLoading}
+                disableElevation 
+                size="small" 
+                sx={{ alignSelf: 'flex-start', borderColor: 'divider', color: 'text.secondary' }}
+              >
+                {accessCodeLoading ? 'Loading...' : 'Get ERC-8004 GraphQL access code'}
+              </Button>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              {isLoggedIn && (
                 <Button 
                   variant="outlined" 
-                  onClick={handleGetAccessCode} 
-                  disabled={accessCodeLoading}
+                  onClick={() => setStatsOpen(true)} 
                   disableElevation 
                   size="small" 
                   sx={{ borderColor: 'divider', color: 'text.secondary' }}
                 >
-                  {accessCodeLoading ? 'Loading...' : 'Get ERC-8004 GraphQL access code'}
-                </Button>
-                <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small" sx={{ borderColor: 'divider', color: 'text.secondary' }}>
                   Stats
                 </Button>
-              </>
+              )}
+              <Button 
+                variant="outlined" 
+                onClick={isLoggedIn ? logout : login} 
+                disableElevation 
+                size="small" 
+                sx={{ borderColor: 'divider', color: 'text.primary' }}
+              >
+                {isLoggedIn ? 'Sign Out' : 'Sign In'}
+              </Button>
+            </Box>
+            {isLoggedIn && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setOpen(true)}
+                disableElevation
+                size="small"
+                sx={{
+                  backgroundColor: 'rgb(31, 136, 61)',
+                  color: '#ffffff',
+                  '&:hover': {
+                    backgroundColor: 'rgb(26, 115, 51)',
+                  },
+                }}
+              >
+                Create Agent Identity
+              </Button>
             )}
-            <Button variant="outlined" onClick={isLoggedIn ? logout : login} disableElevation size="small" sx={{ borderColor: 'divider', color: 'text.primary' }}>
-              {isLoggedIn ? 'Sign Out' : 'Sign In'}
-            </Button>
           </Box>
         </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: '800px' }}>
-          Browse and manage ERC-8004 compliant agent identities across multiple blockchain networks.
-        </Typography>
       </Box>
       
       {isLoggedIn ? (
         <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'transparent' }}>
-          <AgentTable />
+          <AgentTable 
+            addAgentOpen={open}
+            onAddAgentClose={() => setOpen(false)}
+            onAgentIndexed={() => {
+              // Table will refresh itself
+            }}
+          />
         </Paper>
       ) : (
         <Box sx={{ py: 6 }}>
@@ -188,10 +226,6 @@ export default function Page() {
         </Box>
       )}
       
-      <AddAgentModal open={open} onClose={() => setOpen(false)} onAgentIndexed={() => {
-        // Table will auto-refresh when navigating to it
-        window.location.reload();
-      }} />
       <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
       
       <Dialog open={accessCodeOpen} onClose={() => setAccessCodeOpen(false)} maxWidth="sm" fullWidth>

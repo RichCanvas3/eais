@@ -54,9 +54,9 @@ export type Agent = {
   ensEndpoint?: string | null;
 };
 
-type AgentTableProps = { chainIdHex?: string };
+type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: () => void };
 
-export function AgentTable({ chainIdHex }: AgentTableProps) {
+export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onAddAgentClose, onAgentIndexed: externalOnAgentIndexed }: AgentTableProps) {
 	const [domain, setDomain] = React.useState("");
 	const [address, setAddress] = React.useState("");
 	const [agentId, setAgentId] = React.useState("");
@@ -155,8 +155,10 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	const [isCheckingWrapStatus, setIsCheckingWrapStatus] = React.useState(false);
 	const [orgOwner, setOrgOwner] = React.useState<string | null>(null);
 
-	// Modal states
-	const [addAgentOpen, setAddAgentOpen] = React.useState(false);
+	// Modal states - use external if provided, otherwise use internal state
+	const [internalAddAgentOpen, setInternalAddAgentOpen] = React.useState(false);
+	const addAgentOpen = externalAddAgentOpen !== undefined ? externalAddAgentOpen : internalAddAgentOpen;
+	const setAddAgentOpen = externalAddAgentOpen !== undefined ? (onAddAgentClose || (() => {})) : setInternalAddAgentOpen;
 	const [didWebOpen, setDidWebOpen] = React.useState(false);
 	const [didAgentOpen, setDidAgentOpen] = React.useState(false);
 	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
@@ -1586,77 +1588,9 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 	}
 
 	return (
-		<Stack spacing={3}>
-			<Paper variant="outlined" sx={{ p: 2.5 }}>
+		<Stack spacing={1}>
+			<Paper variant="outlined" sx={{ p: 2.5, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
 				<Stack spacing={2}>
-					{/* Header Row with EOA and Actions */}
-					<Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-						<Stack direction="row" alignItems="center" spacing={2}>
-							{eoa && (
-								<Chip
-									label={`EOA: ${eoa}`}
-									size="small"
-									variant="outlined"
-									sx={{ 
-										fontSize: '0.7rem',
-										cursor: 'pointer',
-										'&:hover': {
-											backgroundColor: 'action.hover'
-										}
-									}}
-									onClick={() => window.open(`${getExplorerUrl(11155111)}/address/${eoa}`, '_blank')}
-								/>
-							)}
-							<Stack direction="row" spacing={1}>
-								<Chip
-                                    label={`Identity: ${(process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string).slice(0, 10)}...`}
-									size="small"
-									variant="outlined"
-									sx={{ 
-										fontSize: '0.7rem',
-										cursor: 'pointer',
-										'&:hover': {
-											backgroundColor: 'action.hover'
-										}
-									}}
-									onClick={() => {
-                                        const address = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as string;
-										if (address) {
-											window.open(`${getExplorerUrl(11155111)}/address/${address}`, '_blank');
-										}
-									}}
-								/>
-								<Chip
-									label={`Reputation: ${(process.env.NEXT_PUBLIC_REPUTATION_REGISTRY || 'Not configured').slice(0, 10)}...`}
-									size="small"
-									variant="outlined"
-									sx={{ 
-										fontSize: '0.7rem',
-										cursor: 'pointer',
-										'&:hover': {
-											backgroundColor: 'action.hover'
-										}
-									}}
-									onClick={() => {
-										const address = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY;
-										if (address) {
-											window.open(`${getExplorerUrl(11155111)}/address/${address}`, '_blank');
-										}
-									}}
-								/>
-							</Stack>
-						</Stack>
-						{eoa && (
-							<Button
-								variant="contained"
-								startIcon={<AddIcon />}
-								onClick={() => setAddAgentOpen(true)}
-								size="small"
-							>
-								Create Agent Identity
-							</Button>
-						)}
-					</Stack>
 
 					{/* Search Form */}
 				<Box component="form" onSubmit={handleSubmit}>
@@ -1688,21 +1622,110 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 								</TextField>
 							</Grid>
 							<Grid item xs={12} md={2}>
-								<TextField fullWidth label="address" placeholder="0x…" value={address} onChange={(e) => setAddress(e.target.value)} size="small" />
+								<TextField 
+									fullWidth 
+									label="address" 
+									placeholder="0x…" 
+									value={address} 
+									onChange={(e) => setAddress(e.target.value)} 
+									size="small"
+									sx={{
+										'& .MuiOutlinedInput-root': {
+											borderColor: '#d0d7de',
+											'&:hover': {
+												borderColor: '#d0d7de',
+											},
+											'&.Mui-focused': {
+												borderColor: '#0969da',
+											},
+										},
+									}}
+								/>
 							</Grid>
 						<Grid item xs={12} md={2}>
-							<TextField fullWidth label="name" placeholder="Filter by name (ENS or metadata)" value={domain} onChange={(e) => setDomain(e.target.value)} size="small" />
+							<TextField 
+								fullWidth 
+								label="name" 
+								placeholder="Filter by name (ENS or metadata)" 
+								value={domain} 
+								onChange={(e) => setDomain(e.target.value)} 
+								size="small"
+								sx={{
+									'& .MuiOutlinedInput-root': {
+										borderColor: '#d0d7de',
+										'&:hover': {
+											borderColor: '#d0d7de',
+										},
+										'&.Mui-focused': {
+											borderColor: '#0969da',
+										},
+									},
+								}}
+							/>
 						</Grid>
 						<Grid item xs={12} md={2}>
-							<TextField fullWidth label="id" placeholder="Filter by id" value={agentId} onChange={(e) => setAgentId(e.target.value)} size="small" />
+							<TextField 
+								fullWidth 
+								label="id" 
+								placeholder="Filter by id" 
+								value={agentId} 
+								onChange={(e) => setAgentId(e.target.value)} 
+								size="small"
+								sx={{
+									'& .MuiOutlinedInput-root': {
+										borderColor: '#d0d7de',
+										'&:hover': {
+											borderColor: '#d0d7de',
+										},
+										'&.Mui-focused': {
+											borderColor: '#0969da',
+										},
+									},
+								}}
+							/>
 						</Grid>
 						<Grid item xs={12} md={1}>
 							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
 						</Grid>
 						<Grid item xs={12} md={2}>
 							<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
-								<Button type="submit" variant="contained" disableElevation sx={{ flex: 1 }} disabled={isLoading}>{isLoading ? 'Searching…' : 'Search'}</Button>
-								<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={isLoading} onClick={clearFilters}>Clear</Button>
+								<Button 
+									type="submit" 
+									variant="contained" 
+									disableElevation 
+									sx={{ 
+										flex: 1,
+										backgroundColor: 'rgb(31, 136, 61)',
+										color: '#ffffff',
+										'&:hover': {
+											backgroundColor: 'rgb(26, 115, 51)',
+										},
+										'&:disabled': {
+											backgroundColor: 'rgba(31, 136, 61, 0.5)',
+											color: '#ffffff',
+										},
+									}} 
+									disabled={isLoading}
+								>
+									{isLoading ? 'Searching…' : 'Search'}
+								</Button>
+								<Button 
+									type="button" 
+									variant="outlined" 
+									sx={{ 
+										flex: 1, 
+										borderColor: '#d0d7de',
+										color: '#24292f',
+										'&:hover': {
+											borderColor: '#d0d7de',
+											backgroundColor: '#f6f8fa',
+										},
+									}} 
+									disabled={isLoading} 
+									onClick={clearFilters}
+								>
+									Clear
+								</Button>
 							</Stack>
 						</Grid>
 				</Grid>
@@ -1735,17 +1758,17 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 				</Stack>
 			</Paper>
 
-			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto', borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
 				<Table size="small" sx={{ minWidth: 1200 }}>
                             <TableHead>
-								<TableRow>
-								<TableCell>Chain</TableCell>
-								<TableCell>Account Address</TableCell>
-                                    <TableCell>Name</TableCell>
-                                    <TableCell>Description</TableCell>
-								<TableCell>Identity ID</TableCell>
-								<TableCell>A2A</TableCell>
-								{discoverMatches && <TableCell>Trust Score</TableCell>}
+								<TableRow sx={{ bgcolor: '#f6f8fa', borderBottom: '1px solid #d0d7de' }}>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Chain</TableCell>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Address</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</TableCell>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Identity ID</TableCell>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>A2A</TableCell>
+								{discoverMatches && <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trust Score</TableCell>}
 							</TableRow>
 						</TableHead>
 					<TableBody>
@@ -1754,14 +1777,14 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center">
+                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
                             <TableRow>
-                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center">
+                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -1780,8 +1803,20 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 						// Default: maintain original order
 						return 0;
 					})?.map((row) => (
-									<TableRow key={`${row.chainId}-${row.agentId}`} hover>
-										<TableCell>
+									<TableRow 
+										key={`${row.chainId}-${row.agentId}`} 
+										hover
+										sx={{
+											borderBottom: '1px solid #d0d7de',
+											'&:hover': {
+												backgroundColor: '#f6f8fa',
+											},
+											'&:last-child': {
+												borderBottom: 'none',
+											},
+										}}
+									>
+										<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
 											<Chip 
 												label={getChainConfig(row.chainId)?.chainName || `Chain ${row.chainId}`}
 												size="small"
@@ -1789,7 +1824,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 												sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}
 											/>
 										</TableCell>
-										<TableCell>
+										<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
 											<Stack direction="row" spacing={0.25} alignItems="center">
 												{(() => {
 													const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
@@ -1810,7 +1845,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 												})()}
 											</Stack>
                                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
                             {(() => {
                                 const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
                                 const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
@@ -1861,7 +1896,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
                             )}
                             {/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
                         </TableCell>
-                                        <TableCell>
+                                        <TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
                                             <Typography
                                                 variant="body2"
                                                 noWrap
@@ -1872,7 +1907,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
                                             </Typography>
                                         </TableCell>
 
-									<TableCell>
+									<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
 										<Stack direction="row" spacing={1} alignItems="center">
 											{(() => {
 												// Get chain-specific registry address
@@ -2025,7 +2060,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 										</Stack>
 									</TableCell>
 
-							<TableCell>
+							<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
 								{row.a2aEndpoint ? (
 									<Button 
 										size="small" 
@@ -2047,7 +2082,7 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 							</TableCell>
 
 							{discoverMatches && (
-								<TableCell>
+								<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
 									{discoverTrustScores[row.agentId] ? (
 										<Tooltip title={discoverTrustScores[row.agentId].reasoning || 'Trust score based on feedback and relationships'} arrow>
 											<Chip 
@@ -2991,13 +3026,21 @@ export function AgentTable({ chainIdHex }: AgentTableProps) {
 			<AddAgentModal
 				open={addAgentOpen}
 				onClose={() => {
-					setAddAgentOpen(false);
+					if (externalAddAgentOpen !== undefined) {
+						// External state is being used - call the close callback
+						if (onAddAgentClose) onAddAgentClose();
+					} else {
+						// Internal state is being used - close it
+						setInternalAddAgentOpen(false);
+					}
 					// Refresh the table after agent creation
 					fetchData(data.page);
+					if (externalOnAgentIndexed) externalOnAgentIndexed();
 				}}
 				onAgentIndexed={() => {
 					// Refresh the table after agent indexing
 					fetchData(data.page);
+					if (externalOnAgentIndexed) externalOnAgentIndexed();
 				}}
 			/>
 
