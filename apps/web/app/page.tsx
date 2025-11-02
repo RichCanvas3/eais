@@ -53,8 +53,9 @@ export default function Page() {
   
   return (
     <Container maxWidth="xl" sx={{ py: 0 }}>
-      <Box sx={{ mb: 1, mx: 2.5 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <Box sx={{ mb: 1, mx: { xs: 1.5, sm: 2.5 }, mt: { xs: 2, sm: 0 } }}>
+        {/* Desktop Header */}
+        <Box sx={{ display: { xs: 'none', sm: 'flex' }, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
               <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust Layer</Typography>
@@ -70,7 +71,7 @@ export default function Page() {
                   size="small" 
                   sx={{ alignSelf: 'flex-start', borderColor: 'divider', color: 'text.secondary' }}
                 >
-                  {accessCodeLoading ? 'Loading...' : 'Get access code'}
+                  {accessCodeLoading ? 'Loading...' : 'Get GraphQL access code'}
                 </Button>
                 <Link
                   href="https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphiql"
@@ -129,6 +130,96 @@ export default function Page() {
                 }}
               >
                 Create Agent Identity
+              </Button>
+            )}
+          </Box>
+        </Box>
+
+        {/* Mobile Header */}
+        <Box sx={{ display: { xs: 'flex', sm: 'none' }, justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1 }}>
+            <Typography variant="h5" fontWeight={500} color="text.primary" sx={{ fontSize: '1rem' }}>
+              Agentic Trust Layer
+            </Typography>
+            {isLoggedIn && (
+              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleGetAccessCode} 
+                  disabled={accessCodeLoading}
+                  disableElevation 
+                  size="small" 
+                  sx={{ 
+                    borderColor: 'divider', 
+                    color: 'text.secondary',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  {accessCodeLoading ? 'Loading...' : 'Code'}
+                </Button>
+                <Link
+                  href="https://erc8004-indexer-graphql.richardpedersen3.workers.dev/graphiql"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ 
+                    fontSize: '0.75rem',
+                    color: 'text.secondary',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  }}
+                >
+                  GraphiQL
+                </Link>
+              </Box>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              {isLoggedIn && (
+                <Button 
+                  variant="outlined" 
+                  onClick={() => setStatsOpen(true)} 
+                  disableElevation 
+                  size="small" 
+                  sx={{ 
+                    borderColor: 'divider', 
+                    color: 'text.secondary',
+                  }}
+                >
+                  Stats
+                </Button>
+              )}
+              <Button 
+                variant="outlined" 
+                onClick={isLoggedIn ? logout : login} 
+                disableElevation 
+                size="small" 
+                sx={{ 
+                  borderColor: 'divider', 
+                  color: 'text.primary',
+                }}
+              >
+                {isLoggedIn ? 'Sign Out' : 'Sign In'}
+              </Button>
+            </Box>
+            {isLoggedIn && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setOpen(true)}
+                disableElevation
+                size="small"
+                sx={{
+                  backgroundColor: 'rgb(31, 136, 61)',
+                  color: '#ffffff',
+                  '&:hover': {
+                    backgroundColor: 'rgb(26, 115, 51)',
+                  },
+                }}
+              >
+                Create Agent
               </Button>
             )}
           </Box>

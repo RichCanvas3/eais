@@ -1623,13 +1623,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 	return (
 		<Stack spacing={1}>
-			<Paper variant="outlined" sx={{ p: 2.5, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
+			<Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
 				<Stack spacing={2}>
-
 					{/* Search Form */}
-				<Box component="form" onSubmit={handleSubmit}>
+				<Box component="form" onSubmit={handleSubmit} sx={{ display: 'block' }}>
 						<Grid container spacing={2}>
-							<Grid item xs={12} md={2}>
+							<Grid item xs={12} md={2} sx={{ display: { xs: 'none', sm: 'block' } }}>
 								<TextField
 									fullWidth
 									select
@@ -1655,7 +1654,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									))}
 								</TextField>
 							</Grid>
-							<Grid item xs={12} md={2}>
+							<Grid item xs={12} md={2} sx={{ display: { xs: 'none', sm: 'block' } }}>
 								<TextField 
 									fullWidth 
 									label="address" 
@@ -1676,7 +1675,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									}}
 								/>
 							</Grid>
-						<Grid item xs={12} md={2}>
+						<Grid item xs={7} sm={12} md={3}>
 							<TextField 
 								fullWidth 
 								label="name" 
@@ -1697,14 +1696,23 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								}}
 							/>
 						</Grid>
-						<Grid item xs={12} md={2}>
+						<Grid item xs={5} sm={12} md={2}>
 							<TextField 
 								fullWidth 
 								label="id" 
 								placeholder="Filter by id" 
 								value={agentId} 
-								onChange={(e) => setAgentId(e.target.value)} 
+								onChange={(e) => {
+									const value = e.target.value;
+									// Only allow digits and limit to 5 characters
+									if (value === '' || (/^\d+$/.test(value) && value.length <= 5)) {
+										setAgentId(value);
+									}
+								}} 
 								size="small"
+								inputProps={{
+									maxLength: 5,
+								}}
 								sx={{
 									'& .MuiOutlinedInput-root': {
 										borderColor: '#d0d7de',
@@ -1718,17 +1726,18 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								}}
 							/>
 						</Grid>
-						<Grid item xs={12} md={1}>
+						<Grid item xs={12} md={1} sx={{ display: { xs: 'none', sm: 'block' } }}>
 							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
 						</Grid>
 						<Grid item xs={12} md={2}>
-							<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
+							<Stack direction="row" spacing={1} sx={{ height: '100%', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
 								<Button 
 									type="submit" 
 									variant="contained" 
 									disableElevation 
 									sx={{ 
-										flex: 1,
+										flex: { xs: '1 1 100%', sm: 1 },
+										minWidth: { xs: '100%', sm: 'auto' },
 										backgroundColor: 'rgb(31, 136, 61)',
 										color: '#ffffff',
 										'&:hover': {
@@ -1747,7 +1756,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									type="button" 
 									variant="outlined" 
 									sx={{ 
-										flex: 1, 
+										display: { xs: 'none', sm: 'flex' },
+										flex: { xs: '1 1 auto', sm: 1 }, 
 										borderColor: '#d0d7de',
 										color: '#24292f',
 										'&:hover': {
@@ -1760,22 +1770,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								>
 									Clear
 								</Button>
-								<IconButton 
-									size="small"
-									sx={{ 
-										borderColor: '#d0d7de',
-										color: '#24292f',
-										border: '1px solid',
-										'&:hover': {
-											borderColor: '#d0d7de',
-											backgroundColor: '#f6f8fa',
-										},
-									}} 
-									disabled={isLoading || refreshing} 
-									onClick={handleRefresh}
-								>
-									<RefreshIcon />
-								</IconButton>
 							</Stack>
 						</Grid>
 				</Grid>
@@ -1827,17 +1821,223 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				</Stack>
 			</Paper>
 
-			<TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto', borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
+			{/* Mobile Card View */}
+			<Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+				{!isLoading && data.rows.filter((row) => {
+					const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+					return inDiscover && (!mineOnly || owned[row.agentId]);
+				}).length === 0 && (
+					<Paper variant="outlined" sx={{ p: 3, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px', textAlign: 'center' }}>
+						<Typography variant="body2" color="text.secondary">No agents found.</Typography>
+					</Paper>
+				)}
+				{isLoading && (
+					<Paper variant="outlined" sx={{ p: 3, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px', textAlign: 'center' }}>
+						<Typography variant="body2" color="text.secondary">Loading…</Typography>
+					</Paper>
+				)}
+				<Stack spacing={2}>
+					{data.rows.filter((row) => {
+						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+						const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+						const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+						const dbName = row.agentName || '';
+						const fetchedName = metadataNames[row.agentId] || null;
+						const displayName = dbName || fetchedName || null;
+						const hasName = displayName || ens;
+						return inDiscover && (!mineOnly || owned[row.agentId]) && hasName;
+					}).sort((a, b) => {
+						if (discoverMatches && discoverTrustScores[a.agentId] && discoverTrustScores[b.agentId]) {
+							return discoverTrustScores[b.agentId].score - discoverTrustScores[a.agentId].score;
+						}
+						if (discoverMatches && discoverTrustScores[a.agentId]) return -1;
+						if (discoverMatches && discoverTrustScores[b.agentId]) return 1;
+						return 0;
+					})?.map((row) => {
+						const chainConfig = getChainConfig(row.chainId);
+						const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+						const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+						const dbName = row.agentName || '';
+						const fetchedName = metadataNames[row.agentId] || null;
+						const displayName = dbName || fetchedName || null;
+						const nameText = displayName || ens || '—';
+						const registryAddress = getIdentityRegistry(row.chainId);
+						
+						return (
+							<Card key={`${row.chainId}-${row.agentId}`} variant="outlined" sx={{ borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
+								<CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+									<Stack spacing={1.5}>
+										{/* Header: Chain and ID */}
+										<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+											<Chip 
+												label={chainConfig?.chainName?.charAt(0).toUpperCase() || '?'}
+												size="small"
+												color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
+												sx={{ 
+													fontFamily: 'ui-monospace, monospace', 
+													fontSize: '0.6rem',
+													minWidth: '24px',
+													height: '24px',
+												}}
+												title={chainConfig?.chainName || `Chain ${row.chainId}`}
+											/>
+											{registryAddress ? (
+												<Typography
+													component="a"
+													href={`${getExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													variant="body2"
+													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}
+													title={`View NFT #${row.agentId} on ${getExplorerName(row.chainId)}`}
+												>
+													ID: {row.agentId}
+												</Typography>
+											) : (
+												<Chip label={`ID: ${row.agentId}`} size="small" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }} />
+											)}
+										</Box>
+
+										{/* Name */}
+										<Box>
+											{ens ? (
+												<Typography
+													component="a"
+													href={`https://sepolia.app.ens.domains/${ens as string}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													variant="body1"
+													sx={{ 
+														fontFamily: 'ui-monospace, monospace', 
+														color: 'primary.main', 
+														textDecoration: 'underline', 
+														cursor: 'pointer',
+														fontWeight: 600,
+														display: 'block',
+													}}
+												>
+													{nameText}
+												</Typography>
+											) : (
+												<Typography variant="body1" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
+													{nameText}
+												</Typography>
+											)}
+										</Box>
+
+										{/* A2A Endpoint */}
+										{row.a2aEndpoint && (
+											<Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.75rem' }}>
+												A2A: {row.a2aEndpoint}
+											</Typography>
+										)}
+
+										{/* Trust Score (if discover is active) */}
+										{discoverMatches && discoverTrustScores[row.agentId] && (
+											<Chip 
+												label={`Trust: ${discoverTrustScores[row.agentId].score.toFixed(2)}`}
+												size="small"
+												color="primary"
+												sx={{ alignSelf: 'flex-start' }}
+											/>
+										)}
+
+										{/* Actions */}
+										<Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+											{owned[row.agentId] && (
+												<IconButton
+													size="small"
+													color="error"
+													onClick={async () => {
+														try {
+															const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+															if (!registry) throw new Error('Registry address not configured');
+															const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+															const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+															const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+															const domainOwnerAddress = row.agentAddress;
+															const smartAccountClient = await toMetaMaskSmartAccount({
+																address: domainOwnerAddress as `0x${string}`,
+																client: publicClient,
+																implementation: Implementation.Hybrid,
+																signatory: { walletClient },
+															});
+															const calldata = encodeFunctionData({
+																abi: registryAbi as any,
+																functionName: 'transferFrom' as any,
+																args: [domainOwnerAddress, '0x000000000000000000000000000000000000dEaD' as `0x${string}`, BigInt(row.agentId)],
+															});
+															const bundlerUrl2 = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+															const pimlicoClient2 = createPimlicoClient({ transport: http(bundlerUrl2) });
+															const bundlerClient2 = createBundlerClient({
+																transport: http(bundlerUrl2),
+																paymaster: true as any,
+																chain: sepolia as any,
+																paymasterContext: { mode: 'SPONSORED' },
+															} as any);
+															const { fast: fee2 } = await pimlicoClient2.getUserOperationGasPrice();
+															const userOpHash = await bundlerClient2.sendUserOperation({
+																account: smartAccountClient as any,
+																calls: [{ to: registry, data: calldata }],
+																...fee2,
+															});
+															await bundlerClient2.waitForUserOperationReceipt({ hash: userOpHash });
+															fetchData(data?.page ?? 1);
+														} catch (err) {
+															console.error('Failed to burn identity', err);
+														}
+													}}
+												>
+													<LocalFireDepartmentIcon fontSize="small" />
+												</IconButton>
+											)}
+											<Button size="small" onClick={() => openAgentInfo(row)} sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}>
+												INFO
+											</Button>
+											<Button 
+												size="small" 
+												onClick={() => openIdentityJson(row)}
+												disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false}
+												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+											>
+												Reg
+											</Button>
+											<Button size="small" onClick={() => viewOrCreateCard(row)} sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}>
+												Card
+											</Button>
+										</Stack>
+									</Stack>
+								</CardContent>
+							</Card>
+						);
+					})}
+				</Stack>
+			</Box>
+
+			{/* Desktop Table View */}
+			<TableContainer 
+				component={Paper} 
+				variant="outlined" 
+				sx={{ 
+					display: { xs: 'none', sm: 'block' },
+					overflowX: 'auto', 
+					borderColor: '#d0d7de', 
+					bgcolor: '#ffffff', 
+					borderRadius: '6px',
+					'-webkit-overflow-scrolling': 'touch',
+					width: '100%',
+				}}
+			>
 				<Table size="small" sx={{ minWidth: 1200 }}>
-                            <TableHead>
+                            <TableHead sx={{ display: { xs: 'none', sm: 'table-header-group' } }}>
 								<TableRow sx={{ bgcolor: '#f6f8fa', borderBottom: '1px solid #d0d7de' }}>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Chain</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Address</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Identity ID</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>A2A</TableCell>
-								{discoverMatches && <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trust Score</TableCell>}
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Chain</TableCell>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Account Address</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Name</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Description</TableCell>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Identity ID</TableCell>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>A2A</TableCell>
+								{discoverMatches && <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Trust Score</TableCell>}
 							</TableRow>
 						</TableHead>
 					<TableBody>
@@ -1885,15 +2085,47 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											},
 										}}
 									>
-										<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
-											<Chip 
-												label={getChainConfig(row.chainId)?.chainName || `Chain ${row.chainId}`}
-												size="small"
-												color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
-												sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}
-											/>
+										<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
+											<Box sx={{ display: { xs: 'flex', sm: 'block' }, justifyContent: 'center', alignItems: 'center' }}>
+												{(() => {
+													const chainConfig = getChainConfig(row.chainId);
+													const isMobile = false; // We'll use responsive display instead
+													
+													// Mobile: show icon only
+													return (
+														<>
+															<Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+																<Chip 
+																	label={chainConfig?.chainName?.charAt(0).toUpperCase() || '?'}
+																	size="small"
+																	color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
+																	sx={{ 
+																		fontFamily: 'ui-monospace, monospace', 
+																		fontSize: '0.6rem',
+																		minWidth: '24px',
+																		height: '24px',
+																		padding: 0,
+																		'& .MuiChip-label': {
+																			padding: '0 4px',
+																		},
+																	}}
+																	title={chainConfig?.chainName || `Chain ${row.chainId}`}
+																/>
+															</Box>
+															<Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+																<Chip 
+																	label={chainConfig?.chainName || `Chain ${row.chainId}`}
+																	size="small"
+																	color={getNetworkType(row.chainId) === 'L1' ? 'primary' : 'secondary'}
+																	sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}
+																/>
+															</Box>
+														</>
+													);
+												})()}
+											</Box>
 										</TableCell>
-										<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+										<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
 											<Stack direction="row" spacing={0.25} alignItems="center">
 												{(() => {
 													const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
@@ -1965,7 +2197,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
                             )}
                             {/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
                         </TableCell>
-                                        <TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+                                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: '0.875rem', py: 1 }}>
                                             <Typography
                                                 variant="body2"
                                                 noWrap
@@ -2089,13 +2321,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
 											>
 												Card
-											</Button>
-											<Button 
-												size="small" 
-												onClick={() => { setCurrentAgentForGraph(row); setTrustGraphOpen(true); }}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-											>
-												Graph
 											</Button>
 											<Button 
 												size="small" 
