@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { getAddress } from 'viem';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -19,6 +19,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import EditIcon from '@mui/icons-material/Edit';
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 import IdentityRegistryABI from '@erc8004/sdk/abis/IdentityRegistry.json';
@@ -136,6 +137,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 	// Agent ENS names and metadata
 	const [agentEnsNames, setAgentEnsNames] = React.useState<Record<string, string | null>>({});
+	const [agentUrls, setAgentUrls] = React.useState<Record<string, string | null>>({});
 	const [metadataAccounts, setMetadataAccounts] = React.useState<Record<string, `0x${string}` | null>>({});
 	const [metadataNames, setMetadataNames] = React.useState<Record<string, string | null>>({});
 	const [metadataNamesIsENS, setMetadataNamesIsENS] = React.useState<Record<string, boolean>>({});
@@ -575,6 +577,24 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			}));
 		}
 	};
+
+	// Function to fetch agent URL from ENS
+	const fetchAgentUrl = React.useCallback(async (agentName: string) => {
+		try {
+			if (!agentENSClient) return;
+			const url = await agentENSClient.getAgentUrlByName(agentName);
+			setAgentUrls(prev => ({
+				...prev,
+				[agentName]: url
+			}));
+		} catch (error) {
+			console.error(`Error fetching agent URL for ${agentName}:`, error);
+			setAgentUrls(prev => ({
+				...prev,
+				[agentName]: null
+			}));
+		}
+	}, [agentENSClient]);
 
 	
 	// Fetch ENS names when data changes
@@ -1087,6 +1107,22 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedChainIdFilter]);
 
+	// Fetch agent URLs for agents with ENS names
+	React.useEffect(() => {
+		if (!data?.rows || !agentENSClient) return;
+		
+		data.rows.forEach((row) => {
+			const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+			const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+			
+			// Only fetch if we have an ENS name and haven't fetched/stored it yet
+			if (ens && !(ens in agentUrls)) {
+				fetchAgentUrl(ens);
+			}
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data?.rows, agentENSClient, agentEnsNames, metadataAccounts, fetchAgentUrl]);
+
 	async function handleRefresh() {
 		setRefreshing(true);
 		try {
@@ -1444,9 +1480,51 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		setSessionLoading(true);
 		try {
 			if (!provider || !eoa) throw new Error('Not connected');
-			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+			
+			// Get chain-specific configuration based on the agent's chainId
+			const agentChainId = row.chainId;
+			const rpcUrl = getRpcUrl(agentChainId);
+			const chain = getViemChain(agentChainId);
+			const bundlerUrl = getBundlerUrl(agentChainId);
+			const identityRegistry = getIdentityRegistry(agentChainId);
+			
+			if (!rpcUrl || !chain || !bundlerUrl) {
+				throw new Error(`Chain configuration not found for chainId ${agentChainId}`);
+			}
+			
+			// Switch wallet to the agent's chain
+			const chainIdHex = getChainIdHex(agentChainId);
+			const web3AuthProvider = provider as any;
+			const eip1193 = web3AuthProvider;
+			
+			try {
+				await eip1193.request({
+					method: "wallet_switchEthereumChain",
+					params: [{ chainId: chainIdHex }]
+				});
+			} catch (switchError: any) {
+				// If the chain doesn't exist (code 4902), try to add it
+				if (switchError.code === 4902) {
+					const chainConfig = getChainConfig(agentChainId);
+					await eip1193.request({
+						method: "wallet_addEthereumChain",
+						params: [{
+							chainId: chainIdHex,
+							chainName: chainConfig?.chainName || `Chain ${agentChainId}`,
+							nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+							rpcUrls: [rpcUrl]
+						}]
+					});
+				} else {
+					throw switchError;
+				}
+			}
+			
+			// Add delay to allow wallet to adapt to chain switch
+			await new Promise(resolve => setTimeout(resolve, 1000));
+			
+			const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+			const walletClient = createWalletClient({ chain: chain as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
 			// Use existing AA address from the table row instead of deriving via salt
 			console.info("*********** using agent account address from row: ", row.agentAddress);
@@ -1460,20 +1538,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 			console.info("*********** ai agent address: ", aa);
 			const entryPoint = (await (smartAccount as any).getEntryPointAddress?.()) as `0x${string}` || '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
-			const chainId = 11155111; // sepolia
+			const chainId = agentChainId;
 
 			// Ensure main AA is deployed via bundler (sponsored)
 			const aaCode = await publicClient.getBytecode({ address: aa });
 			const aaDeployed = !!aaCode && aaCode !== '0x';
 			if (!aaDeployed) {
-				const bundlerUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 				const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
 				console.info("create bundler client ", bundlerUrl, paymasterUrl);
 				const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
 				const bundlerClient = createBundlerClient({
 					transport: http(bundlerUrl),
 					paymaster: true as any,
-					chain: sepolia as any,
+					chain: chain as any,
 					paymasterContext: { mode: 'SPONSORED' },
 				} as any);
 
@@ -1511,7 +1588,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			const validAfter = now - 60;
 			const validUntil = now + 60*30;
 
-			const bundlerUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
 			const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
 			const reputationRegistry = (process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`) || '0x0000000000000000000000000000000000000000';
 
@@ -1533,7 +1609,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				const bundlerClient = createBundlerClient({
 					transport: http(bundlerUrl),
 					paymaster: true as any,
-					chain: sepolia as any,
+					chain: chain as any,
 					paymasterContext: { mode: 'SPONSORED' },
 				} as any);
 				const { fast: fee } = await pimlico.getUserOperationGasPrice();
@@ -1592,8 +1668,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 			// Approve sessionAA as operator for this specific Identity tokenId on IdentityRegistry
 			try {
-                const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
-				if (registry) {
+				if (identityRegistry) {
 					const approveCalldata = encodeFunctionData({
 						abi: registryAbi as any,
 						functionName: 'approve' as any,
@@ -1603,13 +1678,13 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					const bundlerApprove = createBundlerClient({
 						transport: http(bundlerUrl),
 						paymaster: true as any,
-						chain: sepolia as any,
+						chain: chain as any,
 						paymasterContext: { mode: 'SPONSORED' },
 					} as any);
 					const { fast: feeApprove } = await pimlicoApprove.getUserOperationGasPrice();
 					const uoHashApprove = await bundlerApprove.sendUserOperation({
 						account: smartAccount as any,
-						calls: [{ to: registry, data: approveCalldata }],
+						calls: [{ to: identityRegistry, data: approveCalldata }],
 						...feeApprove,
 					});
 					await bundlerApprove.waitForUserOperationReceipt({ hash: uoHashApprove });
@@ -1878,6 +1953,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						const nameText = displayName || ens || '—';
 						const registryAddress = getIdentityRegistry(row.chainId);
 						
+						// Get agent URL if already fetched
+						const agentUrl = ens ? agentUrls[ens] : null;
+						
 						return (
 							<Card 
 								key={`${row.chainId}-${row.agentId}`}
@@ -1887,7 +1965,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									bgcolor: '#ffffff', 
 									borderRadius: '6px',
 									cursor: { xs: 'pointer', sm: 'default' },
-									width: { xs: '100%', md: '400px' },
+									width: { xs: '100%', md: '500px' },
 									flexShrink: 0,
 									'&:hover': {
 										backgroundColor: { xs: '#f6f8fa', sm: '#ffffff' },
@@ -1902,51 +1980,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								}}
 							>
 								<CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-									<Stack spacing={1.5}>
-										{/* Header: Chain and ID */}
-										<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-											{(() => {
-												const getChainDisplayName = (chainId: number): string => {
-													switch (chainId) {
-														case 11155111: return 'eth-sepolia';
-														case 84532: return 'base-sepolia';
-														case 11155420: return 'op-sepolia';
-														default: return `chain-${chainId}`;
-													}
-												};
-												
-												return (
-													<Typography 
-														variant="body2" 
-														sx={{ 
-															fontFamily: 'ui-monospace, monospace',
-															fontSize: '0.75rem',
-															color: '#24292f',
-															fontWeight: 500,
-														}}
-													>
-														{getChainDisplayName(row.chainId)}
-													</Typography>
-												);
-											})()}
-											{registryAddress ? (
-												<Typography
-													component="a"
-													href={`${getExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
-													target="_blank"
-													rel="noopener noreferrer"
-													variant="body2"
-													onClick={(e) => e.stopPropagation()}
-													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}
-													title={`View NFT #${row.agentId} on ${getExplorerName(row.chainId)}`}
-												>
-													ID: {row.agentId}
-												</Typography>
-											) : (
-												<Chip label={`ID: ${row.agentId}`} size="small" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }} />
-											)}
-										</Box>
-
+									<Stack spacing={2}>
 										{/* Name */}
 										<Box>
 											{ens ? (
@@ -1975,29 +2009,294 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											)}
 										</Box>
 
-										{/* A2A Endpoint */}
-										{row.a2aEndpoint && (
-											<Typography 
-												component="a" 
-												href={row.a2aEndpoint} 
-												target="_blank" 
+										{/* ID and Session */}
+										<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+											{registryAddress ? (
+												<Typography
+													component="a"
+													href={`${getExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													variant="body2"
+													onClick={(e) => e.stopPropagation()}
+													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}
+													title={`View NFT #${row.agentId} on ${getExplorerName(row.chainId)}`}
+												>
+													ID: {row.agentId}
+												</Typography>
+											) : (
+												<Chip label={`ID: ${row.agentId}`} size="small" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }} />
+											)}
+											{/* Session Link (only for owned agents) */}
+											{owned[row.agentId] && (
+												<Typography
+													component="button"
+													onClick={(e) => {
+														e.stopPropagation();
+														openSessionFor(row);
+													}}
+													disabled={sessionLoading}
+													variant="caption"
+													color="primary"
+													sx={{
+														fontSize: '0.75rem',
+														textDecoration: 'underline',
+														cursor: 'pointer',
+														fontWeight: 600,
+														border: 'none',
+														background: 'none',
+														padding: 0,
+														'&:hover': {
+															color: 'primary.dark',
+															textDecoration: 'none',
+														},
+														'&:disabled': {
+															color: 'text.disabled',
+															cursor: 'not-allowed',
+														},
+													}}
+												>
+													{sessionLoading ? 'Loading...' : 'Session file'}
+												</Typography>
+											)}
+										</Box>
+
+										{/* Chain and Account */}
+										<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+											{(() => {
+												const getChainDisplayName = (chainId: number): string => {
+													switch (chainId) {
+														case 11155111: return 'eth-sepolia';
+														case 84532: return 'base-sepolia';
+														case 11155420: return 'op-sepolia';
+														default: return `chain-${chainId}`;
+													}
+												};
+												
+												return (
+													<Typography 
+														variant="body2" 
+														sx={{ 
+															fontFamily: 'ui-monospace, monospace',
+															fontSize: '0.75rem',
+															color: '#24292f',
+															fontWeight: 500,
+														}}
+													>
+														{getChainDisplayName(row.chainId)}
+													</Typography>
+												);
+											})()}
+											<Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#24292f' }}>, </Typography>
+											<Typography
+												component="a"
+												href={`${getExplorerUrl(row.chainId)}/address/${row.agentAddress}#nfttransfers`}
+												target="_blank"
 												rel="noopener noreferrer"
+												variant="body2"
 												onClick={(e) => e.stopPropagation()}
-												variant="body2" 
-												color="primary" 
-												sx={{ 
-													fontFamily: 'ui-monospace, monospace', 
+												sx={{
+													fontFamily: 'ui-monospace, monospace',
 													fontSize: '0.75rem',
+													color: 'primary.main',
 													textDecoration: 'underline',
 													cursor: 'pointer',
+													fontWeight: 500,
 													'&:hover': {
-														textDecoration: 'none',
 														color: 'primary.dark',
 													},
 												}}
+												title={`View account on ${getExplorerName(row.chainId)}`}
 											>
-												A2A: {row.a2aEndpoint}
+												account
 											</Typography>
+											{registryAddress && (
+												<>
+													<Typography variant="body2" sx={{ fontSize: '0.75rem', color: '#24292f' }}>, </Typography>
+													<Typography
+														component="a"
+														href={`${getExplorerUrl(row.chainId)}/address/${registryAddress}`}
+														target="_blank"
+														rel="noopener noreferrer"
+														variant="body2"
+														onClick={(e) => e.stopPropagation()}
+														sx={{
+															fontFamily: 'ui-monospace, monospace',
+															fontSize: '0.75rem',
+															color: 'primary.main',
+															textDecoration: 'underline',
+															cursor: 'pointer',
+															fontWeight: 500,
+															'&:hover': {
+																color: 'primary.dark',
+															},
+														}}
+														title={`View registry on ${getExplorerName(row.chainId)}`}
+													>
+														reg
+													</Typography>
+												</>
+											)}
+										</Box>
+										
+
+										{/* Description */}
+										{row.description && (
+											<Box sx={{ 
+												bgcolor: '#f8f9fa', 
+												border: '1px solid #e1e4e8', 
+												borderRadius: '6px',
+												p: 1.5,
+												position: 'relative',
+											}}>
+												<FormLabel sx={{ 
+													fontSize: '0.625rem', 
+													fontWeight: 600, 
+													color: 'text.secondary', 
+													position: 'absolute',
+													top: -8,
+													left: 8,
+													px: 0.5,
+													bgcolor: '#f8f9fa',
+													display: 'block'
+												}}>
+													description
+												</FormLabel>
+												<Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem', pr: 3 }}>
+													{row.description}
+												</Typography>
+												<IconButton
+													size="small"
+													sx={{
+														position: 'absolute',
+														top: 4,
+														right: 4,
+														padding: '4px',
+														color: 'text.secondary',
+														'&:hover': {
+															color: 'primary.main',
+															backgroundColor: 'rgba(25, 113, 194, 0.04)',
+														},
+													}}
+													onClick={(e) => {
+														e.stopPropagation();
+														// TODO: Open edit modal for description
+													}}
+												>
+													<EditIcon sx={{ fontSize: '0.75rem' }} />
+												</IconButton>
+											</Box>
+										)}
+
+										{/* Agent URL from ENS */}
+										{agentUrl && (
+											<Box sx={{ 
+												bgcolor: '#f8f9fa', 
+												border: '1px solid #e1e4e8', 
+												borderRadius: '6px',
+												p: 1.5,
+												position: 'relative',
+											}}>
+												<FormLabel sx={{ 
+													fontSize: '0.625rem', 
+													fontWeight: 600, 
+													color: 'text.secondary', 
+													position: 'absolute',
+													top: -8,
+													left: 8,
+													px: 0.5,
+													bgcolor: '#f8f9fa',
+													display: 'block'
+												}}>
+													url
+												</FormLabel>
+												<Typography 
+													component="a"
+													href={agentUrl}
+													target="_blank"
+													rel="noopener noreferrer"
+													onClick={(e) => e.stopPropagation()}
+													variant="caption" 
+													color="primary"
+													sx={{ 
+														fontSize: '0.75rem',
+														textDecoration: 'underline',
+														cursor: 'pointer',
+														pr: 3,
+														display: 'block',
+														wordBreak: 'break-all',
+														'&:hover': {
+															color: 'primary.dark',
+															textDecoration: 'none',
+														},
+													}}
+												>
+													{agentUrl}
+												</Typography>
+												<IconButton
+													size="small"
+													sx={{
+														position: 'absolute',
+														top: 4,
+														right: 4,
+														padding: '2px',
+														color: 'text.secondary',
+														'&:hover': {
+															color: 'primary.main',
+															backgroundColor: 'rgba(25, 113, 194, 0.04)',
+														},
+													}}
+													onClick={(e) => {
+														e.stopPropagation();
+														// TODO: Open edit modal for URL
+													}}
+												>
+													<EditIcon sx={{ fontSize: '0.75rem' }} />
+												</IconButton>
+											</Box>
+										)}
+
+										{/* ENS URL - Only show on mobile, not desktop card view */}
+										{ens && !showCardViewForDesktop && (
+											<Typography 
+												component="a"
+												href={`https://sepolia.app.ens.domains/${ens as string}`}
+												target="_blank"
+												rel="noopener noreferrer"
+												onClick={(e) => e.stopPropagation()}
+												variant="caption" 
+												color="primary"
+												sx={{ 
+													fontFamily: 'ui-monospace, monospace',
+													fontSize: '0.7rem',
+													textDecoration: 'underline',
+													cursor: 'pointer',
+													display: 'block',
+													'&:hover': {
+														color: 'primary.dark',
+														textDecoration: 'none',
+													},
+												}}
+											>
+												ENS: {ens}
+											</Typography>
+										)}
+
+
+										{/* DID Key Path - Only show on mobile, not desktop card view */}
+										{!showCardViewForDesktop && (
+										<Typography 
+											variant="caption" 
+											color="text.secondary"
+											sx={{ 
+												fontFamily: 'ui-monospace, monospace',
+												fontSize: '0.7rem',
+												display: 'block',
+												wordBreak: 'break-all',
+											}}
+										>
+											DID: eip155:{row.chainId}:{acct}
+										</Typography>
 										)}
 
 										{/* Trust Score (if discover is active) */}
@@ -2074,11 +2373,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												}} 
 												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
 											>
-												INFO
+												Info
 											</Button>
-											{owned[row.agentId] && (
-												<>
-													<Button 
+											<Button 
 														size="small" 
 														onClick={(e) => {
 															e.stopPropagation();
@@ -2089,6 +2386,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													>
 														Reg
 													</Button>
+											{owned[row.agentId] && (
+												<>
+													
 													<Button 
 														size="small" 
 														onClick={(e) => {
@@ -2119,6 +2419,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													>
 														DID:Agent
 													</Button>
+													{row.a2aEndpoint && (
+														<Button 
+															component="a"
+															href={row.a2aEndpoint}
+															target="_blank"
+															rel="noopener noreferrer"
+															size="small"
+															onClick={(e) => e.stopPropagation()}
+															sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+														>
+															A2A
+														</Button>
+													)}
 												</>
 											)}
 										</Stack>
@@ -2318,6 +2631,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												
 												if (registryAddress) {
 													return (
+														<>
 														<Typography
 															component="a"
 															href={`${getExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
@@ -2329,6 +2643,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														>
 															{row.agentId}
 														</Typography>
+														
+														</>
 													);
 												} else {
 													return (
@@ -2336,8 +2652,60 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													);
 												}
 											})()}
+
+											{/* Always-visible actions (read-only) */}
+											<Button 
+												size="small" 
+												onClick={() => openAgentInfo(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+											>
+												Info
+											</Button>
+											<Tooltip title={row.metadataURI || 'No registration URI'}>
+												<span>
+													<Button 
+														size="small" 
+														onClick={() => openIdentityJson(row)}
+														disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														Reg
+													</Button>
+												</span>
+											</Tooltip>
 											{owned[row.agentId] && (
-												<Tooltip title="Burn Identity (send to 0x000…dEaD)">
+												<>
+													
+													<Button 
+														size="small" 
+														onClick={() => viewOrCreateCard(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														Card
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openDidWebModal(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														DID:Web
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openDidAgentModal(row)}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														DID:Agent
+													</Button>
+													<Button 
+														size="small" 
+														onClick={() => openSessionFor(row)} 
+														disabled={sessionLoading}
+														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+													>
+														{sessionLoading ? 'Loading...' : 'Session'}
+													</Button>
+													<Tooltip title="Burn Identity (send to 0x000…dEaD)">
 													<span>
 													<IconButton
 														size="small"
@@ -2396,62 +2764,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													{/* JSON link moved outside tooltip to avoid burn hover text */}
 												</span>
 												</Tooltip>
-											)}
-											{/* Always-visible actions (read-only) */}
-											<Button 
-												size="small" 
-												onClick={() => openAgentInfo(row)}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
-											>
-												INFO
-											</Button>
-											{owned[row.agentId] && (
-												<>
-													<Tooltip title={row.metadataURI || 'No registration URI'}>
-														<span>
-															<Button 
-																size="small" 
-																onClick={() => openIdentityJson(row)}
-																disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
-																sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-															>
-																Reg
-															</Button>
-														</span>
-													</Tooltip>
-													<Button 
-														size="small" 
-														onClick={() => viewOrCreateCard(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														Card
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openDidWebModal(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														DID:Web
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openDidAgentModal(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														DID:Agent
-													</Button>
 												</>
 											)}
-										{owned[row.agentId] && (
-											<Button 
-												size="small" 
-												onClick={() => openSessionFor(row)} 
-												disabled={sessionLoading}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-											>
-												{sessionLoading ? 'Loading...' : 'Session'}
-											</Button>
-										)}
+
 									
 											
 												
@@ -2543,6 +2858,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
                 ) : identityJsonData ? (
 					<Grid container spacing={2}>
 						{/* Left: endpoints editor */}
+						{identityCurrentAgent && owned[identityCurrentAgent.agentId] && (
 						<Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' } }}>
 						<Stack spacing={1}>
 								{identityUpdateError && (
@@ -2604,8 +2920,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								</Stack>
 							</Stack>
 						</Grid>
+						)}
 						{/* Right: merged JSON preview */}
-						<Grid item xs={12} md={6}>
+						<Grid item xs={12} md={identityCurrentAgent && owned[identityCurrentAgent.agentId] ? 6 : 12}>
 							<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
 								<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints }; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => {}); } catch {} }} sx={{ position: 'absolute', top: 4, right: 4 }}>
 									<ContentCopyIcon fontSize="inherit" />
@@ -2628,32 +2945,36 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
                 )}
 			</DialogContent>
 			<DialogActions>
-				<Button 
-					variant="contained" 
-					size="small" 
-					disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
-					onClick={updateIdentityRegistration}
-					sx={{
-						display: { xs: 'none', sm: 'inline-flex' },
-						backgroundColor: 'rgb(31, 136, 61)',
-						color: '#ffffff',
-						'&:hover': {
-							backgroundColor: 'rgb(26, 115, 51)',
-						},
-						'&:disabled': {
-							backgroundColor: 'rgba(31, 136, 61, 0.5)',
+				{identityCurrentAgent && owned[identityCurrentAgent.agentId] && (
+				<>
+					<Button 
+						variant="contained" 
+						size="small" 
+						disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
+						onClick={updateIdentityRegistration}
+						sx={{
+							display: { xs: 'none', sm: 'inline-flex' },
+							backgroundColor: 'rgb(31, 136, 61)',
 							color: '#ffffff',
-						},
-					}}
-				>
-					{identityUpdateLoading ? 'Updating…' : 'Update'}
-				</Button>
-				<Button 
-					onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}
-					sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-				>
-					Reset
-				</Button>
+							'&:hover': {
+								backgroundColor: 'rgb(26, 115, 51)',
+							},
+							'&:disabled': {
+								backgroundColor: 'rgba(31, 136, 61, 0.5)',
+								color: '#ffffff',
+							},
+						}}
+					>
+						{identityUpdateLoading ? 'Updating…' : 'Update'}
+					</Button>
+					<Button 
+						onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}
+						sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+					>
+						Reset
+					</Button>
+				</>
+				)}
 				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
 			</DialogActions>
 		</Dialog>
@@ -3502,11 +3823,15 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					// Note: onAgentIndexed will handle the refresh with the filter
 				}}
 				onAgentIndexed={(agentName) => {
-					// Set the name filter to the newly created agent
+					// Set the name filter to the newly created agent and clear other filters
 					if (agentName) {
 						setDomain(agentName);
+						setAddress("");
+						setAgentId("");
+						setMineOnly(false);
+						setSelectedChainIdFilter(null);
 						// Refresh the table with the new agent name filter applied
-						fetchData(data.page, { name: agentName });
+						fetchData(1, { name: agentName });
 					} else {
 						// Refresh the table after agent indexing
 						fetchData(data.page);
