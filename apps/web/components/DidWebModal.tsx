@@ -153,7 +153,6 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
 
       // Generate JWK from connected wallet's private key
       let eoaJwk: any = null;
-      console.log('🔍 JWK Generation Debug:', { provider: !!provider, eoa, agentAddress });
       
       // Always generate JWK first, before creating the DID document
       if (provider && eoa) {
@@ -435,7 +434,6 @@ export function DidWebModal({ open, onClose, agent, ensName }: Props) {
       console.log('✅ EOA signature created:', signature);
 
       // Verify the signature using the smart account
-      console.log('🔍 Calling isValidSignature on smart account:', agent.agentAddress);
       
       // First, let's check if the smart account is deployed and get its owner
       try {

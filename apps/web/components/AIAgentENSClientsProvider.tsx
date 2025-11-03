@@ -120,7 +120,6 @@ export function AIAgentENSClientsProvider({ children }: Props) {
   React.useEffect(() => {
     console.log('🔍 AIAgentENSClientsProvider useEffect triggered');
     console.log('🔍 web3AuthProvider:', !!web3AuthProvider);
-    console.log('🔍 address:', address);
     console.log('🔍 web3AuthProvider type:', typeof web3AuthProvider);
     
     (async () => {

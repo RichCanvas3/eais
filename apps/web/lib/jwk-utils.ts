@@ -14,28 +14,20 @@ export function generatePublicKeyJwkFromPrivateKey(privateKey: `0x${string}`): {
     y: string;
   };
 } {
-  console.log('🔍 generatePublicKeyJwkFromPrivateKey called with:', privateKey.slice(0, 10) + '...');
-  
   // Create account from private key
   const account = privateKeyToAccount(privateKey);
   
   // Get the public key (this is the uncompressed public key)
   const publicKey = account.publicKey;
   
-  console.log('🔍 Generated public key from private key:', publicKey);
-  
   // Remove the 0x04 prefix and split into x and y coordinates
   const publicKeyHex = publicKey.slice(2); // Remove 0x
   const xHex = publicKeyHex.slice(0, 64); // First 32 bytes
   const yHex = publicKeyHex.slice(64, 128); // Next 32 bytes
   
-  console.log('🔍 Extracted coordinates:', { xHex, yHex });
-  
   // Convert hex to base64url encoding
   const x = hexToBase64Url(xHex);
   const y = hexToBase64Url(yHex);
-  
-  console.log('🔍 Base64URL coordinates:', { x, y });
   
   return {
     x,
@@ -63,14 +55,12 @@ export function generateDeterministicJwkFromAddress(address: string): {
     y: string;
   };
 } {
-  console.log('🔍 generateDeterministicJwkFromAddress called with:', address);
   
   // Create a deterministic "private key" based on the address
   // This is for demonstration only - not cryptographically secure
   const addressHash = keccak256(stringToHex(address));
   const mockPrivateKey = `0x${addressHash.slice(2)}` as `0x${string}`;
   
-  console.log('🔍 Generated deterministic private key:', mockPrivateKey.slice(0, 10) + '...');
   
   return generatePublicKeyJwkFromPrivateKey(mockPrivateKey);
 }
@@ -346,39 +336,21 @@ function base64UrlToHex(base64url: string): string {
  */
 export async function extractPrivateKeyFromWallet(provider: any, address: string): Promise<`0x${string}` | null> {
   try {
-    console.log('🔍 Extracting private key from wallet:', { 
-      provider: !!provider, 
-      address,
-      providerKeys: provider ? Object.keys(provider) : 'no provider',
-      providerType: provider?.constructor?.name,
-      hasPrivateKey: !!(provider?.privateKey),
-      hasPrivateKeyProp: !!(provider?.['privateKey']),
-      providerValues: provider ? Object.values(provider).slice(0, 5) : 'no provider'
-    });
-    
     // For Web3Auth, try to get the private key from the provider
     if (provider && provider.privateKey) {
-      console.log('✅ Found private key in provider.privateKey');
       return provider.privateKey as `0x${string}`;
     }
     
     // If Web3Auth is available globally
     if (typeof window !== 'undefined' && (window as any).web3auth) {
       const web3auth = (window as any).web3auth;
-      console.log('🔍 Checking global web3auth:', { 
-        hasProvider: !!web3auth.provider,
-        providerKeys: web3auth.provider ? Object.keys(web3auth.provider) : 'no provider',
-        hasPrivateKey: !!(web3auth.provider?.privateKey)
-      });
       if (web3auth.provider && web3auth.provider.privateKey) {
-        console.log('✅ Found private key in global web3auth.provider.privateKey');
         return web3auth.provider.privateKey as `0x${string}`;
       }
     }
     
     // Try to get from provider's internal state
     if (provider && provider._privateKey) {
-      console.log('✅ Found private key in provider._privateKey');
       return provider._privateKey as `0x${string}`;
     }
     
@@ -386,7 +358,6 @@ export async function extractPrivateKeyFromWallet(provider: any, address: string
     const possibleKeys = ['_privateKey', 'privateKey', 'key', '_key', 'signingKey'];
     for (const key of possibleKeys) {
       if (provider && provider[key]) {
-        console.log(`✅ Found private key in provider.${key}`);
         return provider[key] as `0x${string}`;
       }
     }
@@ -394,10 +365,8 @@ export async function extractPrivateKeyFromWallet(provider: any, address: string
     // For MetaMask and similar wallets, private keys are not accessible
     // due to security restrictions - we'll use signature-based approach instead
     
-    console.warn('❌ No private key found in any of the checked locations');
     return null;
   } catch (error) {
-    console.error('❌ Error extracting private key from wallet:', error);
     return null;
   }
 }
@@ -419,30 +388,18 @@ export async function generateJwkFromConnectedWallet(
   };
 } | null> {
   try {
-    console.log('🔍 generateJwkFromConnectedWallet called:', { 
-      hasProvider: !!provider, 
-      address,
-      providerType: provider?.constructor?.name,
-      isMetaMask: provider?.isMetaMask,
-      providerKeys: provider ? Object.keys(provider) : 'no provider'
-    });
-    
     // First, try to extract private key (works for Web3Auth)
     const privateKey = await extractPrivateKeyFromWallet(provider, address);
     
     if (privateKey) {
-      console.log('✅ Using private key from Web3Auth:', privateKey.slice(0, 10) + '...');
       const result = generatePublicKeyJwkFromPrivateKey(privateKey);
-      console.log('✅ Generated JWK from private key:', result.jwk);
       return result;
     }
     
     // If no private key available, try signature-based approach for any provider with request method
     if (provider && provider.request && typeof provider.request === 'function') {
-      console.log('🔍 Provider has request method, attempting signature-based approach');
       try {
         const result = await generateJwkFromMetaMask(provider, address);
-        console.log('✅ Generated JWK from signature:', result?.jwk);
         return result;
       } catch (signatureError) {
         console.warn('❌ Signature-based approach failed:', signatureError);

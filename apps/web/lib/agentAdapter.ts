@@ -271,9 +271,10 @@ export async function addAgentNameToOrg(params: {
   agentName: string,
   agentUrl: string,
   agentAccount: `0x${string}`,
-  agentDescription?: string
+  agentDescription?: string,
+  agentImage?: string
 }): Promise<`0x${string}`> {
-  const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount, agentDescription } = params;
+  const { agentENSClient, bundlerUrl, chain, orgAccountClient, orgName, agentAccountClient, agentName, agentUrl, agentAccount, agentDescription, agentImage } = params;
 
   // 1. Add agent name to org within ENS
   console.log('********************* prepareAddAgentNameToOrgCalls');
@@ -364,6 +365,22 @@ export async function addAgentNameToOrg(params: {
     const { receipt: agentReceipt } = await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash2 });
     console.log('********************* agentReceipt', agentReceipt);
 
+    // 3. Set agent image if provided
+    if (agentImage && agentImage.trim() !== '') {
+      const ensFullName = `${cleanAgentName}.${cleanOrgName}.eth`;
+      const { calls: imageCalls } = await agentENSClient.prepareSetNameImageCalls(ensFullName, agentImage.trim());
+      
+      if (imageCalls.length > 0) {
+        const userOpHash3 = await sendSponsoredUserOperation({
+          bundlerUrl,
+          chain,
+          accountClient: agentAccountClient,
+          calls: imageCalls,
+        });
+
+        await (bundlerClient as any).waitForUserOperationReceipt({ hash: userOpHash3 });
+      }
+    }
 
     return userOpHash1 as `0x${string}`;
   }
@@ -432,6 +449,13 @@ export async function addAgentNameToOrg(params: {
         agentUrl: agentUrl,
         agentDescription: agentDescription
       });
+
+      // Add image call if provided
+      if (agentImage && agentImage.trim() !== '') {
+        const fullSubname = `${cleanAgentName}.${cleanOrgName}.eth`;
+        const { calls: imageCalls } = await agentENSClient.prepareSetNameImageCalls(fullSubname, agentImage.trim());
+        infoCalls.push(...imageCalls);
+      }
 
       for (const call of infoCalls) {
         console.log('********************* send sponsored user operation to add agent info');
@@ -542,12 +566,7 @@ export async function setAgentNameUri(params: {
   console.log('-------------------------> setAgentUri: agentUri', agentUri);
 
 
-  console.log('-------------------------> setAgentUri: calls', bundlerUrl, chain.id, agentAccountClient.address);
   const { calls: setUriCalls }  = await agentENSClient.prepareSetNameUriCalls(agentName, agentUri);
-
-  console.log(' bundler: ', bundlerUrl);
-  console.log(' chain: ', chain.id);
-  console.log(' agentAccountClient: ', agentAccountClient.address);
 
   
   const userOpHash = await sendSponsoredUserOperation({

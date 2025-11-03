@@ -139,48 +139,7 @@ export default function Page() {
               <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust</Typography>
               <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
             </Box>
-            {isLoggedIn && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Button
-                  variant="outlined"
-                  onClick={handleOpenGraphQL}
-                  disableElevation
-                  size="small"
-                  sx={{ 
-                    borderColor: 'divider',
-                    color: 'text.secondary',
-                    fontSize: '0.875rem',
-                    '&:hover': {
-                      borderColor: 'divider',
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                    },
-                  }}
-                >
-                  GraphQL
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={handleRefreshIndexer}
-                  disabled={refreshingIndexer}
-                  disableElevation
-                  size="small"
-                  sx={{ 
-                    borderColor: 'divider',
-                    color: 'text.secondary',
-                    fontSize: '0.875rem',
-                    '&:hover': {
-                      borderColor: 'divider',
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                    },
-                    '&:disabled': {
-                      opacity: 0.6,
-                    },
-                  }}
-                >
-                  {refreshingIndexer ? 'Refreshing...' : 'Refresh Indexer'}
-                </Button>
-              </Box>
-            )}
+           
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

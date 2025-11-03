@@ -130,7 +130,6 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
 
       // For DID:Agent, we use the account abstraction address for verification
       // No need to generate JWK since we're using EcdsaSecp256k1RecoveryMethod2020
-      console.log('✅ Using account abstraction address for verification:', agent.agentAddress);
 
       // Create verification methods using account abstraction address
       const verificationMethods = [
@@ -314,8 +313,6 @@ export const DidAgentModal: React.FC<Props> = ({ open, onClose, agent, ensName }
       
       console.log('🔍 Test message:', testMessage);
       console.log('🔍 Message hash:', messageHash);
-      console.log('🔍 EOA address:', eoa);
-      console.log('🔍 Agent address:', agent.agentAddress);
 
       // Get signature using personal_sign
       const signature = await provider.request({

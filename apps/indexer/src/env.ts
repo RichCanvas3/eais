@@ -7,28 +7,41 @@ const isNodeEnvironment = typeof process !== 'undefined' &&
                           import.meta.url &&
                           import.meta.url.startsWith('file:');
 
+// Load dotenv synchronously using createRequire for ES module compatibility
+// This code only runs in Node.js, not in Workers
 if (isNodeEnvironment) {
-  // Use synchronous require in try-catch to avoid bundling issues
-  // This code only runs in Node.js, not in Workers
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // Use createRequire to get require in ES module context
+    // @ts-ignore - createRequire exists but TypeScript types may be outdated
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
     const dotenv = require("dotenv");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { fileURLToPath } = require("node:url");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const path = await import("node:path");
     
     // Load additional .env files to support monorepo root setups.
     // Precedence: package-local .env first, then repo-root .env fills in missing values.
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     // Load package-local env: apps/indexer/.env
-    dotenv.config({ path: path.resolve(__dirname, "../.env"), override: false });
+    const localEnvPath = path.resolve(__dirname, "../.env");
+    const result1 = dotenv.config({ path: localEnvPath, override: false });
     // Load repo-root env: ./.env
-    dotenv.config({ path: path.resolve(__dirname, "../../../.env"), override: false });
+    const rootEnvPath = path.resolve(__dirname, "../../../.env");
+    const result2 = dotenv.config({ path: rootEnvPath, override: false });
+    
+    // Debug: Log if env file was loaded
+    if (process.env.DEBUG_ENV) {
+      console.log('Local .env loaded:', !result1.error, localEnvPath);
+      console.log('Root .env loaded:', !result2.error, rootEnvPath);
+      console.log('ETH_SEPOLIA_RPC_HTTP_URL:', process.env.ETH_SEPOLIA_RPC_HTTP_URL || 'NOT FOUND');
+    }
   } catch (error) {
     // dotenv not available (e.g., in Workers) - this is fine
     // Workers use env vars from wrangler.toml and Cloudflare dashboard
+    if (process.env.DEBUG_ENV) {
+      console.error('Error loading dotenv:', error);
+    }
   }
 }
 

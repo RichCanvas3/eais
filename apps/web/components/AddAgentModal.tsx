@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { ethers } from 'ethers';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener, LinearProgress, Box } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography, ClickAwayListener, LinearProgress, Box, Avatar, Card, CardContent, FormLabel } from '@mui/material';
 import { useWeb3Auth } from './Web3AuthProvider';
 import { createAgentAdapter, 
   createAIAgentIdentity as adapterCreateAIAgentIdentity, 
@@ -47,6 +47,7 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
   const [error, setError] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
+  const [agentImage, setAgentImage] = React.useState('');
   const [agentName, setAgentName] = React.useState('');
   const [agentAccount, setAgentAccount] = React.useState<string | null>(null);
   const [agentResolving, setAgentResolving] = React.useState(false);
@@ -118,12 +119,23 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
     }
   }, [clients, selectedChainIdHex]);
 
-  // Reset selectedChainIdHex to Ethereum Sepolia when modal opens
+  // Reset selectedChainIdHex to Ethereum Sepolia when modal opens, and reset form when closed
   React.useEffect(() => {
     if (open) {
       // Always default to Ethereum Sepolia (0xaa36a7) for Create Agent Identity
       setSelectedChainIdHex('0xaa36a7');
       console.log('Resetting chain to Ethereum Sepolia for Create Agent Identity');
+    } else {
+      // Reset form fields when modal closes
+      setName('');
+      setDescription('');
+      setAgentImage('');
+      setAgentUrlEdit('');
+      setAgentUrlIsAuto(true);
+      setError(null);
+      setAgentError(null);
+      setAgentExists(null);
+      setAgentAvailable(null);
     }
   }, [open]);
 
@@ -250,7 +262,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
   const createViemCompatibleProvider = (ethersProvider: any) => {
     return {
       request: async ({ method, params }: { method: string; params?: any[] }) => {
-        console.log(`🔍 Provider request: ${method}`, params);
         try {
           // Handle different ethers.js provider interfaces
           let result;
@@ -274,7 +285,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
             }
           }
           
-          console.log(`🔍 Provider response:`, result);
           return result;
         } catch (error) {
           console.error(`❌ Provider request failed:`, error);
@@ -295,6 +305,26 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
     const chainConfig = getChainConfigByHex(selectedChainIdHex || '0xaa36a7');
     return chainConfig?.bundlerUrl || process.env.NEXT_PUBLIC_ETH_SEPOLIA_BUNDLER_URL as string;
   }, [selectedChainIdHex]);
+
+  // Compute endpoint previews from agent URL
+  const endpointPreviews = React.useMemo(() => {
+    if (!agentUrlEdit || !/^https?:\/\//i.test(agentUrlEdit.trim())) {
+      return null;
+    }
+    
+    try {
+      const cleanBase = agentUrlEdit.trim().replace(/\/$/, '');
+      const url = new URL(cleanBase);
+      const domain = url.hostname;
+      
+      const a2aEndpoint = `${cleanBase}/.well-known/agent-card.json`;
+      const mcpEndpoint = `wss://${domain}/.well-known/mcp`;
+      
+      return { a2aEndpoint, mcpEndpoint };
+    } catch {
+      return null;
+    }
+  }, [agentUrlEdit]);
 
   const resolvedChain = React.useMemo(() => {
     const chainConfig = getChainConfigByHex(selectedChainIdHex || '0xaa36a7');
@@ -454,7 +484,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
 
         const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
 
-        console.info("send user operation with bundlerClient 2: ", bundlerClient);
         const userOperationHash = await bundlerClient!.sendUserOperation({
           account: agentAccountClient as any,
           calls: [
@@ -578,13 +607,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         const ensPrivateKey = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_PRIVATE_KEY as `0x${string}`;
         const orgOwnerEOA = privateKeyToAccount(ensPrivateKey);
 
-        console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerAddress: ", orgOwnerAddress);
-        console.info("@@@@@@@@@@@@@@@@@@@ l1RpcUrl: ", l1RpcUrl);
-        console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerEOA: ", orgOwnerEOA);
-        console.info("@@@@@@@@@@@@@@@@@@@ resolvedChain: ", resolvedChain.id);
-        console.info("@@@@@@@@@@@@@@@@@@@ parentName: ", parentName);
-        console.info("@@@@@@@@@@@@@@@@@@@ orgStatus: ", orgStatus);
-        console.info("@@@@@@@@@@@@@@@@@@@ agentAccountClient address: ", await agentAccountClient.getAddress());
 
         
                     
@@ -615,6 +637,7 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
           agentUrl: urlToSet,
           agentAccount: addressToUse as `0x${string}`,
           agentDescription: description || undefined,
+          agentImage: agentImage || undefined,
         });
 
         console.log("Agent name added to org successfully!");
@@ -627,14 +650,12 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         // Update ownership state to reflect that the current user now owns the agent name
         if (eoaAddress) {
           setEnsAgentOwnerEoa(eoaAddress);
-          console.log("Setting ensAgentOwnerEoa to:", eoaAddress);
         }
         
         // Refresh the agent URL and other related data
         try {
           console.log("Refreshing agent URL for:", agentName);
           const normalized = await getENSClientForChain().getAgentUrlByName(agentName);
-          console.log("Retrieved agent URL:", normalized);
           setAgentUrlText(normalized);
           setAgentUrlEdit(normalized ?? '');
         } catch (e) {
@@ -748,7 +769,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         
         if (!cancelled) {
           setAgentAADefaultAddress(agentAddress);
-          console.log('Computed agent AA default address:', agentAddress, 'for chain:', resolvedChain.name);
         }
       } catch (error) {
         if (!cancelled) {
@@ -1310,12 +1330,15 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
           100% { background-position: -200% 0; }
         }
       `}</style>
-      <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" sx={{ '& .MuiDialog-paper': { minHeight: '600px' } }}>
+      <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" sx={{ '& .MuiDialog-paper': { minHeight: '600px' } }}>
       <DialogTitle>
         Create Agent Identity
       </DialogTitle>
       <DialogContent sx={{ overflow: 'visible' }}>
-        <Stack spacing={2}>
+        <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
+          {/* Left side - Form fields */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack spacing={2}>
           {/* Agent Chain Selection at the top */}
           <Stack direction="row" spacing={2} alignItems="center">
             <Typography variant="body2" sx={{ fontWeight: 'bold' }}>Agent Chain</Typography>
@@ -1361,12 +1384,11 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
               orgStatusLoading ? 'Org: checking…' : orgStatusError ? `Org: error — ${orgStatusError}` : orgStatus?.exists ? (
                 (() => {
                   const base = cleanOrg(org);
-                  const wrappedText = orgStatus.isWrapped ? 'wrapped' : 'unwrapped';
                   const url = `https://sepolia.app.ens.domains/${base}.eth`;
                   return (
                     <Stack direction="row" spacing={1} alignItems="center">
                       <span>
-                        Org ENS: <a href={url} target="_blank" rel="noopener noreferrer">{base}.eth</a> — {wrappedText}
+                        Org ENS: <a href={url} target="_blank" rel="noopener noreferrer">{base}.eth</a>
                       </span>
                       {!orgStatus.isWrapped && (orgStatus.registrationMethod === 'baseRegistrar' || orgStatus.registrationMethod === 'ensRegistry') && (
                         <Button
@@ -1396,8 +1418,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
                               }
                               
                               const ensAccount = privateKeyToAccount(ensPrivateKey);
-                              console.info("@@@@@@@@@@@@@@@@@@@ ensAccount: ", ensAccount.address);
-                              console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerAddress: ", orgOwnerAddress);
                               const ensWalletClient = createWalletClient({
                                 chain: sepolia,
                                 transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string),
@@ -1411,7 +1431,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
                               // Create smart account client
                               const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
                               
-                              console.info("@@@@@@@@@@@@@@@@@@@ orgOwnerAddress: ", orgOwnerAddress);
                               const smartAccountClient = await toMetaMaskSmartAccount({
                                 address: orgOwnerAddress as `0x${string}`,
                                 client: publicClient,
@@ -1421,7 +1440,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
                               
                               // Wrap the domain using ensService with ENS private key signer
                               console.info("@@@@@@@@@@@@@@@@@@@ wrapping org name: ", orgName);
-                              console.info("@@@@@@@@@@@@@@@@@@@ smartAccountClient: ", smartAccountClient.address);
                               await ensService.wrapEnsDomainName(ensWallet as any, smartAccountClient, orgName, sepolia);
                               
                               // Refresh org status to show new wrapped status
@@ -1498,7 +1516,6 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
                         account: orgAccount 
                       });
 
-                      console.info("++++++++++++++ orgOwnerAddress", orgOwnerAddress);
                       const publicClient = createPublicClient({ chain: sepolia, transport: http(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string) });
 
                       const smartAccountClient = await toMetaMaskSmartAccount({
@@ -1560,7 +1577,20 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
             placeholder="https://example.com/agent-name"
             sx={{ ml: 5 }}
           />
-          <TextField label="Agent Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth />
+          <TextField 
+            label="Agent Description (optional)" 
+            value={description} 
+            onChange={(e) => setDescription(e.target.value)} 
+            fullWidth 
+          />
+          <TextField 
+            label="Agent Image URL (optional)" 
+            value={agentImage} 
+            onChange={(e) => setAgentImage(e.target.value)} 
+            fullWidth 
+            placeholder="https://example.com/image.png"
+            helperText="Image URL stored in ENS 'avatar' text record"
+          />
                   
           {/* Agent Name Creation */}
           {agentName && org && (
@@ -1658,7 +1688,164 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
               </Typography>
             </Box>
           )}
-        </Stack>
+            </Stack>
+          </Box>
+          
+          {/* Right side - Agent Preview Card */}
+          <Box sx={{ width: { xs: '100%', md: '400px' }, flexShrink: 0, display: { xs: 'none', md: 'block' } }}>
+            {(endpointPreviews || agentImage || name || description || agentUrlEdit) && (
+              <Card 
+                variant="outlined" 
+                sx={{ 
+                  position: 'sticky', 
+                  top: 20,
+                  borderColor: '#d0d7de', 
+                  bgcolor: '#ffffff', 
+                  borderRadius: '6px',
+                  width: '100%',
+                }}
+              >
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Stack spacing={2}>
+                    {/* Name with Avatar */}
+                    {(name || agentImage) && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar 
+                          src={agentImage && agentImage.trim() !== '' ? agentImage.trim() : undefined}
+                          alt={name || 'Agent'}
+                          sx={{ width: 40, height: 40 }}
+                        />
+                        {name && (
+                          <Typography variant="body1" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
+                            {name}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+
+                    {/* Description */}
+                    {description && (
+                      <Box sx={{ 
+                        bgcolor: '#f8f9fa', 
+                        border: '1px solid #e1e4e8', 
+                        borderRadius: '6px',
+                        p: 1.5,
+                        position: 'relative',
+                      }}>
+                        <FormLabel sx={{ 
+                          fontSize: '0.625rem', 
+                          fontWeight: 600, 
+                          color: 'text.secondary', 
+                          position: 'absolute',
+                          top: -8,
+                          left: 8,
+                          px: 0.5,
+                          bgcolor: '#f8f9fa',
+                          display: 'block'
+                        }}>
+                          description
+                        </FormLabel>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                          {description}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* Agent URL */}
+                    {agentUrlEdit && /^https?:\/\//i.test(agentUrlEdit.trim()) && (
+                      <Box sx={{ 
+                        bgcolor: '#f8f9fa', 
+                        border: '1px solid #e1e4e8', 
+                        borderRadius: '6px',
+                        p: 1.5,
+                        position: 'relative',
+                      }}>
+                        <FormLabel sx={{ 
+                          fontSize: '0.625rem', 
+                          fontWeight: 600, 
+                          color: 'text.secondary', 
+                          position: 'absolute',
+                          top: -8,
+                          left: 8,
+                          px: 0.5,
+                          bgcolor: '#f8f9fa',
+                          display: 'block'
+                        }}>
+                          url
+                        </FormLabel>
+                        <Typography 
+                          component="a"
+                          href={agentUrlEdit.trim()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          variant="caption" 
+                          color="primary"
+                          sx={{ 
+                            fontSize: '0.75rem',
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            display: 'block',
+                            wordBreak: 'break-all',
+                            '&:hover': {
+                              color: 'primary.dark',
+                              textDecoration: 'none',
+                            },
+                          }}
+                        >
+                          {agentUrlEdit.trim()}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* Endpoint Preview */}
+                    {endpointPreviews && (
+                      <Stack spacing={1.5}>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
+                            A2A Agent Card:
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontFamily: 'monospace', 
+                              bgcolor: '#f8f9fa',
+                              border: '1px solid #e1e4e8',
+                              borderRadius: '6px',
+                              p: 1,
+                              wordBreak: 'break-all',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            {endpointPreviews.a2aEndpoint}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
+                            MCP Endpoint:
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontFamily: 'monospace', 
+                              bgcolor: '#f8f9fa',
+                              border: '1px solid #e1e4e8',
+                              borderRadius: '6px',
+                              p: 1,
+                              wordBreak: 'break-all',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            {endpointPreviews.mcpEndpoint}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
+          </Box>
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>

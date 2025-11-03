@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { getAddress } from 'viem';
-import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel, Avatar } from '@mui/material';
+import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel, Avatar, LinearProgress } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import { createPublicClient, createWalletClient, http, custom, keccak256, stringToHex, toHex, zeroAddress, encodeAbiParameters, namehash, encodeFunctionData, hexToString } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -21,6 +21,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
+import ViewListIcon from '@mui/icons-material/ViewList';
 import ensService from '@/service/ensService';
 import IpfsService from '@/service/ipfsService';
 import IdentityRegistryABI from '@erc8004/sdk/abis/IdentityRegistry.json';
@@ -71,6 +73,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [selectedChainIdFilter, setSelectedChainIdFilter] = React.useState<number | null>(null);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
 	const [refreshing, setRefreshing] = React.useState(false);
+	const [preferCardView, setPreferCardView] = React.useState(true); // Default to card view
     const { provider, address: eoa } = useWeb3Auth();
 
 	// Discover state
@@ -124,6 +127,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [sessionOpen, setSessionOpen] = React.useState(false);
 	const [sessionJson, setSessionJson] = React.useState<string | null>(null);
 	const [sessionLoading, setSessionLoading] = React.useState(false);
+	const [sessionProgress, setSessionProgress] = React.useState(0);
+	const [sessionProgressActive, setSessionProgressActive] = React.useState(false);
 
 	// Edit agent modal state
 	const [editAgentOpen, setEditAgentOpen] = React.useState(false);
@@ -385,7 +390,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			console.log('********************* updateIdentityRegistration: agentName', agentName);
 			if (!agentName) throw new Error('Agent ENS name not found');
 			// Validate current EOA is the owner/signatory of the agent account
-			console.log('********************* updateIdentityRegistration: identityCurrentAgent.agentAddress', identityCurrentAgent.agentAddress);
 			const accountOwner = await agentIdentityClient.getAgentEoaByAgentAccount(identityCurrentAgent.agentAddress as `0x${string}`);
 			if (!eoa || !accountOwner || accountOwner.toLowerCase() !== eoa.toLowerCase()) {
 				console.log('********************* updateIdentityRegistration: accountOwner', accountOwner, eoa);
@@ -584,10 +588,11 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		}
 	};
 
-	// Function to fetch agent URL from ENS
+	// Function to fetch agent URL from ENS (uses refs to prevent loops)
 	const fetchAgentUrl = React.useCallback(async (agentName: string) => {
 		try {
-			if (!agentENSClient) return;
+			if (!agentENSClient || fetchedUrlsRef.current.has(agentName)) return;
+			fetchedUrlsRef.current.add(agentName);
 			const url = await agentENSClient.getAgentUrlByName(agentName);
 			setAgentUrls(prev => ({
 				...prev,
@@ -595,6 +600,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			}));
 		} catch (error) {
 			console.error(`Error fetching agent URL for ${agentName}:`, error);
+			fetchedUrlsRef.current.delete(agentName); // Remove on error so it can retry later
 			setAgentUrls(prev => ({
 				...prev,
 				[agentName]: null
@@ -602,10 +608,11 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		}
 	}, [agentENSClient]);
 
-	// Function to fetch agent avatar from ENS
+	// Function to fetch agent avatar from ENS (uses refs to prevent loops)
 	const fetchAgentAvatar = React.useCallback(async (agentName: string) => {
 		try {
-			if (!agentENSClient) return;
+			if (!agentENSClient || fetchedAvatarsRef.current.has(agentName)) return;
+			fetchedAvatarsRef.current.add(agentName);
 			const avatar = await agentENSClient.getAgentImageByName(agentName);
 			setAgentAvatars(prev => ({
 				...prev,
@@ -613,6 +620,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			}));
 		} catch (error) {
 			console.error(`Error fetching agent avatar for ${agentName}:`, error);
+			fetchedAvatarsRef.current.delete(agentName); // Remove on error so it can retry later
 			setAgentAvatars(prev => ({
 				...prev,
 				[agentName]: null
@@ -1131,24 +1139,89 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedChainIdFilter]);
 
-	// Fetch agent URLs and avatars for agents with ENS names
+	// Use refs to track fetched data to avoid re-renders triggering loops
+	const fetchedUrlsRef = React.useRef<Set<string>>(new Set());
+	const fetchedAvatarsRef = React.useRef<Set<string>>(new Set());
+	const fetchingUrlsRef = React.useRef<Set<string>>(new Set());
+	const fetchingAvatarsRef = React.useRef<Set<string>>(new Set());
+	const fetchQueueRef = React.useRef<{ url: string[]; avatar: string[] }>({ url: [], avatar: [] });
+	const isProcessingQueueRef = React.useRef(false);
+
+	// Process fetch queue with debouncing to prevent infinite loops
+	const processFetchQueue = React.useCallback(async () => {
+		if (isProcessingQueueRef.current || !agentENSClient) return;
+		isProcessingQueueRef.current = true;
+
+		try {
+			// Process URLs
+			const urlQueue = fetchQueueRef.current.url.filter(
+				ens => !fetchedUrlsRef.current.has(ens) && !fetchingUrlsRef.current.has(ens)
+			);
+			for (const ens of urlQueue) {
+				fetchingUrlsRef.current.add(ens);
+				fetchAgentUrl(ens)
+					.then(() => fetchedUrlsRef.current.add(ens))
+					.catch(() => {})
+					.finally(() => fetchingUrlsRef.current.delete(ens));
+			}
+
+			// Process avatars
+			const avatarQueue = fetchQueueRef.current.avatar.filter(
+				ens => !fetchedAvatarsRef.current.has(ens) && !fetchingAvatarsRef.current.has(ens)
+			);
+			for (const ens of avatarQueue) {
+				fetchingAvatarsRef.current.add(ens);
+				fetchAgentAvatar(ens)
+					.then(() => fetchedAvatarsRef.current.add(ens))
+					.catch(() => {})
+					.finally(() => fetchingAvatarsRef.current.delete(ens));
+			}
+
+			// Clear queue after processing
+			fetchQueueRef.current = { url: [], avatar: [] };
+		} finally {
+			isProcessingQueueRef.current = false;
+		}
+	}, [agentENSClient, fetchAgentUrl, fetchAgentAvatar]);
+
+	// Debounced queue processor
+	const debouncedProcessQueue = React.useCallback(() => {
+		setTimeout(() => {
+			processFetchQueue();
+		}, 500); // 500ms debounce
+	}, [processFetchQueue]);
+
+	// Build fetch queue based on current data (runs on data changes only)
 	React.useEffect(() => {
 		if (!data?.rows || !agentENSClient) return;
-		
+
+		const newUrls: string[] = [];
+		const newAvatars: string[] = [];
+
 		data.rows.forEach((row) => {
 			const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
 			const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
 			
-			// Only fetch if we have an ENS name and haven't fetched/stored it yet
-			if (ens && !(ens in agentUrls)) {
-				fetchAgentUrl(ens);
-			}
-			if (ens && !(ens in agentAvatars)) {
-				fetchAgentAvatar(ens);
+			if (ens && typeof ens === 'string') {
+				// Add to queue if not already fetched (check both ref and state for safety)
+				if (!fetchedUrlsRef.current.has(ens) && !agentUrls[ens]) {
+					newUrls.push(ens);
+				}
+				if (!fetchedAvatarsRef.current.has(ens) && !agentAvatars[ens]) {
+					newAvatars.push(ens);
+				}
 			}
 		});
+
+		// Only update queue if there are new items
+		if (newUrls.length > 0 || newAvatars.length > 0) {
+			fetchQueueRef.current.url.push(...newUrls);
+			fetchQueueRef.current.avatar.push(...newAvatars);
+			debouncedProcessQueue();
+		}
+		// Only depend on data.rows and agentENSClient
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [data?.rows, agentENSClient, agentEnsNames, metadataAccounts]);
+	}, [data?.rows, agentENSClient, debouncedProcessQueue]);
 
 	async function handleRefresh() {
 		setRefreshing(true);
@@ -1179,6 +1252,51 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			console.error('❌ Error triggering full index:', error?.message || error);
 		} finally {
 			setRefreshing(false);
+		}
+	}
+
+	async function handleOpenGraphQL() {
+		if (!eoa) return;
+		
+		try {
+			// Get access code
+			const response = await fetch('/api/getAccessCode', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ address: eoa }),
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to get access code');
+			}
+
+			const data = await response.json();
+			const code = data.accessCode;
+
+			// Get GraphQL base URL from environment variable
+			const graphqlBaseUrl = process.env.NEXT_PUBLIC_GRAPHQL_API_URL || '';
+			
+			if (!graphqlBaseUrl) {
+				throw new Error('GraphQL API URL not configured');
+			}
+
+			// Remove trailing slash and any existing /graphql or /graphiql path
+			let baseUrl = graphqlBaseUrl.trim().replace(/\/+$/, '').replace(/\/(graphql|graphiql)\/?$/i, '');
+			
+			// Ensure base URL has protocol
+			if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+				baseUrl = `https://${baseUrl}`;
+			}
+
+			// Construct GraphiQL URL
+			const graphiqlUrl = `${baseUrl}/graphiql`;
+			const urlWithCode = `${graphiqlUrl}?accessCode=${encodeURIComponent(code)}`;
+			window.open(urlWithCode, '_blank', 'noopener,noreferrer');
+		} catch (error) {
+			console.error('Error opening GraphQL:', error);
+			alert('Failed to get access code. Please try again.');
 		}
 	}
 
@@ -1505,6 +1623,25 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	async function openSessionFor(row: Agent) {
 		console.log('Starting session creation for:', row.agentName);
 		setSessionLoading(true);
+		setSessionProgressActive(true);
+		setSessionProgress(0);
+		
+		// Start progress bar that runs for 60 seconds
+		const startTime = Date.now();
+		const duration = 60000; // 60 seconds in milliseconds
+		let progressInterval: NodeJS.Timeout | null = null;
+		
+		progressInterval = setInterval(() => {
+			const elapsed = Date.now() - startTime;
+			const progress = Math.min((elapsed / duration) * 100, 100);
+			setSessionProgress(progress);
+			
+			if (progress >= 100) {
+				if (progressInterval) clearInterval(progressInterval);
+				setSessionProgressActive(false);
+			}
+		}, 100); // Update every 100ms
+		
 		try {
 			if (!provider || !eoa) throw new Error('Not connected');
 			
@@ -1554,7 +1691,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			const walletClient = createWalletClient({ chain: chain as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
 			// Use existing AA address from the table row instead of deriving via salt
-			console.info("*********** using agent account address from row: ", row.agentAddress);
 			const smartAccount = await toMetaMaskSmartAccount({
 				address: row.agentAddress as `0x${string}`,
 				client: publicClient,
@@ -1563,7 +1699,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			} as any);
 			const aa = await smartAccount.getAddress() as `0x${string}`;
 
-			console.info("*********** ai agent address: ", aa);
 			const entryPoint = (await (smartAccount as any).getEntryPointAddress?.()) as `0x${string}` || '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 			const chainId = agentChainId;
 
@@ -1572,7 +1707,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			const aaDeployed = !!aaCode && aaCode !== '0x';
 			if (!aaDeployed) {
 				const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
-				console.info("create bundler client ", bundlerUrl, paymasterUrl);
 				const pimlicoClient = createPimlicoClient({ transport: http(bundlerUrl) });
 				const bundlerClient = createBundlerClient({
 					transport: http(bundlerUrl),
@@ -1581,13 +1715,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					paymasterContext: { mode: 'SPONSORED' },
 				} as any);
 
-				console.info("get gas price");
 				const { fast: fee } = await pimlicoClient.getUserOperationGasPrice();
 
-				console.info("deploy indivAccount EOA address: ", eoa);
-				console.info("deploy indivAccountClient AA address: ", aa);
 				try {
-					console.info("send user operation with bundlerClient 2: ", bundlerClient);
 					const userOperationHash = await bundlerClient!.sendUserOperation({
 						account: smartAccount as any,
 						calls: [
@@ -1688,8 +1818,6 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				selector: '0x8524d988',
 				sessionKey: { privateKey: pk, address: skAddr, validAfter, validUntil },
 				entryPoint,
-				bundlerUrl,
-				paymasterUrl,
 				signedDelegation,
 			} as any;
 
@@ -1729,6 +1857,17 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			setCardError(e?.message ?? 'Failed to build session');
 		} finally {
 			setSessionLoading(false);
+			// Keep progress bar running until minute is up, then stop it
+			const remainingTime = Math.max(0, 60000 - (Date.now() - startTime));
+			if (remainingTime > 0) {
+				setTimeout(() => {
+					setSessionProgressActive(false);
+					if (progressInterval) clearInterval(progressInterval);
+				}, remainingTime);
+			} else {
+				setSessionProgressActive(false);
+				if (progressInterval) clearInterval(progressInterval);
+			}
 		}
 	}
 
@@ -1745,10 +1884,88 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			return inDiscover && (!mineOnly || owned[row.agentId]) && hasName;
 		}), [data.rows, discoverMatches, mineOnly, owned, metadataAccounts, metadataNames, agentEnsNames]
 	);
-	const showCardViewForDesktop = filteredRowsForDisplay.length <= 4 && !isMobile;
+	// On mobile, always use card view. On desktop, use user preference.
+	const showCardView = isMobile || preferCardView;
 
 	return (
 		<Stack spacing={1}>
+			{/* View Toggle and Actions (Desktop) */}
+			{!isMobile && (
+				<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+					{/* View Toggle on Left */}
+					<Stack direction="row" spacing={0.5}>
+						<Tooltip title="Card View">
+							<IconButton
+								size="small"
+								onClick={() => setPreferCardView(true)}
+								sx={{
+									color: preferCardView ? 'rgb(31, 136, 61)' : 'text.secondary',
+									border: preferCardView ? '1px solid rgb(31, 136, 61)' : '1px solid',
+									borderColor: preferCardView ? 'rgb(31, 136, 61)' : 'divider',
+									'&:hover': {
+										backgroundColor: preferCardView ? 'rgba(31, 136, 61, 0.08)' : 'action.hover',
+									},
+								}}
+							>
+								<ViewModuleIcon fontSize="small" />
+							</IconButton>
+						</Tooltip>
+						<Tooltip title="Table View">
+							<IconButton
+								size="small"
+								onClick={() => setPreferCardView(false)}
+								sx={{
+									color: !preferCardView ? 'rgb(31, 136, 61)' : 'text.secondary',
+									border: !preferCardView ? '1px solid rgb(31, 136, 61)' : '1px solid',
+									borderColor: !preferCardView ? 'rgb(31, 136, 61)' : 'divider',
+									'&:hover': {
+										backgroundColor: !preferCardView ? 'rgba(31, 136, 61, 0.08)' : 'action.hover',
+									},
+								}}
+							>
+								<ViewListIcon fontSize="small" />
+							</IconButton>
+						</Tooltip>
+					</Stack>
+					{/* GraphQL and Refresh Indexer buttons on Right */}
+					{eoa && (
+						<Stack direction="row" spacing={1} alignItems="center">
+							<Tooltip title="GraphQL">
+								<IconButton
+									size="small"
+									onClick={handleOpenGraphQL}
+									sx={{
+										border: '1px solid',
+										borderColor: 'divider',
+										'&:hover': {
+											backgroundColor: 'action.hover',
+										},
+									}}
+								>
+									<Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: 600 }}>GraphQL</Typography>
+								</IconButton>
+							</Tooltip>
+							<Tooltip title="Refresh Indexer">
+								<IconButton
+									size="small"
+									onClick={handleRefresh}
+									disabled={refreshing}
+									sx={{
+										border: '1px solid',
+										borderColor: 'divider',
+										'&:hover': {
+											backgroundColor: 'action.hover',
+										},
+									}}
+								>
+									<RefreshIcon fontSize="small" sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none', '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } } }} />
+								</IconButton>
+							</Tooltip>
+						</Stack>
+					)}
+				</Box>
+			)}
+
 			<Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
 				<Stack spacing={2}>
 					{/* Search Form */}
@@ -1950,8 +2167,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				</Stack>
 			</Paper>
 
-			{/* Mobile & Desktop Card View (when 4 or fewer agents) */}
-			<Box sx={{ display: showCardViewForDesktop ? { xs: 'none', sm: 'block' } : { xs: 'block', sm: 'none' } }}>
+
+			{/* Mobile & Desktop Card View */}
+			<Box sx={{ display: showCardView ? { xs: 'block', sm: 'block' } : { xs: 'block', sm: 'none' } }}>
 				{!isLoading && filteredRowsForDisplay.length === 0 && (
 					<Paper variant="outlined" sx={{ p: 3, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px', textAlign: 'center' }}>
 						<Typography variant="body2" color="text.secondary">No agents found.</Typography>
@@ -1992,7 +2210,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									bgcolor: '#ffffff', 
 									borderRadius: '6px',
 									cursor: { xs: 'pointer', sm: 'default' },
-									width: { xs: '100%', md: '500px' },
+									width: { xs: '100%', md: 'calc(33.333% - 11px)' },
+									minWidth: { xs: '100%', md: '300px' },
 									flexShrink: 0,
 									'&:hover': {
 										backgroundColor: { xs: '#f6f8fa', sm: '#ffffff' },
@@ -2083,35 +2302,49 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											)}
 											{/* Session Link (only for owned agents) */}
 											{owned[row.agentId] && (
-												<Typography
-													component="button"
-													onClick={(e) => {
-														e.stopPropagation();
-														openSessionFor(row);
-													}}
-													disabled={sessionLoading}
-													variant="caption"
-													color="primary"
-													sx={{
-														fontSize: '0.75rem',
-														textDecoration: 'underline',
-														cursor: 'pointer',
-														fontWeight: 600,
-														border: 'none',
-														background: 'none',
-														padding: 0,
-														'&:hover': {
-															color: 'primary.dark',
-															textDecoration: 'none',
-														},
-														'&:disabled': {
-															color: 'text.disabled',
-															cursor: 'not-allowed',
-														},
-													}}
-												>
-													{sessionLoading ? 'Loading...' : 'Session file'}
-												</Typography>
+												<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+													<Typography
+														component="button"
+														onClick={(e) => {
+															e.stopPropagation();
+															openSessionFor(row);
+														}}
+														disabled={sessionLoading}
+														variant="caption"
+														color="primary"
+														sx={{
+															fontSize: '0.75rem',
+															textDecoration: 'underline',
+															cursor: 'pointer',
+															fontWeight: 600,
+															border: 'none',
+															background: 'none',
+															padding: 0,
+															'&:hover': {
+																color: 'primary.dark',
+																textDecoration: 'none',
+															},
+															'&:disabled': {
+																color: 'text.disabled',
+																cursor: 'not-allowed',
+															},
+														}}
+													>
+														{sessionLoading ? 'Loading...' : 'session file'}
+													</Typography>
+													{sessionProgressActive && (
+														<LinearProgress 
+															variant="determinate" 
+															value={sessionProgress} 
+															sx={{ 
+																width: '100px',
+																height: 4,
+																mt: 0.5,
+																borderRadius: 2,
+															}} 
+														/>
+													)}
+												</Box>
 											)}
 										</Box>
 
@@ -2387,12 +2620,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				</Box>
 			</Box>
 
-			{/* Desktop Table View (only when more than 4 agents) */}
+			{/* Desktop Table View */}
 			<TableContainer 
 				component={Paper} 
 				variant="outlined" 
 				sx={{ 
-					display: showCardViewForDesktop ? { xs: 'none', sm: 'none' } : { xs: 'none', sm: 'block' },
+					display: showCardView ? { xs: 'none', sm: 'none' } : { xs: 'none', sm: 'block' },
 					overflowX: 'auto', 
 					borderColor: '#d0d7de', 
 					bgcolor: '#ffffff', 
@@ -2404,6 +2637,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				<Table size="small" sx={{ minWidth: 1200 }}>
                             <TableHead sx={{ display: { xs: 'none', sm: 'table-header-group' } }}>
 								<TableRow sx={{ bgcolor: '#f6f8fa', borderBottom: '1px solid #d0d7de' }}>
+								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', width: '60px' }}>Image</TableCell>
 								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Chain</TableCell>
 								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Account Address</TableCell>
                                     <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Name</TableCell>
@@ -2419,14 +2653,14 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						return inDiscover && (!mineOnly || owned[row.agentId]);
 					}).length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
+                                <TableCell colSpan={discoverMatches ? 8 : 7} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
 									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
 								</TableCell>
 							</TableRow>
 						)}
 						{isLoading && (
                             <TableRow>
-                                <TableCell colSpan={discoverMatches ? 7 : 6} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
+                                <TableCell colSpan={discoverMatches ? 8 : 7} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
@@ -2458,6 +2692,27 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											},
 										}}
 									>
+										{(() => {
+											const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+											const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+											const avatar = ens ? agentAvatars[ens] : null;
+											
+											return (
+												<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 }, width: '60px' }}>
+													{avatar ? (
+														<Avatar 
+															src={avatar} 
+															alt={row.agentName || ens || 'Agent'} 
+															sx={{ width: 40, height: 40 }}
+														/>
+													) : (
+														<Avatar sx={{ width: 40, height: 40, bgcolor: 'grey.300' }}>
+															{row.agentName?.charAt(0).toUpperCase() || '?'}
+														</Avatar>
+													)}
+												</TableCell>
+											);
+										})()}
 										<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
 											{(() => {
 												// Map chainId to lowercase hyphenated format
@@ -3299,7 +3554,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 			{/* Session dialog */}
 			<Dialog open={sessionOpen} onClose={() => setSessionOpen(false)} fullWidth maxWidth="sm">
-				<DialogTitle>Session Package</DialogTitle>
+				<DialogTitle>session file</DialogTitle>
 				<DialogContent dividers>
 					<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
 						<IconButton size="small" aria-label="Copy" onClick={() => { if (sessionJson) { navigator.clipboard.writeText(sessionJson).catch(() => {}); } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
