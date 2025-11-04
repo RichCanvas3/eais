@@ -12,12 +12,16 @@ export default function Page() {
   const { isLoggedIn, login, logout, address } = useWeb3Auth();
   const [open, setOpen] = React.useState(false);
   const [statsOpen, setStatsOpen] = React.useState(false);
-  const [accessCodeOpen, setAccessCodeOpen] = React.useState(false);
   const [accessCode, setAccessCode] = React.useState<string | null>(null);
   const [accessCodeLoading, setAccessCodeLoading] = React.useState(false);
 
   const handleGetAccessCode = async () => {
     if (!address) return;
+    
+    // If already fetched, don't fetch again
+    if (accessCode) {
+      return;
+    }
     
     setAccessCodeLoading(true);
     try {
@@ -35,7 +39,6 @@ export default function Page() {
 
       const data = await response.json();
       setAccessCode(data.accessCode);
-      setAccessCodeOpen(true);
     } catch (error) {
       console.error('Error getting access code:', error);
       alert('Failed to get access code. Please try again.');
@@ -43,6 +46,40 @@ export default function Page() {
       setAccessCodeLoading(false);
     }
   };
+
+  // Hide access code on page interactions (excluding mouse movement and copy button clicks)
+  React.useEffect(() => {
+    if (!accessCode) return;
+
+    let timeoutId: NodeJS.Timeout;
+    const hideAccessCode = () => {
+      // Small delay to ensure copy action completes
+      timeoutId = setTimeout(() => {
+        setAccessCode(null);
+      }, 200);
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      // Don't hide if clicking on the access code container
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-access-code-container]')) {
+        return;
+      }
+      hideAccessCode();
+    };
+
+    // Listen for user interactions (excluding mousemove)
+    window.addEventListener('click', handleClick, { once: true });
+    window.addEventListener('scroll', hideAccessCode, { once: true });
+    window.addEventListener('keydown', hideAccessCode, { once: true });
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('scroll', hideAccessCode);
+      window.removeEventListener('keydown', hideAccessCode);
+    };
+  }, [accessCode]);
 
   const handleCopyAccessCode = () => {
     if (accessCode) {
@@ -139,7 +176,65 @@ export default function Page() {
               <Typography variant="h5" fontWeight={500} color="text.primary">Agentic Trust</Typography>
               <Typography variant="body2" fontStyle="italic" color="text.secondary">by OrgTrust.eth</Typography>
             </Box>
-           
+            {isLoggedIn && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {!accessCode && (
+                  <Typography
+                    component="button"
+                    onClick={handleGetAccessCode}
+                    disabled={accessCodeLoading}
+                    variant="caption"
+                    color="primary"
+                    sx={{
+                      fontSize: '0.75rem',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      border: 'none',
+                      background: 'none',
+                      padding: 0,
+                      textAlign: 'left',
+                      '&:hover': {
+                        color: 'primary.dark',
+                        textDecoration: 'none',
+                      },
+                      '&:disabled': {
+                        color: 'text.disabled',
+                        cursor: 'not-allowed',
+                      },
+                    }}
+                  >
+                    {accessCodeLoading ? 'Loading...' : 'your api-key'}
+                  </Typography>
+                )}
+                {accessCode && !accessCodeLoading && (
+                  <Box 
+                    data-access-code-container
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}>
+                      {accessCode}
+                    </Typography>
+                    <IconButton 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyAccessCode();
+                      }} 
+                      size="small"
+                      sx={{ 
+                        padding: '2px',
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                        }
+                      }}
+                    >
+                      <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                    </IconButton>
+                  </Box>
+                )}
+              </Box>
+            )}
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -191,6 +286,65 @@ export default function Page() {
             <Typography variant="h5" fontWeight={500} color="text.primary" sx={{ fontSize: '1rem' }}>
               Agentic Trust Layer
             </Typography>
+            {isLoggedIn && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 0.5 }}>
+                {!accessCode && (
+                  <Typography
+                    component="button"
+                    onClick={handleGetAccessCode}
+                    disabled={accessCodeLoading}
+                    variant="caption"
+                    color="primary"
+                    sx={{
+                      fontSize: '0.75rem',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      border: 'none',
+                      background: 'none',
+                      padding: 0,
+                      textAlign: 'left',
+                      '&:hover': {
+                        color: 'primary.dark',
+                        textDecoration: 'none',
+                      },
+                      '&:disabled': {
+                        color: 'text.disabled',
+                        cursor: 'not-allowed',
+                      },
+                    }}
+                  >
+                    {accessCodeLoading ? 'Loading...' : 'your api-key'}
+                  </Typography>
+                )}
+                {accessCode && !accessCodeLoading && (
+                  <Box 
+                    data-access-code-container
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem' }}>
+                      {accessCode}
+                    </Typography>
+                    <IconButton 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyAccessCode();
+                      }} 
+                      size="small"
+                      sx={{ 
+                        padding: '2px',
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                        }
+                      }}
+                    >
+                      <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                    </IconButton>
+                  </Box>
+                )}
+              </Box>
+            )}
             {isLoggedIn && (
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <Button
@@ -393,36 +547,6 @@ export default function Page() {
       )}
       
       <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
-      
-      <Dialog open={accessCodeOpen} onClose={() => setAccessCodeOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Indexer Access Code</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Use this access code to authenticate GraphQL requests. Include it in the Authorization header:
-            <code style={{ display: 'block', marginTop: '8px', padding: '8px', background: '#f5f5f5', borderRadius: '4px', fontSize: '12px' }}>
-              Authorization: Bearer {accessCode?.substring(0, 20)}...
-            </code>
-          </Typography>
-          <TextField
-            fullWidth
-            value={accessCode || ''}
-            label="Access Code"
-            variant="outlined"
-            InputProps={{
-              readOnly: true,
-              endAdornment: (
-                <IconButton onClick={handleCopyAccessCode} size="small">
-                  <ContentCopyIcon fontSize="small" />
-                </IconButton>
-              ),
-            }}
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAccessCodeOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
     </Container>
   );
 }

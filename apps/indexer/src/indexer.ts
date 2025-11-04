@@ -641,7 +641,7 @@ export async function backfill(client: ERC8004Client, dbOverride?: any) {
 
 
 
-  const pageSize = 100; // Reduced page size to avoid Workers timeout (30s limit)
+  const pageSize = 10000; // Reduced page size to avoid Workers timeout (30s limit)
   console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
   
 

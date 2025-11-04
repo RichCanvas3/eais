@@ -149,23 +149,6 @@ const createWorkersDBQueries = async (db: any, env?: any) => {
   return createDBQueries(db, indexAgentResolver);
 };
 
-// Wrapper that creates the DB queries synchronously for use in executeGraphQL
-// We'll create the resolver lazily when needed
-let cachedDBQueries: any = null;
-let cachedDB: any = null;
-let cachedEnv: any = null;
-
-async function getWorkersDBQueries(db: any, env?: any) {
-  // Cache if DB/env hasn't changed
-  if (cachedDBQueries && cachedDB === db && cachedEnv === env) {
-    return cachedDBQueries;
-  }
-  
-  cachedDBQueries = await createWorkersDBQueries(db, env);
-  cachedDB = db;
-  cachedEnv = env;
-  return cachedDBQueries;
-}
 
 // Use shared schema
 const schema = buildGraphQLSchema();

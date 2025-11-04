@@ -144,33 +144,7 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
           }
         }
       }
-      // Optionally trigger full backfill (only for local/Express)
-      // Note: Backfill runs regardless of whether the specific agent was found
-      // This allows "refresh indexer" to work even when the trigger agentId doesn't exist
-      const backfillTriggered = config.triggerBackfill && config.backfillClients && config.backfillClients.length > 0;
-      
-      if (config.triggerBackfill && config.backfillClients) {
-        console.log('🔄 Triggering full index after agent indexing...');
-        // Dynamically import backfill to avoid circular dependencies
-        const { backfill } = await import('./indexer');
-        for (const backfillClient of config.backfillClients) {
-          try {
-            // Pass db from config (for Workers) or undefined (for local, uses global db)
-            await backfill(backfillClient, config.db);
-          } catch (error: any) {
-            const errorMessage = error?.message || String(error);
-            const fullError = error?.stack ? `${errorMessage}\n${error.stack}` : errorMessage;
-            backfillErrors.push(`Chain ${backfillClient.getChainId()}: ${fullError}`);
-            console.warn(`⚠️ Error in backfill for ${backfillClient.getChainId()}:`, errorMessage);
-          }
-        }
-        if (backfillErrors.length === 0) {
-          console.log('✅ Full index completed');
-        } else {
-          console.warn(`⚠️ Full index completed with ${backfillErrors.length} error(s)`);
-        }
-      }
-      
+
       // Build more informative message including actual errors
       let message: string;
       const errorDetails: string[] = [];
@@ -183,35 +157,10 @@ export async function createIndexAgentResolver(config: IndexAgentConfig) {
       }
       const errorText = errorDetails.length > 0 ? ` Errors: ${errorDetails.join(' | ')}` : '';
       
-      if (processedChains.length > 0) {
-        if (backfillTriggered) {
-          if (backfillErrors.length > 0) {
-            message = `Successfully indexed agent ${agentId} on ${processedChains.join(', ')}, triggered full index but encountered errors.${errorText}`;
-          } else {
-            message = `Successfully indexed agent ${agentId} on ${processedChains.join(', ')} and triggered full index${errorText}`;
-          }
-        } else {
-          message = `Successfully indexed agent ${agentId} on ${processedChains.join(', ')}${errorText}`;
-        }
-      } else {
-        // Agent wasn't processed on any chain
-        if (backfillTriggered) {
-          if (backfillErrors.length > 0) {
-            message = `Agent ${agentId} not found on any configured chain, but triggered full index which failed.${errorText}`;
-          } else {
-            message = `Agent ${agentId} not found on any configured chain, but triggered full index (which may have succeeded)${errorText}`;
-          }
-        } else {
-          if (processingErrors.length > 0) {
-            message = `Agent ${agentId} not found on any configured chain, but encountered processing errors.${errorText}`;
-          } else {
-            message = `Agent ${agentId} not found on any configured chain.${errorText}, other text:` + otherMessageText;
-          }
-        }
-      }
-      
+      message = `Successfully indexed agent ${agentId} on ${processedChains.join(', ')}, triggered full index but encountered errors.${errorText}`;
+
       return {
-        success: processedChains.length > 0 || (backfillTriggered && backfillErrors.length === 0),
+        success: processedChains.length > 0,
         message,
         processedChains,
       };

@@ -1875,13 +1875,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const filteredRowsForDisplay = React.useMemo(() => 
 		data.rows.filter((row) => {
 			const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
-			const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
-			const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
-			const dbName = row.agentName || '';
-			const fetchedName = metadataNames[row.agentId] || null;
-			const displayName = dbName || fetchedName || null;
-			const hasName = displayName || ens;
-			return inDiscover && (!mineOnly || owned[row.agentId]) && hasName;
+			return inDiscover && (!mineOnly || owned[row.agentId]);
 		}), [data.rows, discoverMatches, mineOnly, owned, metadataAccounts, metadataNames, agentEnsNames]
 	);
 	// On mobile, always use card view. On desktop, use user preference.
