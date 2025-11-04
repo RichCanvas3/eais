@@ -611,7 +611,11 @@ export async function backfill(client: ERC8004Client, dbOverride?: any) {
 
   const fetchJson = async (body: any) => {
     // Normalize URL: some gateways expect <key>/<subgraph> without trailing /graphql
+    // The Graph Studio URLs are already complete, so we don't need to append /graphql
     const endpoint = (graphqlUrl || '').replace(/\/graphql\/?$/i, '');
+    
+    console.info("............fetchJson: endpoint:", endpoint);
+    console.info("............fetchJson: query:", body.query?.substring(0, 200));
     
     // Prepare headers
     const headers: Record<string, string> = {
@@ -633,20 +637,21 @@ export async function backfill(client: ERC8004Client, dbOverride?: any) {
     if (!res.ok) {
       let text = '';
       try { text = await res.text(); } catch {}
+      console.error("............fetchJson: HTTP error:", res.status, text);
       throw new Error(`GraphQL ${res.status}: ${text || res.statusText}`);
     }
-    return await res.json();
+    
+    const json = await res.json();
+    return json;
   };
 
 
 
 
-  const pageSize = 10000; // Reduced page size to avoid Workers timeout (30s limit)
-  console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
-  
+  const pageSize = 1000; // Reduced page size to avoid Workers timeout (30s limit)
 
-  const historicalQuery = `query TokensAndTransfers($first: Int!) {
-    transfers(first: $first, orderBy: timestamp, orderDirection: asc) {
+  const historicalQuery = `query TokensAndTransfers($first: Int!, $skip: Int!) {
+    transfers(first: $first, skip: $skip, orderBy: timestamp, orderDirection: asc) {
       id
       token { id }
       from { id }
@@ -656,10 +661,68 @@ export async function backfill(client: ERC8004Client, dbOverride?: any) {
     }
   }`;
   
-  const resp = await fetchJson({ query: historicalQuery, variables: { first: pageSize } }) as any;
+  // Fetch all transfers in batches
+  const allTransferItems: any[] = [];
+  let skip = 0;
+  let hasMore = true;
+  let batchNumber = 0;
   
-  // Handle tokens (metadata) and transfers (ownership)
-  const transferItems = (resp?.data?.transfers as any[]) || [];
+  console.info("............backfill: Fetching transfers with pageSize:", pageSize, "last checkpoint:", last.toString());
+  
+  while (hasMore) {
+    batchNumber++;
+    console.info(`............Fetching batch ${batchNumber}, skip: ${skip}`);
+    
+    const resp = await fetchJson({ 
+      query: historicalQuery, 
+      variables: { first: pageSize, skip } 
+    }) as any;
+
+    // Check for GraphQL errors
+    if (resp?.errors && Array.isArray(resp.errors) && resp.errors.length > 0) {
+      console.error("............GraphQL errors:", JSON.stringify(resp.errors, null, 2));
+      throw new Error(`GraphQL query failed: ${JSON.stringify(resp.errors)}`);
+    }
+    
+    // Handle tokens (metadata) and transfers (ownership)
+    const batchItems = (resp?.data?.transfers as any[]) || [];
+    console.info(`............  Batch ${batchNumber}: ${batchItems.length} transfers`);
+    
+    if (batchItems.length === 0) {
+      hasMore = false;
+      console.info("............No more transfers found, stopping pagination");
+    } else {
+      // Add batch to all items
+      allTransferItems.push(...batchItems);
+      
+      // Show token ID for last item in current batch
+      const lastItem = batchItems[batchItems.length - 1];
+      const lastTokenId = lastItem?.token?.id || 'unknown';
+      console.info(`............  Batch ${batchNumber} last transfer token ID: ${lastTokenId}`);
+      
+      // If we got fewer items than pageSize, we've reached the end
+      if (batchItems.length < pageSize) {
+        hasMore = false;
+        console.info(`............Reached end of transfers (got ${batchItems.length} < ${pageSize})`);
+      } else {
+        // Move to next batch
+        skip += pageSize;
+      }
+    }
+  }
+  
+  const transferItems = allTransferItems;
+  console.info(`............  Total transferItems fetched: ${transferItems.length}`)
+  
+  // If no transfers, log to help debug
+  if (transferItems.length === 0) {
+    console.warn("............No transfers found in GraphQL response");
+  } else {
+    // Show token ID for last item in complete list
+    const lastItem = transferItems[transferItems.length - 1];
+    const lastTokenId = lastItem?.token?.id || 'unknown';
+    console.info("............  Final last transfer token ID: ", lastTokenId);
+  }
 
   // Upsert latest tokens metadata first (oldest-first by mintedAt)
 
@@ -690,12 +753,14 @@ export async function backfill(client: ERC8004Client, dbOverride?: any) {
 
 
 
-  const tokenItems = ((resp as any)?.data?.tokens as any[]) || [];
+  // Note: tokens query removed - we're now using transfers only
+  // If tokens are needed, add a separate paginated query here
+  const tokenItems: any[] = [];
   const tokensOrdered = tokenItems
   .slice()
   .sort((a, b) => Number((a.mintedAt || 0)) - Number((b.mintedAt || 0)));
 
-  console.info("............  process tokens: ", tokensOrdered)
+  console.info("............  process tokens: ", tokensOrdered.length)
   for (const t of tokensOrdered) {
     console.info(">>>>>>>>>>>>>>> upsertFromTokenGraph: t: ", t)
     await upsertFromTokenGraph(t, chainId); // ETH Sepolia chainId
