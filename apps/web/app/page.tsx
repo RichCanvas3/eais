@@ -1,122 +1,105 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/AgentTable";
 import { StatsPanel } from "@/components/StatsPanel";
-import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
 import * as React from 'react';
 import { AddAgentModal } from '@/components/AddAgentModal';
+import Link from 'next/link';
 
 export default function Page() {
   const { isLoggedIn, login, logout } = useWeb3Auth();
   const [open, setOpen] = React.useState(false);
   const [statsOpen, setStatsOpen] = React.useState(false);
   
-  return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h5" fontWeight={600}>Agentic Trust Layer - Agent Explorer</Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {isLoggedIn && (
-              <Button variant="outlined" onClick={() => setStatsOpen(true)} disableElevation size="small">
+  if (isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b border-border">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <div className="font-serif text-xl">Agentic Trust Layer</div>
+            <nav className="hidden md:flex items-center gap-8">
+              <Link href="https://github.com/Agentic-Trust-Layer/eais" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Documentation
+              </Link>
+              <Link href="https://github.com/Agentic-Trust-Layer/eais" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                GitHub
+              </Link>
+            </nav>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStatsOpen(true)}>
                 View Stats
               </Button>
-            )}
-            <Button variant="contained" onClick={isLoggedIn ? logout : login} disableElevation size="small">
-              {isLoggedIn ? 'Disconnect' : 'Login'}
-            </Button>
-          </Box>
-        </Box>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>Discover, evaluate, and connect with AI agents in the agentic ecosystem.</Typography>
-      </Box>
-      
-      {isLoggedIn ? (
-        <Paper elevation={0} sx={{ p: { xs: 1, sm: 2 }, bgcolor: 'transparent' }}>
-          <AgentTable />
-        </Paper>
-      ) : (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h3" fontWeight={600} sx={{ mb: 3, color: 'primary.main' }}>
-            Create and Manage your Agent Identities
-          </Typography>
+              <Button variant="outline" size="sm" onClick={logout}>
+                Disconnect
+              </Button>
+            </div>
+          </div>
+        </header>
 
-          <Button 
-            variant="contained" 
-            size="large" 
-            onClick={login} 
-            disableElevation
-            sx={{ px: 4, py: 1.5, fontSize: '1.1rem' }}
-          >
-            Get Started with Social Login
+        <main className="container mx-auto px-4 py-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-semibold mb-2">Agent Explorer</h1>
+            <p className="text-muted-foreground">Discover, evaluate, and connect with AI agents in the agentic ecosystem.</p>
+          </div>
+          <AgentTable />
+        </main>
+        
+        <AddAgentModal open={open} onClose={() => setOpen(false)} />
+        <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
+      </div>
+    );
+  }
+  
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="font-serif text-xl">Agentic Trust Layer</div>
+          <nav className="hidden md:flex items-center gap-8">
+            <Link href="https://github.com/Agentic-Trust-Layer/eais" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Documentation
+            </Link>
+            <Link href="https://github.com/Agentic-Trust-Layer/eais" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              GitHub
+            </Link>
+          </nav>
+          <Button variant="outline" size="sm" onClick={login}>
+            Open App
           </Button>
-          
-          <Grid container spacing={3} sx={{ mt: 6, maxWidth: '1200px', mx: 'auto' }}>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Social Login, or Wallet
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Connect with your social account or wallet for seamless agent identity management
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Multi-Chain
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Manage your agents across multiple blockchain networks with unified control
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Strongly Named
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Create human-readable agent names with ENS integration for easy identification
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Uniquely Addressable & Onchain Verifiable
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Each agent has a unique blockchain address with verifiable cryptographic signatures
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={4}>
-              <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                    Agent Discovery - Trust Graph
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Discover and connect with agents through cross-chain subgraphs and naming services
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Box>
-      )}
-      
-      <AddAgentModal open={open} onClose={() => setOpen(false)} />
-      <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />
-    </Container>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="container mx-auto px-4 py-24 md:py-32">
+        <div className="max-w-4xl mx-auto text-center space-y-8">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-muted/30 text-sm text-muted-foreground mb-4">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            ERC-8004 discovery and trust layer
+          </div>
+
+          <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl text-balance leading-tight">
+            Decentralized Trust Infrastructure
+          </h1>
+
+          <p className="font-mono text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-pretty leading-relaxed">
+            A protocol-level solution for agent discovery, verification, and trust establishment in decentralized
+            systems.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <Button size="lg" className="min-w-[160px]" onClick={login}>
+              Open App
+            </Button>
+            <Button size="lg" variant="outline" className="min-w-[160px] bg-transparent" asChild>
+              <Link href="https://github.com/Agentic-Trust-Layer/eais">
+                Read Docs
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }
