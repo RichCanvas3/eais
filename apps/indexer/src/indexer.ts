@@ -84,10 +84,43 @@ function extractCid(tokenURI: string): string | null {
       const cid = rest.split('/')[0]?.trim();
       return cid || null;
     }
-    const m = tokenURI.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
-    if (m && m[1]) return m[1];
+    
+    // Try subdomain format: https://CID.ipfs.gateway.com (Web3Storage, Pinata subdomain)
+    const subdomainMatch = tokenURI.match(/https?:\/\/([a-zA-Z0-9]{46,})\.ipfs\.[^\/\s]*/i);
+    if (subdomainMatch && subdomainMatch[1]) {
+      return subdomainMatch[1];
+    }
+    
+    // Try path format: https://gateway.com/ipfs/CID (Pinata, IPFS.io, etc.)
+    const pathMatch = tokenURI.match(/https?:\/\/[^\/]+\/ipfs\/([a-zA-Z0-9]{46,})/i);
+    if (pathMatch && pathMatch[1]) {
+      return pathMatch[1];
+    }
+    
+    // Fallback: try to match any CID-like pattern (Qm... or bafy...)
+    const cidMatch = tokenURI.match(/(Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy[a-z0-9]{56})/i);
+    if (cidMatch && cidMatch[1]) {
+      return cidMatch[1];
+    }
   } catch {}
   return null;
+}
+
+/**
+ * Create an AbortSignal with timeout (compatible with both Node.js and Workers)
+ */
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  // Try AbortSignal.timeout if available (Node.js 17.3+, modern browsers)
+  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+    return (AbortSignal as any).timeout(timeoutMs);
+  }
+  
+  // Fallback: create manual AbortController
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // Note: We can't clear the timeout on success in Workers, but that's okay
+  // The timeout will just fire and abort, but the promise should already be resolved
+  return controller.signal;
 }
 
 async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
@@ -146,15 +179,73 @@ async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
     const cid = extractCid(tokenURI);
     if (cid) {
       console.info("............fetchIpfsJson: cid: ", cid)
-      // Fetch directly from IPFS gateway (Web3.Storage)
-      const ipfsUrl = `https://${cid}.ipfs.w3s.link`;
-      console.info("............fetchIpfsJson: fetching from IPFS gateway: ", ipfsUrl)
-      const resp = await fetchFn(ipfsUrl);
-      if (resp?.ok) {
-        const json = await resp.json();
-        console.info("............fetchIpfsJson: json: ", JSON.stringify(json))
-        return json ?? null;
+      
+      // Detect if URI suggests a specific service (from URL format)
+      const isPinataUrl = tokenURI.includes('pinata') || tokenURI.includes('gateway.pinata.cloud');
+      const isWeb3StorageUrl = tokenURI.includes('w3s.link') || tokenURI.includes('web3.storage');
+      
+      // Try multiple IPFS gateways as fallbacks
+      // Prioritize based on detected service, then try all options
+      const gateways: Array<{ url: string; service: string }> = [];
+      
+      // Pinata gateways (try first if detected as Pinata, otherwise after Web3Storage)
+      const pinataGateways = [
+        { url: `https://gateway.pinata.cloud/ipfs/${cid}`, service: 'Pinata (gateway.pinata.cloud)' },
+        { url: `https://${cid}.ipfs.mypinata.cloud`, service: 'Pinata (mypinata.cloud subdomain)' },
+      ];
+      
+      // Web3Storage gateways (try first if detected as Web3Storage, otherwise try early)
+      const web3StorageGateways = [
+        { url: `https://${cid}.ipfs.w3s.link`, service: 'Web3Storage (w3s.link)' },
+        { url: `https://w3s.link/ipfs/${cid}`, service: 'Web3Storage (w3s.link path)' },
+      ];
+      
+      // Public IPFS gateways (fallbacks)
+      const publicGateways = [
+        { url: `https://ipfs.io/ipfs/${cid}`, service: 'IPFS.io' },
+        { url: `https://cloudflare-ipfs.com/ipfs/${cid}`, service: 'Cloudflare IPFS' },
+        { url: `https://dweb.link/ipfs/${cid}`, service: 'Protocol Labs (dweb.link)' },
+        { url: `https://gateway.ipfs.io/ipfs/${cid}`, service: 'IPFS Gateway' },
+      ];
+      
+      // Build gateway list with priority based on detection
+      if (isPinataUrl) {
+        // Pinata detected: try Pinata first, then Web3Storage, then public
+        gateways.push(...pinataGateways, ...web3StorageGateways, ...publicGateways);
+      } else if (isWeb3StorageUrl) {
+        // Web3Storage detected: try Web3Storage first, then Pinata, then public
+        gateways.push(...web3StorageGateways, ...pinataGateways, ...publicGateways);
+      } else {
+        // No detection: try Web3Storage first (most common), then Pinata, then public
+        gateways.push(...web3StorageGateways, ...pinataGateways, ...publicGateways);
       }
+      
+      for (const { url: ipfsUrl, service } of gateways) {
+        try {
+          console.info(`............fetchIpfsJson: trying ${service}: ${ipfsUrl}`)
+          const timeoutSignal = createTimeoutSignal(10000); // 10 second timeout per gateway
+          const resp = await fetchFn(ipfsUrl, { 
+            signal: timeoutSignal
+          });
+          if (resp?.ok) {
+            const json = await resp.json();
+            console.info(`............fetchIpfsJson: ✅ success from ${service}, json:`, JSON.stringify(json))
+            return json ?? null;
+          } else {
+            console.info(`............fetchIpfsJson: ${service} returned status ${resp.status}, trying next gateway`)
+          }
+        } catch (e: any) {
+          const errorMsg = e?.message || String(e);
+          // Don't log timeout errors for every gateway (too noisy)
+          if (!errorMsg.includes('aborted') && !errorMsg.includes('timeout')) {
+            console.info(`............fetchIpfsJson: ${service} failed: ${errorMsg}, trying next gateway`)
+          }
+          // Continue to next gateway
+          continue;
+        }
+      }
+      
+      console.warn(`............fetchIpfsJson: ❌ all IPFS gateways failed for CID: ${cid}`)
     }
     if (/^https?:\/\//i.test(tokenURI)) {
       const resp = await fetchFn(tokenURI);
@@ -183,6 +274,8 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
   // Fetch metadata from tokenURI BEFORE database insert to populate all fields
   let preFetchedMetadata: any = null;
   let a2aEndpoint: string | null = null;
+  let description: string | null = null;
+  let image: string | null = null;
   if (tokenURI) {
     try {
       console.info("............upsertFromTransfer: fetching metadata from tokenURI before insert");
@@ -195,6 +288,18 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
         if (typeof metadata.name === 'string' && metadata.name.trim()) {
           agentName = metadata.name.trim();
           console.info("............upsertFromTransfer: found agentName:", agentName);
+        }
+        
+        // Extract description
+        if (typeof metadata.description === 'string' && metadata.description.trim()) {
+          description = metadata.description.trim();
+          console.info("............upsertFromTransfer: found description:", description);
+        }
+        
+        // Extract image
+        if (metadata.image != null) {
+          image = String(metadata.image);
+          console.info("............upsertFromTransfer: found image:", image);
         }
         
         // Extract a2a endpoint from endpoints array
@@ -254,8 +359,9 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
         const type = typeof meta.type === 'string' ? meta.type : null;
         const name = typeof meta.name === 'string' ? meta.name : null;
 
-        const description = typeof meta.description === 'string' ? meta.description : null;
-        const image = meta.image == null ? null : String(meta.image);
+        // Use pre-extracted description and image, or extract from metadata if not already extracted
+        const desc = description || (typeof meta.description === 'string' ? meta.description : null);
+        const img = image || (meta.image == null ? null : String(meta.image));
         const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
         const findEndpoint = (n: string) => {
           const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
@@ -275,8 +381,8 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
         console.info("............update into table: agentAddress: ", agentAddress)
         console.info("............update into table: type: ", type)
         console.info("............update into table: name: ", name)
-        console.info("............update into table: description: ", description)
-        console.info("............update into table: image: ", image)
+        console.info("............update into table: description: ", desc)
+        console.info("............update into table: image: ", img)
         console.info("............update into table: a2aEndpoint: ", a2aEndpoint)
         console.info("............update into table: ensEndpoint: ", ensEndpoint)
         const updateTime = Math.floor(Date.now() / 1000);
@@ -318,8 +424,8 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
           type,
           name, name, name,
           agentAddress, agentAddress, agentAddress,
-          description, description, description,
-          image, image, image,
+          desc, desc, desc,
+          img, img, img,
           a2aEndpoint, a2aEndpoint, a2aEndpoint,
           ensEndpoint, ensEndpoint, ensEndpoint,
           agentAccountEndpoint,

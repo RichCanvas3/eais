@@ -50,11 +50,15 @@ async function getBlockNumber(provider: any): Promise<bigint> {
 export async function createIndexAgentResolver(config: IndexAgentConfig) {
   return async (args: { agentId: string; chainId?: number }) => {
     try {
+
+      
       const { agentId, chainId } = args;
       const agentIdBigInt = BigInt(agentId);
       const processedChains: string[] = [];
       const processingErrors: string[] = [];
       const backfillErrors: string[] = [];
+
+      console.log('********************* graphql direct indexer: ', agentId, chainId);
 
       // Check if chains are configured
       if (config.chains.length === 0) {

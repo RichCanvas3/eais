@@ -20,6 +20,199 @@ async function executeUpdate(db: any, sql: string, params: any[]): Promise<void>
 }
 
 /**
+ * Extract CID from IPFS URI (supports ipfs:// and https://...ipfs... formats)
+ */
+function extractCid(tokenURI: string): string | null {
+  try {
+    if (tokenURI.startsWith('ipfs://')) {
+      const rest = tokenURI.slice('ipfs://'.length);
+      const cid = rest.split('/')[0]?.trim();
+      return cid || null;
+    }
+    
+    // Try subdomain format: https://CID.ipfs.gateway.com (Web3Storage, Pinata subdomain)
+    const subdomainMatch = tokenURI.match(/https?:\/\/([a-zA-Z0-9]{46,})\.ipfs\.[^\/\s]*/i);
+    if (subdomainMatch && subdomainMatch[1]) {
+      return subdomainMatch[1];
+    }
+    
+    // Try path format: https://gateway.com/ipfs/CID (Pinata, IPFS.io, etc.)
+    const pathMatch = tokenURI.match(/https?:\/\/[^\/]+\/ipfs\/([a-zA-Z0-9]{46,})/i);
+    if (pathMatch && pathMatch[1]) {
+      return pathMatch[1];
+    }
+    
+    // Fallback: try to match any CID-like pattern (Qm... or bafy...)
+    const cidMatch = tokenURI.match(/(Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy[a-z0-9]{56})/i);
+    if (cidMatch && cidMatch[1]) {
+      return cidMatch[1];
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Create an AbortSignal with timeout (compatible with both Node.js and Workers)
+ */
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  // Try AbortSignal.timeout if available (Node.js 17.3+, modern browsers)
+  if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+    return (AbortSignal as any).timeout(timeoutMs);
+  }
+  
+  // Fallback: create manual AbortController
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  // Note: We can't clear the timeout on success in Workers, but that's okay
+  // The timeout will just fire and abort, but the promise should already be resolved
+  return controller.signal;
+}
+
+/**
+ * Improved token URI parser with better error handling and fallbacks
+ */
+async function fetchIpfsJson(tokenURI: string | null): Promise<any | null> {
+  if (!tokenURI) return null;
+  const fetchFn = (globalThis as any).fetch as undefined | ((input: any, init?: any) => Promise<any>);
+  if (!fetchFn) return null;
+  try {
+    console.info("............fetchIpfsJson: tokenURI: ", tokenURI)
+    
+    // Handle inline data URIs (data:application/json,...)
+    if (tokenURI.startsWith('data:application/json')) {
+      try {
+        const commaIndex = tokenURI.indexOf(',');
+        if (commaIndex === -1) {
+          console.warn("............fetchIpfsJson: Invalid data URI format");
+          return null;
+        }
+        
+        const jsonData = tokenURI.substring(commaIndex + 1);
+        let parsed;
+        
+        // Check if it's marked as base64 encoded
+        if (tokenURI.startsWith('data:application/json;base64,')) {
+          try {
+            // Try base64 decode first (use atob for compatibility with Workers)
+            let jsonString: string;
+            if (typeof atob !== 'undefined') {
+              jsonString = atob(jsonData);
+            } else {
+              // Node.js environment
+              const cryptoNode = await import('crypto');
+              jsonString = Buffer.from(jsonData, 'base64').toString('utf-8');
+            }
+            parsed = JSON.parse(jsonString);
+          } catch (e) {
+            // If base64 fails, try parsing as plain JSON (some URIs are mislabeled)
+            console.info("............fetchIpfsJson: base64 decode failed, trying plain JSON");
+            try {
+              parsed = JSON.parse(jsonData);
+            } catch (e2) {
+              const decodedJson = decodeURIComponent(jsonData);
+              parsed = JSON.parse(decodedJson);
+            }
+          }
+        } else {
+          // Plain JSON - try parsing directly first, then URL decode if needed
+          try {
+            parsed = JSON.parse(jsonData);
+          } catch (e) {
+            const decodedJson = decodeURIComponent(jsonData);
+            parsed = JSON.parse(decodedJson);
+          }
+        }
+        
+        console.info("............fetchIpfsJson: parsed inline data:", parsed);
+        return parsed;
+      } catch (e) {
+        console.warn("............fetchIpfsJson: Failed to parse inline data URI:", e);
+        return null;
+      }
+    }
+    
+    const cid = extractCid(tokenURI);
+    if (cid) {
+      console.info("............fetchIpfsJson: cid: ", cid)
+      
+      // Detect if URI suggests a specific service (from URL format)
+      const isPinataUrl = tokenURI.includes('pinata') || tokenURI.includes('gateway.pinata.cloud');
+      const isWeb3StorageUrl = tokenURI.includes('w3s.link') || tokenURI.includes('web3.storage');
+      
+      // Try multiple IPFS gateways as fallbacks
+      // Prioritize based on detected service, then try all options
+      const gateways: Array<{ url: string; service: string }> = [];
+      
+      // Pinata gateways (try first if detected as Pinata, otherwise after Web3Storage)
+      const pinataGateways = [
+        { url: `https://gateway.pinata.cloud/ipfs/${cid}`, service: 'Pinata (gateway.pinata.cloud)' },
+        { url: `https://${cid}.ipfs.mypinata.cloud`, service: 'Pinata (mypinata.cloud subdomain)' },
+      ];
+      
+      // Web3Storage gateways (try first if detected as Web3Storage, otherwise try early)
+      const web3StorageGateways = [
+        { url: `https://${cid}.ipfs.w3s.link`, service: 'Web3Storage (w3s.link)' },
+        { url: `https://w3s.link/ipfs/${cid}`, service: 'Web3Storage (w3s.link path)' },
+      ];
+      
+      // Public IPFS gateways (fallbacks)
+      const publicGateways = [
+        { url: `https://ipfs.io/ipfs/${cid}`, service: 'IPFS.io' },
+        { url: `https://cloudflare-ipfs.com/ipfs/${cid}`, service: 'Cloudflare IPFS' },
+        { url: `https://dweb.link/ipfs/${cid}`, service: 'Protocol Labs (dweb.link)' },
+        { url: `https://gateway.ipfs.io/ipfs/${cid}`, service: 'IPFS Gateway' },
+      ];
+      
+      // Build gateway list with priority based on detection
+      if (isPinataUrl) {
+        // Pinata detected: try Pinata first, then Web3Storage, then public
+        gateways.push(...pinataGateways, ...web3StorageGateways, ...publicGateways);
+      } else if (isWeb3StorageUrl) {
+        // Web3Storage detected: try Web3Storage first, then Pinata, then public
+        gateways.push(...web3StorageGateways, ...pinataGateways, ...publicGateways);
+      } else {
+        // No detection: try Web3Storage first (most common), then Pinata, then public
+        gateways.push(...web3StorageGateways, ...pinataGateways, ...publicGateways);
+      }
+      
+      for (const { url: ipfsUrl, service } of gateways) {
+        try {
+          console.info(`............fetchIpfsJson: trying ${service}: ${ipfsUrl}`)
+          const timeoutSignal = createTimeoutSignal(10000); // 10 second timeout per gateway
+          const resp = await fetchFn(ipfsUrl, { 
+            signal: timeoutSignal
+          });
+          if (resp?.ok) {
+            const json = await resp.json();
+            console.info(`............fetchIpfsJson: ✅ success from ${service}, json:`, JSON.stringify(json))
+            return json ?? null;
+          } else {
+            console.info(`............fetchIpfsJson: ${service} returned status ${resp.status}, trying next gateway`)
+          }
+        } catch (e: any) {
+          const errorMsg = e?.message || String(e);
+          // Don't log timeout errors for every gateway (too noisy)
+          if (!errorMsg.includes('aborted') && !errorMsg.includes('timeout')) {
+            console.info(`............fetchIpfsJson: ${service} failed: ${errorMsg}, trying next gateway`)
+          }
+          // Continue to next gateway
+          continue;
+        }
+      }
+      
+      console.warn(`............fetchIpfsJson: ❌ all IPFS gateways failed for CID: ${cid}`)
+    }
+    if (/^https?:\/\//i.test(tokenURI)) {
+      const resp = await fetchFn(tokenURI);
+      if (resp?.ok) return await resp.json();
+    }
+  } catch (e) {
+    console.warn("............fetchIpfsJson: Error fetching/parsing token URI:", e);
+  }
+  return null;
+}
+
+/**
  * Process agent data directly from blockchain and upsert into database
  * @param ownerAddress - The owner address of the agent NFT
  * @param tokenId - The agent token ID (bigint)
@@ -40,59 +233,26 @@ export async function processAgentDirectly(
   const agentAddress = ownerAddress;
   let agentName = '';
 
-  // Fetch metadata from tokenURI
+  // Fetch metadata from tokenURI using improved parser
   let preFetchedMetadata: any = null;
   let a2aEndpoint: string | null = null;
+  let description: string | null = null;
+  let image: string | null = null;
   
   if (tokenURI) {
     try {
-      // Handle inline data URIs (base64 or URL-encoded JSON)
-      if (tokenURI.startsWith('data:application/json')) {
-        const commaIndex = tokenURI.indexOf(',');
-        if (commaIndex !== -1) {
-          const jsonData = tokenURI.substring(commaIndex + 1);
-          try {
-            if (tokenURI.startsWith('data:application/json;base64,')) {
-              // Decode base64
-              // Use atob if available (Workers), otherwise Buffer (Node.js)
-              let decoded: string;
-              if (typeof atob !== 'undefined') {
-                decoded = atob(jsonData);
-              } else {
-                // Node.js environment
-                const cryptoNode = await import('crypto');
-                decoded = Buffer.from(jsonData, 'base64').toString('utf-8');
-              }
-              preFetchedMetadata = JSON.parse(decoded);
-            } else {
-              preFetchedMetadata = JSON.parse(decodeURIComponent(jsonData));
-            }
-          } catch {
-            // Fallback: try parsing as-is
-            preFetchedMetadata = JSON.parse(jsonData);
-          }
-        }
-      } else {
-        // Fetch from IPFS gateway or HTTP URL
-        const cidMatch = tokenURI.match(/ipfs:\/\/([a-z0-9]+)/i) || tokenURI.match(/https?:\/\/([a-z0-9]+)\.ipfs\.[^\/]*/i);
-        if (cidMatch) {
-          const cid = cidMatch[1];
-          const ipfsUrl = `https://${cid}.ipfs.w3s.link`;
-          const resp = await fetch(ipfsUrl);
-          if (resp?.ok) {
-            preFetchedMetadata = await resp.json();
-          }
-        } else if (/^https?:\/\//i.test(tokenURI)) {
-          const resp = await fetch(tokenURI);
-          if (resp?.ok) {
-            preFetchedMetadata = await resp.json();
-          }
-        }
-      }
-      
+      preFetchedMetadata = await fetchIpfsJson(tokenURI);
+      console.info("............process-agent: preFetchedMetadata: ", preFetchedMetadata)
       if (preFetchedMetadata) {
         if (typeof preFetchedMetadata?.name === 'string' && preFetchedMetadata.name.trim()) {
+          console.log('********************* process-agent: name', preFetchedMetadata.name);
           agentName = preFetchedMetadata.name.trim();
+        }
+        if (typeof preFetchedMetadata?.description === 'string' && preFetchedMetadata.description.trim()) {
+          description = preFetchedMetadata.description.trim();
+        }
+        if (preFetchedMetadata?.image != null) {
+          image = String(preFetchedMetadata.image);
         }
         const endpoints = Array.isArray(preFetchedMetadata.endpoints) ? preFetchedMetadata.endpoints : [];
         const findEndpoint = (n: string) => {
@@ -111,6 +271,7 @@ export async function processAgentDirectly(
     const currentTime = Math.floor(Date.now() / 1000);
     
     // Insert or update agent
+    console.log('********************* process-agent: inserting or updating agent: ', agentId, agentAddress, ownerAddress, agentName, tokenURI, a2aEndpoint, blockNumber, currentTime);
     await executeUpdate(db, `
       INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -138,8 +299,9 @@ export async function processAgentDirectly(
         const meta = preFetchedMetadata;
         const type = typeof meta.type === 'string' ? meta.type : null;
         const name = typeof meta.name === 'string' ? meta.name : null;
-        const description = typeof meta.description === 'string' ? meta.description : null;
-        const image = meta.image == null ? null : String(meta.image);
+        // Use pre-extracted description and image, or extract from metadata if not already extracted
+        const desc = description || (typeof meta.description === 'string' ? meta.description : null);
+        const img = image || (meta.image == null ? null : String(meta.image));
         const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
         const findEndpoint = (n: string) => {
           const e = endpoints.find((x: any) => (x?.name ?? '').toLowerCase() === n.toLowerCase());
@@ -192,8 +354,8 @@ export async function processAgentDirectly(
           type,
           name, name, name,
           agentAddress, agentAddress, agentAddress,
-          description, description, description,
-          image, image, image,
+          desc, desc, desc,
+          img, img, img,
           a2aEp, a2aEp, a2aEp,
           ensEndpoint, ensEndpoint, ensEndpoint,
           agentAccountEndpoint,

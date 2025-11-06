@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    
     const body = await request.json();
     const { agentId, chainId } = body;
 
@@ -13,6 +14,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+
 
     // Get the GraphQL endpoint from environment variable (same as other API routes)
     const graphqlUrl = (process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL) + '/graphql';
