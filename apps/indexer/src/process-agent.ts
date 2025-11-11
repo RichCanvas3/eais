@@ -314,6 +314,15 @@ export async function processAgentDirectly(
           agentAccountEndpoint = `eip155:${chainId}:${ownerAddress}`;
         }
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
+        const did = typeof meta.did === 'string' ? meta.did : null;
+        const mcp = !!(meta.mcp === true || meta.mcp === 1 || String(meta.mcp).toLowerCase() === 'true');
+        const x402support = !!(meta.x402support === true || meta.x402support === 1 || String(meta.x402support).toLowerCase() === 'true');
+        const active = !!(meta.active === true || meta.active === 1 || String(meta.active).toLowerCase() === 'true');
+        const operators = Array.isArray((meta.operators ?? meta.Operators)) ? (meta.operators ?? meta.Operators) : [];
+        const a2aSkills = Array.isArray(meta.a2aSkills) ? meta.a2aSkills : [];
+        const mcpTools = Array.isArray(meta.mcpTools) ? meta.mcpTools : [];
+        const mcpPrompts = Array.isArray(meta.mcpPrompts) ? meta.mcpPrompts : [];
+        const mcpResources = Array.isArray(meta.mcpResources) ? meta.mcpResources : [];
         const updateTime = Math.floor(Date.now() / 1000);
         
         await executeUpdate(db, `
@@ -347,6 +356,10 @@ export async function processAgentDirectly(
             END,
             agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
             supportedTrust = COALESCE(?, supportedTrust),
+            did = COALESCE(?, did),
+            mcp = COALESCE(?, mcp),
+            x402support = COALESCE(?, x402support),
+            active = COALESCE(?, active),
             rawJson = COALESCE(?, rawJson),
             updatedAtTime = ?
           WHERE chainId = ? AND agentId = ?
@@ -360,11 +373,35 @@ export async function processAgentDirectly(
           ensEndpoint, ensEndpoint, ensEndpoint,
           agentAccountEndpoint,
           JSON.stringify(supportedTrust),
+          did,
+          mcp ? 1 : 0,
+          x402support ? 1 : 0,
+          active ? 1 : 0,
           JSON.stringify(meta),
           updateTime,
           chainId,
           agentId,
         ]);
+
+        // Upsert normalized rows
+        const insertMany = async (table: string, column: string, values: any[]) => {
+          for (const vRaw of values) {
+            const v = typeof vRaw === 'string' ? vRaw : JSON.stringify(vRaw);
+            await executeUpdate(db, `
+              INSERT INTO ${table}(chainId, agentId, ${column}) VALUES(?, ?, ?)
+              ON CONFLICT(chainId, agentId, ${column}) DO NOTHING
+            `, [chainId, agentId, v]);
+          }
+        };
+        // operators (strings or addresses)
+        await insertMany('agent_operators', 'operator', operators.map((o: any) => String(o).toLowerCase()));
+        // supported trust (strings)
+        await insertMany('agent_supported_trust', 'trust', supportedTrust.map(String));
+        // skills/tools/prompts/resources (strings)
+        await insertMany('agent_skills', 'skill', a2aSkills.map(String));
+        await insertMany('agent_mcp_tools', 'tool', mcpTools.map(String));
+        await insertMany('agent_mcp_prompts', 'prompt', mcpPrompts.map(String));
+        await insertMany('agent_mcp_resources', 'resource', mcpResources.map(String));
       } catch (error) {
         console.warn('Error updating metadata:', error);
       }

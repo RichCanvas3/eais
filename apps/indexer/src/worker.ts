@@ -1,9 +1,9 @@
 /**
- * Cloudflare Workers entry point for ERC8004 Indexer GraphQL API
+ * Cloudflare Workers entry point for ERC8004 Indexer GraphQL API (with Yoga)
  */
 
-import { graphql, type GraphQLSchema } from 'graphql';
-import { buildGraphQLSchema } from './graphql-schema.js';
+import { createYoga, createSchema } from 'graphql-yoga';
+import { graphQLSchemaString } from './graphql-schema.js';
 
 // Import shared functions
 import { validateAccessCode } from './graphql-resolvers.js';
@@ -14,8 +14,6 @@ import {
   needsAuthentication,
   extractAccessCode,
   validateRequestAccessCode,
-  executeGraphQL,
-  parseGraphQLRequest,
   corsHeaders as sharedCorsHeaders,
 } from './graphql-handler.js';
 import { graphiqlHTML } from './graphiql-template.js';
@@ -150,9 +148,6 @@ const createWorkersDBQueries = async (db: any, env?: any) => {
 };
 
 
-// Use shared schema
-const schema = buildGraphQLSchema();
-
 // GraphiQL HTML template is imported from shared module
 
 // Use shared CORS headers
@@ -181,104 +176,100 @@ export default {
     ctx: { waitUntil?: (promise: Promise<any>) => void }
   ): Promise<Response> {
     const url = new URL(request.url);
-    
-    // Handle CORS preflight
+
+    // Handle CORS preflight early
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders,
-      });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Handle GraphiQL
-    if (url.pathname === '/graphiql' && request.method === 'GET') {
+    // Health check stays as a lightweight endpoint
+    if (url.pathname === '/health' && request.method === 'GET') {
+      return Response.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        environment: 'cloudflare-workers'
+      }, { headers: corsHeaders });
+    }
+
+    // Serve custom GraphiQL (with default headers/query) like before
+    if ((url.pathname === '/graphiql' && request.method === 'GET') ||
+        (url.pathname === '/graphql' && request.method === 'GET' && !url.searchParams.get('query'))) {
       return new Response(graphiqlHTML, {
-        headers: { 
+        headers: {
           'Content-Type': 'text/html',
           ...corsHeaders,
         },
       });
     }
 
-    // Handle health check
-    if (url.pathname === '/health' && request.method === 'GET') {
-      return Response.json({ 
-        status: 'ok', 
-        timestamp: new Date().toISOString(),
-        environment: 'cloudflare-workers'
-      }, {
-        headers: corsHeaders,
+    // Build Yoga instance on first request (schema/resolvers are static)
+    // Use context per request for DB + auth
+    if (!(globalThis as any).__schema) {
+      (globalThis as any).__schema = createSchema({
+        typeDefs: graphQLSchemaString,
+        resolvers: {
+          Query: {
+            agents: (_p: any, args: any, ctx: any) => ctx.dbQueries.agents(args),
+            agent: (_p: any, args: any, ctx: any) => ctx.dbQueries.agent(args),
+            agentByName: (_p: any, args: any, ctx: any) => ctx.dbQueries.agentByName(args),
+            agentsByChain: (_p: any, args: any, ctx: any) => ctx.dbQueries.agentsByChain(args),
+            agentsByOwner: (_p: any, args: any, ctx: any) => ctx.dbQueries.agentsByOwner(args),
+            searchAgents: (_p: any, args: any, ctx: any) => ctx.dbQueries.searchAgents(args),
+            searchAgentsGraph: (_p: any, args: any, ctx: any) => ctx.dbQueries.searchAgentsGraph(args),
+            getAccessCode: (_p: any, args: any, ctx: any) => ctx.dbQueries.getAccessCode(args),
+            countAgents: (_p: any, args: any, ctx: any) => ctx.dbQueries.countAgents(args),
+          },
+          Mutation: {
+            createAccessCode: (_p: any, args: any, ctx: any) => ctx.dbQueries.createAccessCode(args),
+            indexAgent: (_p: any, args: any, ctx: any) => ctx.dbQueries.indexAgent(args),
+          },
+        },
       });
     }
 
-    // Handle GraphQL queries
-    if (url.pathname === '/graphql' || url.pathname === '/') {
-      try {
-        // Parse GraphQL request using shared handler
-        const graphqlRequest = await parseGraphQLRequest(request, url);
-        
-        // Handle GraphiQL UI (GET without query param)
-        if (request.method === 'GET' && !graphqlRequest) {
-          return new Response(graphiqlHTML, {
-            headers: { 
-              'Content-Type': 'text/html',
-              ...corsHeaders,
-            },
-          });
-        }
+    // Create Yoga per request so we can close over env/DB in context
+    const yoga = createYoga({
+      schema: (globalThis as any).__schema,
+      graphqlEndpoint: '/graphql',
+      maskedErrors: false,
+      context: async ({ request }) => {
+        // Parse minimal GraphQL details to decide auth
+        let query = '';
+        let operationName: string | undefined = undefined;
+        try {
+          const url2 = new URL(request.url);
+          if (request.method === 'POST') {
+            const body = await request.clone().json().catch(() => null) as any;
+            query = body?.query ?? '';
+            operationName = body?.operationName ?? undefined;
+          } else if (request.method === 'GET') {
+            query = url2.searchParams.get('query') ?? '';
+            operationName = url2.searchParams.get('operationName') ?? undefined;
+          }
+        } catch {}
 
-        if (!graphqlRequest || !graphqlRequest.query) {
-          return Response.json(
-            { errors: [{ message: 'Query is required' }] },
-            { status: 400, headers: corsHeaders }
-          );
-        }
-
-        // Check if authentication is needed
-        if (needsAuthentication(graphqlRequest.query, graphqlRequest.operationName)) {
-          // Require access code authentication
+        // Auth (skip for access-code / indexAgent)
+        if (needsAuthentication(query, operationName)) {
           const authHeader = request.headers.get('authorization') || '';
           const accessCode = extractAccessCode(authHeader);
           const secretAccessCode = env.GRAPHQL_SECRET_ACCESS_CODE;
-          
           const validation = await validateRequestAccessCode(accessCode, secretAccessCode, env.DB);
           if (!validation.valid) {
-            return Response.json(
-              { errors: [{ message: validation.error || 'Invalid access code' }] },
-              { status: 401, headers: corsHeaders }
-            );
+            throw new Error(validation.error || 'Invalid access code');
           }
         }
 
-        // Execute GraphQL query using shared handler
-        const result = await executeGraphQL(
-          schema,
-          graphqlRequest,
-          {
-            db: env.DB,
-            env,
-            createDBQueries: createWorkersDBQueries,
-          }
-        );
-
-        return Response.json(result, { headers: corsHeaders });
-      } catch (error) {
-        console.error('GraphQL error:', error);
-        return Response.json(
-          { 
-            errors: [{ 
-              message: error instanceof Error ? error.message : 'Internal server error' 
-            }] 
-          },
-          { status: 500, headers: corsHeaders }
-        );
-      }
-    }
-
-    return new Response('Not Found', { 
-      status: 404,
-      headers: corsHeaders,
+        // Build per-request DB resolvers (with Workers-aware indexAgent)
+        const dbQueries = await createWorkersDBQueries(env.DB, env);
+        return { dbQueries };
+      },
     });
+
+    // Route all non-health requests through Yoga (including /graphql and /)
+    const resp = await yoga.fetch(request);
+    // Ensure CORS headers present
+    Object.entries(corsHeaders).forEach(([k, v]) => resp.headers.set(k, v));
+    return resp;
   },
 };
 

@@ -122,64 +122,6 @@ function buildWhereClause(filters: {
 }
 
 /**
- * Helper function to build WHERE clause for advanced search
- */
-function buildAdvancedWhereClause(filters: {
-  query?: string;
-  chainId?: number;
-  agentOwner?: string;
-  agentName?: string;
-  type?: string;
-  hasA2aEndpoint?: boolean;
-  hasEnsEndpoint?: boolean;
-}): { where: string; params: any[] } {
-  const conditions: string[] = [];
-  const params: any[] = [];
-
-  // Text search across multiple fields
-  if (filters.query) {
-    const searchPattern = `%${filters.query}%`;
-    conditions.push(`(agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)`);
-    params.push(searchPattern, searchPattern, searchPattern, searchPattern);
-  }
-
-  if (filters.chainId !== undefined) {
-    conditions.push(`chainId = ?`);
-    params.push(filters.chainId);
-  }
-
-  if (filters.agentOwner) {
-    conditions.push(`agentOwner = ?`);
-    params.push(filters.agentOwner);
-  }
-
-  if (filters.agentName) {
-    conditions.push(`agentName LIKE ?`);
-    params.push(`%${filters.agentName}%`);
-  }
-
-  if (filters.type) {
-    conditions.push(`type = ?`);
-    params.push(filters.type);
-  }
-
-  if (filters.hasA2aEndpoint === true) {
-    conditions.push(`a2aEndpoint IS NOT NULL AND a2aEndpoint != ''`);
-  } else if (filters.hasA2aEndpoint === false) {
-    conditions.push(`(a2aEndpoint IS NULL OR a2aEndpoint = '')`);
-  }
-
-  if (filters.hasEnsEndpoint === true) {
-    conditions.push(`ensEndpoint IS NOT NULL AND ensEndpoint != ''`);
-  } else if (filters.hasEnsEndpoint === false) {
-    conditions.push(`(ensEndpoint IS NULL OR ensEndpoint = '')`);
-  }
-
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  return { where, params };
-}
-
-/**
  * Helper function to build ORDER BY clause
  */
 function buildOrderByClause(orderBy?: string, orderDirection?: string): string {
@@ -194,6 +136,209 @@ function buildOrderByClause(orderBy?: string, orderDirection?: string): string {
   const orderColumn = column === 'agentId' ? 'CAST(agentId AS INTEGER)' : column;
   
   return `ORDER BY ${orderColumn} ${direction}`;
+}
+
+/**
+ * Build WHERE clause using The Graph-style where input
+ */
+function buildGraphWhereClause(where?: {
+  chainId?: number;
+  chainId_in?: number[];
+  agentId?: string;
+  agentId_in?: string[];
+  agentOwner?: string;
+  agentOwner_in?: string[];
+  agentName_contains?: string;
+  agentName_contains_nocase?: string;
+  agentName_starts_with?: string;
+  agentName_starts_with_nocase?: string;
+  agentName_ends_with?: string;
+  agentName_ends_with_nocase?: string;
+  description_contains?: string;
+  description_contains_nocase?: string;
+  ensEndpoint_contains?: string;
+  ensEndpoint_contains_nocase?: string;
+  agentAccountEndpoint_contains?: string;
+  agentAccountEndpoint_contains_nocase?: string;
+  did?: string;
+  did_contains?: string;
+  did_contains_nocase?: string;
+  createdAtTime_gt?: number;
+  createdAtTime_gte?: number;
+  createdAtTime_lt?: number;
+  createdAtTime_lte?: number;
+  hasA2aEndpoint?: boolean;
+  hasEnsEndpoint?: boolean;
+  mcp?: boolean;
+  x402support?: boolean;
+  active?: boolean;
+  operator_in?: string[];
+  supportedTrust_in?: string[];
+  a2aSkills_in?: string[];
+  mcpTools_in?: string[];
+  mcpPrompts_in?: string[];
+  mcpResources_in?: string[];
+}): { where: string; params: any[] } {
+  if (!where) return { where: '', params: [] };
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  // Equality / IN filters
+  if (where.chainId !== undefined) {
+    conditions.push(`chainId = ?`);
+    params.push(where.chainId);
+  }
+  if (Array.isArray(where.chainId_in) && where.chainId_in.length > 0) {
+    conditions.push(`chainId IN (${where.chainId_in.map(() => '?').join(',')})`);
+    params.push(...where.chainId_in);
+  }
+  if (where.agentId) {
+    conditions.push(`agentId = ?`);
+    params.push(where.agentId);
+  }
+  if (Array.isArray(where.agentId_in) && where.agentId_in.length > 0) {
+    conditions.push(`agentId IN (${where.agentId_in.map(() => '?').join(',')})`);
+    params.push(...where.agentId_in);
+  }
+  if (where.agentOwner) {
+    conditions.push(`agentOwner = ?`);
+    params.push(where.agentOwner);
+  }
+  if (Array.isArray(where.agentOwner_in) && where.agentOwner_in.length > 0) {
+    conditions.push(`agentOwner IN (${where.agentOwner_in.map(() => '?').join(',')})`);
+    params.push(...where.agentOwner_in);
+  }
+
+  // Text filters - agentName
+  if (where.agentName_contains) {
+    conditions.push(`agentName LIKE ?`);
+    params.push(`%${where.agentName_contains}%`);
+  }
+  if (where.agentName_contains_nocase) {
+    conditions.push(`LOWER(agentName) LIKE LOWER(?)`);
+    params.push(`%${where.agentName_contains_nocase}%`);
+  }
+  if (where.agentName_starts_with) {
+    conditions.push(`agentName LIKE ?`);
+    params.push(`${where.agentName_starts_with}%`);
+  }
+  if (where.agentName_starts_with_nocase) {
+    conditions.push(`LOWER(agentName) LIKE LOWER(?)`);
+    params.push(`${where.agentName_starts_with_nocase}%`);
+  }
+  if (where.agentName_ends_with) {
+    conditions.push(`agentName LIKE ?`);
+    params.push(`%${where.agentName_ends_with}`);
+  }
+  if (where.agentName_ends_with_nocase) {
+    conditions.push(`LOWER(agentName) LIKE LOWER(?)`);
+    params.push(`%${where.agentName_ends_with_nocase}`);
+  }
+
+  // Text filters - description
+  if (where.description_contains) {
+    conditions.push(`description LIKE ?`);
+    params.push(`%${where.description_contains}%`);
+  }
+  if (where.description_contains_nocase) {
+    conditions.push(`LOWER(description) LIKE LOWER(?)`);
+    params.push(`%${where.description_contains_nocase}%`);
+  }
+
+  // Endpoints and DID
+  if (where.ensEndpoint_contains) {
+    conditions.push(`ensEndpoint LIKE ?`);
+    params.push(`%${where.ensEndpoint_contains}%`);
+  }
+  if (where.ensEndpoint_contains_nocase) {
+    conditions.push(`LOWER(ensEndpoint) LIKE LOWER(?)`);
+    params.push(`%${where.ensEndpoint_contains_nocase}%`);
+  }
+  if (where.agentAccountEndpoint_contains) {
+    conditions.push(`agentAccountEndpoint LIKE ?`);
+    params.push(`%${where.agentAccountEndpoint_contains}%`);
+  }
+  if (where.agentAccountEndpoint_contains_nocase) {
+    conditions.push(`LOWER(agentAccountEndpoint) LIKE LOWER(?)`);
+    params.push(`%${where.agentAccountEndpoint_contains_nocase}%`);
+  }
+  if (where.did) {
+    conditions.push(`did = ?`);
+    params.push(where.did);
+  }
+  if (where.did_contains) {
+    conditions.push(`did LIKE ?`);
+    params.push(`%${where.did_contains}%`);
+  }
+  if (where.did_contains_nocase) {
+    conditions.push(`LOWER(did) LIKE LOWER(?)`);
+    params.push(`%${where.did_contains_nocase}%`);
+  }
+
+  // Numeric ranges
+  if (where.createdAtTime_gt !== undefined) {
+    conditions.push(`createdAtTime > ?`);
+    params.push(where.createdAtTime_gt);
+  }
+  if (where.createdAtTime_gte !== undefined) {
+    conditions.push(`createdAtTime >= ?`);
+    params.push(where.createdAtTime_gte);
+  }
+  if (where.createdAtTime_lt !== undefined) {
+    conditions.push(`createdAtTime < ?`);
+    params.push(where.createdAtTime_lt);
+  }
+  if (where.createdAtTime_lte !== undefined) {
+    conditions.push(`createdAtTime <= ?`);
+    params.push(where.createdAtTime_lte);
+  }
+
+  // Presence checks
+  if (where.hasA2aEndpoint === true) {
+    conditions.push(`a2aEndpoint IS NOT NULL AND a2aEndpoint != ''`);
+  } else if (where.hasA2aEndpoint === false) {
+    conditions.push(`(a2aEndpoint IS NULL OR a2aEndpoint = '')`);
+  }
+  if (where.hasEnsEndpoint === true) {
+    conditions.push(`ensEndpoint IS NOT NULL AND ensEndpoint != ''`);
+  } else if (where.hasEnsEndpoint === false) {
+    conditions.push(`(ensEndpoint IS NULL OR ensEndpoint = '')`);
+  }
+
+  // Boolean flags
+  if (where.mcp === true) {
+    conditions.push(`mcp = 1`);
+  } else if (where.mcp === false) {
+    conditions.push(`(mcp IS NULL OR mcp = 0)`);
+  }
+  if (where.x402support === true) {
+    conditions.push(`x402support = 1`);
+  } else if (where.x402support === false) {
+    conditions.push(`(x402support IS NULL OR x402support = 0)`);
+  }
+  if (where.active === true) {
+    conditions.push(`active = 1`);
+  } else if (where.active === false) {
+    conditions.push(`(active IS NULL OR active = 0)`);
+  }
+
+  // Membership filters using EXISTS subqueries
+  const addExistsFilter = (table: string, column: string, values?: string[]) => {
+    if (Array.isArray(values) && values.length > 0) {
+      const placeholders = values.map(() => '?').join(',');
+      conditions.push(`EXISTS (SELECT 1 FROM ${table} t WHERE t.chainId = agents.chainId AND t.agentId = agents.agentId AND t.${column} IN (${placeholders}))`);
+      params.push(...values);
+    }
+  };
+  addExistsFilter('agent_operators', 'operator', where.operator_in);
+  addExistsFilter('agent_supported_trust', 'trust', where.supportedTrust_in);
+  addExistsFilter('agent_skills', 'skill', where.a2aSkills_in);
+  addExistsFilter('agent_mcp_tools', 'tool', where.mcpTools_in);
+  addExistsFilter('agent_mcp_prompts', 'prompt', where.mcpPrompts_in);
+  addExistsFilter('agent_mcp_resources', 'resource', where.mcpResources_in);
+
+  const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { where: whereSql, params };
 }
 
 /**
@@ -223,6 +368,35 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         return await executeQuery(db, query, allParams);
       } catch (error) {
         console.error('❌ Error in agents resolver:', error);
+        throw error;
+      }
+    },
+
+    // Graph-like advanced search (where/first/skip/orderBy/orderDirection)
+    searchAgentsGraph: async (args: {
+      where?: any;
+      first?: number;
+      skip?: number;
+      orderBy?: string;
+      orderDirection?: string;
+    }) => {
+      try {
+        const { where, first = 20, skip = 0, orderBy, orderDirection } = args || {};
+        const { where: whereSql, params } = buildGraphWhereClause(where);
+        const orderByClause = buildOrderByClause(orderBy, orderDirection);
+
+        const agentsQuery = `SELECT * FROM agents ${whereSql} ${orderByClause} LIMIT ? OFFSET ?`;
+        const agentsParams = [...params, first, skip];
+        const agents = await executeQuery(db, agentsQuery, agentsParams);
+
+        const countQuery = `SELECT COUNT(*) as count FROM agents ${whereSql}`;
+        const countResult = await executeQuerySingle(db, countQuery, params);
+        const total = (countResult as any)?.count || 0;
+        const hasMore = (skip + first) < total;
+
+        return { agents, total, hasMore };
+      } catch (error) {
+        console.error('❌ Error in searchAgentsGraph resolver:', error);
         throw error;
       }
     },
@@ -312,59 +486,6 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         return await executeQuery(db, sqlQuery, params);
       } catch (error) {
         console.error('❌ Error in searchAgents resolver:', error);
-        throw error;
-      }
-    },
-
-    searchAgentsAdvanced: async (args: { params: any }) => {
-      try {
-        const {
-          query,
-          chainId,
-          agentOwner,
-          agentName,
-          type,
-          hasA2aEndpoint,
-          hasEnsEndpoint,
-          limit = 20,
-          offset = 0,
-          orderBy,
-          orderDirection
-        } = args.params;
-
-        const filters = {
-          query,
-          chainId,
-          agentOwner,
-          agentName,
-          type,
-          hasA2aEndpoint,
-          hasEnsEndpoint
-        };
-
-        const { where, params } = buildAdvancedWhereClause(filters);
-        const orderByClause = buildOrderByClause(orderBy, orderDirection);
-
-        // Get agents with pagination
-        const agentsQuery = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
-        const agentsParams = [...params, limit, offset];
-        const agents = await executeQuery(db, agentsQuery, agentsParams);
-
-        // Get total count for pagination info
-        const countQuery = `SELECT COUNT(*) as count FROM agents ${where}`;
-        const countResult = await executeQuerySingle(db, countQuery, params);
-        const total = (countResult as any)?.count || 0;
-
-        // Calculate hasMore
-        const hasMore = (offset + limit) < total;
-
-        return {
-          agents,
-          total,
-          hasMore
-        };
-      } catch (error) {
-        console.error('❌ Error in searchAgentsAdvanced resolver:', error);
         throw error;
       }
     },
