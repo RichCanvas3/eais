@@ -2736,7 +2736,14 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 										<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
 											<Stack direction="row" spacing={0.25} alignItems="center">
 												{(() => {
-													const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+													const acct = (metadataAccounts[row.agentId] as `0x${string}` | undefined) || (row.agentAddress as `0x${string}` | undefined);
+													if (!acct) {
+														return (
+															<Typography component="span" variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }} noWrap>
+																—
+															</Typography>
+														);
+													}
 													const display = `${acct.slice(0, 6)}...${acct.slice(-4)}`;
 													return (
 														<Typography 

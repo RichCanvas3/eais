@@ -1,151 +1,177 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import type { DiscoverParams } from '@agentic-trust/core/server';
+import { discoverAgents, type DiscoverRequest, type DiscoverResponse } from '@agentic-trust/core/server';
+import { getAdminClient } from '@/lib/client';
 
 export const dynamic = 'force-dynamic';
 
-async function queryGraphQL(query: string, variables: any = {}) {
-  // Get GraphQL endpoint URL from environment at runtime
-  const GRAPHQL_URL = (process.env.GRAPHQL_API_URL || process.env.NEXT_PUBLIC_GRAPHQL_API_URL) + '/graphql';
-  console.info("++++++++++++++++++++ queryGraphQL 0: GRAPHQL_URL", GRAPHQL_URL);
+const DEFAULT_PAGE_SIZE = 50;
+
+function toNumber(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function extractAddressFromAccountEndpoint(endpoint?: string | null): string | undefined {
+  if (!endpoint) return undefined;
+  // Expected format: eip155:<chainId>:<address>
+  const parts = endpoint.split(':');
+  const maybe = parts[parts.length - 1];
+  if (maybe && maybe.startsWith('0x') && maybe.length === 42) return maybe.toLowerCase();
+  return undefined;
+}
+
+function mapAgentsResponse(data: DiscoverResponse) {
+  const { agents, total, page, pageSize, totalPages } = data;
+  const agentsData = agents.map((agent: any) => ({
+    chainId: agent.data?.chainId ?? agent.chainId,
+    agentId: agent.agentId,
+    agentName: agent.agentName,
+    agentOwner: agent.data?.agentOwner ?? agent.agentOwner,
+    agentAccountEndpoint: agent.agentAccountEndpoint ?? agent.data?.agentAccountEndpoint,
+    ensEndpoint: agent.ensEndpoint ?? agent.data?.ensEndpoint,
+    a2aEndpoint: agent.a2aEndpoint ?? agent.data?.a2aEndpoint,
+    // Derive address with fallbacks
+    agentAddress:
+      agent.agentAddress ??
+      agent.data?.agentAddress ??
+      extractAddressFromAccountEndpoint(agent.agentAccountEndpoint ?? agent.data?.agentAccountEndpoint) ??
+      undefined,
+    description: agent.data?.description ?? agent.description,
+    image: agent.data?.image ?? agent.image,
+    metadataURI: agent.data?.metadataURI ?? agent.metadataURI,
+    createdAtBlock: agent.data?.createdAtBlock ?? agent.createdAtBlock,
+    createdAtTime: agent.data?.createdAtTime ?? agent.createdAtTime,
+    updatedAtTime: agent.data?.updatedAtTime ?? agent.updatedAtTime,
+    supportedTrust: agent.data?.supportedTrust ?? agent.supportedTrust,
+    rawJson: agent.data?.rawJson ?? agent.rawJson,
+  }));
+
+  return {
+    rows: agentsData,
+    total: total ?? agents.length,
+    page: page ?? 1,
+    pageSize: pageSize ?? agents.length,
+    totalPages: totalPages ?? Math.max(1, Math.ceil((total ?? agents.length) / (pageSize ?? Math.max(agents.length, 1)))),
+  };
+}
+
+function parseParamsParam(raw: string | null): DiscoverParams | undefined {
+  if (!raw) return undefined;
   try {
-    console.info("++++++++++++++++++++ queryGraphQL 1: GRAPHQL_URL", GRAPHQL_URL);
-    if (!GRAPHQL_URL) {
-      // Fallback to empty data if GraphQL URL not configured
-      console.warn("No GRAPHQL_URL configured");
-      return null;
-    }
-
-    const requestBody = { query, variables };
-    console.info("++++++++++++++++++++ queryGraphQL request body: ", JSON.stringify(requestBody, null, 2));
-
-    // Get secret access code for server-to-server authentication
-    const secretAccessCode = process.env.GRAPHQL_SECRET_ACCESS_CODE;
-    console.info("++++++++++++++++++++ queryGraphQL auth check:", {
-      hasSecretAccessCode: !!secretAccessCode,
-      secretAccessCodeLength: secretAccessCode?.length || 0,
-      secretAccessCodePreview: secretAccessCode ? `${secretAccessCode.substring(0, 8)}...` : 'none'
-    });
-    
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    
-    if (secretAccessCode) {
-      headers['Authorization'] = `Bearer ${secretAccessCode}`;
-      console.info("++++++++++++++++++++ queryGraphQL Authorization header set");
-    } else {
-      console.warn("⚠️ GRAPHQL_SECRET_ACCESS_CODE not configured! Requests will fail.");
-    }
-
-    const res = await fetch(GRAPHQL_URL, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody),
-      cache: 'no-store', // Disable Next.js fetch caching
-      next: { revalidate: 0 }, // Ensure no revalidation caching
-    });
-
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`GraphQL request failed: ${res.status} ${res.statusText}`, errorText);
-      return null;
-    }
-
-    const data = await res.json();
-
-    if (data.errors) {
-      console.error('GraphQL errors:', data.errors);
-      return null;
-    }
-    console.info("++++++++++++++++++++ queryGraphQL response - has data:", !!data.data, "has errors:", !!data.errors);
-    if (data.data) {
-      console.info("++++++++++++++++++++ queryGraphQL data.agents count:", data.data.agents?.length || 0);
-    }
-    return data.data;
-  } catch (error: any) {
-    console.error('GraphQL fetch error:', error?.message || error);
-    return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as unknown as DiscoverParams) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.get('pageSize') || '50', 10)));
-    const offset = (page - 1) * pageSize;
+    const urlParams = request.nextUrl.searchParams;
+    const page = toNumber(urlParams.get('page'));
+    const pageSize = toNumber(urlParams.get('pageSize')) ?? DEFAULT_PAGE_SIZE;
+    const query = urlParams.get('query')?.trim();
+    const params = parseParamsParam(urlParams.get('params'));
+    const name = urlParams.get('name')?.trim() || undefined;
+    const id = urlParams.get('id')?.trim() || undefined;
+    const address = urlParams.get('address')?.trim()?.toLowerCase() || undefined;
+    const chainIdNum = toNumber(urlParams.get('chainId'));
+    const orderBy = urlParams.get('orderBy')?.trim() || 'agentId';
+    const orderDirectionRaw = urlParams.get('orderDirection')?.trim().toUpperCase();
+    const orderDirection =
+      orderDirectionRaw === 'ASC' || orderDirectionRaw === 'DESC' ? (orderDirectionRaw as 'ASC' | 'DESC') : 'DESC';
 
-    const name = (searchParams.get('name') || '').trim();
-    const id = (searchParams.get('id') || '').trim();
-    const address = (searchParams.get('address') || '').trim();
-    const chainId = searchParams.get('chainId');
-
-    // Build GraphQL query
-    const filters: any = { limit: pageSize, offset, orderBy: 'agentId', orderDirection: 'desc' };
-    if (chainId) filters.chainId = parseInt(chainId);
-    if (id) filters.agentId = id;
-    if (address) filters.agentOwner = address.toLowerCase();
-    if (name) filters.agentName = name.toLowerCase();
-
-    const query = `
-      query GetAgents($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String, $limit: Int, $offset: Int, $orderBy: String, $orderDirection: String) {
-        agents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName, limit: $limit, offset: $offset, orderBy: $orderBy, orderDirection: $orderDirection) {
-          chainId
-          agentId
-          agentAddress
-          agentOwner
-          agentName
-          description
-          image
-          a2aEndpoint
-          ensEndpoint
-          agentAccountEndpoint
-          supportedTrust
-          rawJson
-          metadataURI
-          createdAtBlock
-          createdAtTime
-        }
-      }
-    `;
-
-    const data = await queryGraphQL(query, filters);
-
-
-    if (!data) {
-      // Return empty data if GraphQL is not available
-      console.warn("⚠️ No data returned from GraphQL query");
-      return NextResponse.json({ rows: [], total: 0, page, pageSize });
+    // Merge legacy filters into discover params
+    const mergedParams: any = { ...(params || {}) };
+    if (name) mergedParams.name = name;
+    if (id) mergedParams.id = id;
+    if (address) mergedParams.owners = Array.isArray(mergedParams.owners) ? Array.from(new Set([...mergedParams.owners, address])) : [address];
+    if (chainIdNum != null) {
+      mergedParams.chains = Array.isArray(mergedParams.chains) ? Array.from(new Set([...mergedParams.chains, chainIdNum])) : [chainIdNum];
     }
 
-    const rows = data.agents || [];
-    console.info("++++++++++++++++++++ GET rows count: ", rows.length);
-    if (rows.length > 0) {
-      console.info("++++++++++++++++++++ GET first row sample: ", JSON.stringify(rows[0], null, 2));
-      // Log max agentId to verify we're getting the latest
-      const maxAgentId = Math.max(...rows.map((r: any) => parseInt(r.agentId || '0', 10)));
-      console.info("++++++++++++++++++++ GET max agentId in results: ", maxAgentId);
+    const response = await discoverAgents(
+      {
+        page,
+        pageSize,
+        query: query && query.length > 0 ? query : undefined,
+        params: mergedParams,
+        orderBy,
+        orderDirection,
+      } satisfies DiscoverRequest,
+      getAdminClient
+    );
+
+    return NextResponse.json(mapAgentsResponse(response));
+  } catch (error: unknown) {
+    console.error('Error searching agents:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    return NextResponse.json(
+      {
+        error: 'Failed to search agents',
+        message: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? errorStack : undefined,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const page = typeof body.page === 'number' ? body.page : undefined;
+    const pageSize =
+      typeof body.pageSize === 'number' && Number.isFinite(body.pageSize) ? body.pageSize : DEFAULT_PAGE_SIZE;
+    const query = typeof body.query === 'string' && body.query.trim().length > 0 ? body.query.trim() : undefined;
+    const params: DiscoverParams | undefined =
+      body.params && typeof body.params === 'object' ? (body.params as DiscoverParams) : undefined;
+    const orderBy: string | undefined =
+      typeof body.orderBy === 'string' && body.orderBy.trim().length > 0 ? body.orderBy.trim() : undefined;
+    const orderDirection: 'ASC' | 'DESC' | undefined =
+      typeof body.orderDirection === 'string' && ['ASC', 'DESC'].includes(body.orderDirection.toUpperCase())
+        ? (body.orderDirection.toUpperCase() as 'ASC' | 'DESC')
+        : undefined;
+
+    // Support legacy fields in body: name, id, address, chainId
+    const mergedParams: any = { ...(params || {}) };
+    if (typeof body.name === 'string' && body.name.trim()) mergedParams.name = body.name.trim();
+    if (typeof body.id === 'string' && body.id.trim()) mergedParams.id = body.id.trim();
+    if (typeof body.address === 'string' && body.address.trim()) {
+      const addr = body.address.trim().toLowerCase();
+      mergedParams.owners = Array.isArray(mergedParams.owners) ? Array.from(new Set([...mergedParams.owners, addr])) : [addr];
+    }
+    if (typeof body.chainId === 'number' && Number.isFinite(body.chainId)) {
+      mergedParams.chains = Array.isArray(mergedParams.chains) ? Array.from(new Set([...mergedParams.chains, body.chainId])) : [body.chainId];
     }
 
-    // Get total count using the new countAgents query (more efficient)
-    const countFilters: any = {};
-    if (chainId) countFilters.chainId = parseInt(chainId);
-    if (id) countFilters.agentId = id;
-    if (address) countFilters.agentOwner = address.toLowerCase();
-    if (name) countFilters.agentName = name.toLowerCase();
-    
-    const countQuery = `
-      query GetAgentsCount($chainId: Int, $agentId: String, $agentOwner: String, $agentName: String) {
-        countAgents(chainId: $chainId, agentId: $agentId, agentOwner: $agentOwner, agentName: $agentName)
-      }
-    `;
-    const countData = await queryGraphQL(countQuery, countFilters);
-    const total = countData?.countAgents || rows.length;
+    const response = await discoverAgents(
+      {
+        page,
+        pageSize,
+        query,
+        params: mergedParams,
+        orderBy,
+        orderDirection,
+      } satisfies DiscoverRequest,
+      getAdminClient
+    );
 
-    return NextResponse.json({ rows, total, page, pageSize });
-  } catch (e: any) {
-    console.error('API error:', e);
-    // Return empty data on error to prevent site crash
-    return NextResponse.json({ rows: [], total: 0, page: 1, pageSize: 50 });
+    return NextResponse.json(mapAgentsResponse(response));
+  } catch (error: unknown) {
+    console.error('Error searching agents:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    return NextResponse.json(
+      {
+        error: 'Failed to search agents',
+        message: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? errorStack : undefined,
+      },
+      { status: 500 }
+    );
   }
 }
