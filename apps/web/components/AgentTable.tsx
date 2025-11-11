@@ -68,7 +68,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [address, setAddress] = React.useState("");
 	const [agentId, setAgentId] = React.useState("");
 	const [isLoading, setIsLoading] = React.useState(false);
-	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number }>({ rows: [], total: 0, page: 1, pageSize: 50 });
+	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number }>({ rows: [], total: 0, page: 1, pageSize: 5 });
 	const [mineOnly, setMineOnly] = React.useState(false);
 	const [selectedChainIdFilter, setSelectedChainIdFilter] = React.useState<number | null>(null);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
@@ -1026,12 +1026,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			if (idFilter) url.searchParams.set("id", idFilter);
 			if (chainIdFilter) url.searchParams.set("chainId", String(chainIdFilter));
         url.searchParams.set("page", String(page));
-        url.searchParams.set("pageSize", "50");
+        url.searchParams.set("pageSize", "5");
 		try {
 
 				const res = await fetch(url);
                 if (!res.ok) {
-                    setData({ page: page, pageSize: 50, total: 0, rows: [] });
+                    setData({ page: page, pageSize: 5, total: 0, rows: [] });
 					return;
 				}
 				const text = await res.text();
@@ -1041,10 +1041,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				}
 				
 				// Ensure the response has the correct structure
-                const responseData = json ?? { page, pageSize: 50, total: 0, rows: [] };
+                const responseData = json ?? { page, pageSize: 5, total: 0, rows: [] };
                 setData({
                     page: responseData.page ?? page,
-                    pageSize: responseData.pageSize ?? 50,
+                    pageSize: responseData.pageSize ?? 5,
                     total: responseData.total ?? 0,
                     rows: Array.isArray(responseData.rows) ? responseData.rows : []
                 });

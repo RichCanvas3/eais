@@ -700,14 +700,26 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         
         const { agentId, account } = await correctENSClient.getAgentIdentityByName(agentName.trim());
         if (account) {
-          const agentAccountClient = await toMetaMaskSmartAccount({
-            address: account.address as `0x${string}`,
-            client: publicClient,
-            implementation: Implementation.Hybrid,
-            signatory: { walletClient },
-          });
-          
-          return agentAccountClient;
+          let accountAddress: `0x${string}` | undefined;
+          if (typeof account === 'string') {
+            accountAddress = account as `0x${string}`;
+          } else if (typeof account === 'object' && account !== null && 'address' in account) {
+            const maybeAddress = (account as { address?: string }).address;
+            if (typeof maybeAddress === 'string') {
+              accountAddress = maybeAddress as `0x${string}`;
+            }
+          }
+
+          if (accountAddress) {
+            const agentAccountClient = await toMetaMaskSmartAccount({
+              address: accountAddress,
+              client: publicClient,
+              implementation: Implementation.Hybrid,
+              signatory: { walletClient },
+            });
+
+            return agentAccountClient;
+          }
         }
       }
     } catch (error: any) {
