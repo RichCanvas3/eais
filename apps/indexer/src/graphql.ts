@@ -160,7 +160,8 @@ export function createGraphQLServer(port: number = 4000) {
   // Only log, don't modify req.body - graphql-http needs it intact
   app.use((req, res, next) => {
     if (req.path === '/graphql' && req.method === 'POST') {
-      console.log(`📥 GraphQL Request - Body:`, JSON.stringify(req.body).substring(0, 200));
+      console.log(`📥 GraphQL Request - ${new Date().toISOString()} - Body:`, JSON.stringify(req.body).substring(0, 200));
+      console.log(`📥 Request details - URL: ${req.url}, Method: ${req.method}, Headers:`, JSON.stringify(req.headers).substring(0, 100));
     }
     next();
   });

@@ -25,6 +25,26 @@ export const graphQLSchemaString = `
     updatedAtTime: Int
   }
 
+  input AgentSearchParams {
+    query: String
+    chainId: Int
+    agentOwner: String
+    agentName: String
+    type: String
+    hasA2aEndpoint: Boolean
+    hasEnsEndpoint: Boolean
+    limit: Int
+    offset: Int
+    orderBy: String
+    orderDirection: String
+  }
+
+  type AgentSearchResult {
+    agents: [Agent!]!
+    total: Int!
+    hasMore: Boolean!
+  }
+
   type AccessCode {
     address: String!
     accessCode: String!
@@ -42,17 +62,21 @@ export const graphQLSchemaString = `
       orderBy: String
       orderDirection: String
     ): [Agent!]!
-    
+
     agent(chainId: Int!, agentId: String!): Agent
-    
+
+    agentByName(agentName: String!): Agent
+
     agentsByChain(chainId: Int!, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
-    
+
     agentsByOwner(agentOwner: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
-    
+
     searchAgents(query: String!, chainId: Int, limit: Int, offset: Int, orderBy: String, orderDirection: String): [Agent!]!
-    
+
+    searchAgentsAdvanced(params: AgentSearchParams!): AgentSearchResult!
+
     getAccessCode(address: String!): AccessCode
-    
+
     countAgents(
       chainId: Int
       agentId: String

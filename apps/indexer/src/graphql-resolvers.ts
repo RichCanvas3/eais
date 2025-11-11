@@ -122,6 +122,64 @@ function buildWhereClause(filters: {
 }
 
 /**
+ * Helper function to build WHERE clause for advanced search
+ */
+function buildAdvancedWhereClause(filters: {
+  query?: string;
+  chainId?: number;
+  agentOwner?: string;
+  agentName?: string;
+  type?: string;
+  hasA2aEndpoint?: boolean;
+  hasEnsEndpoint?: boolean;
+}): { where: string; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  // Text search across multiple fields
+  if (filters.query) {
+    const searchPattern = `%${filters.query}%`;
+    conditions.push(`(agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)`);
+    params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+  }
+
+  if (filters.chainId !== undefined) {
+    conditions.push(`chainId = ?`);
+    params.push(filters.chainId);
+  }
+
+  if (filters.agentOwner) {
+    conditions.push(`agentOwner = ?`);
+    params.push(filters.agentOwner);
+  }
+
+  if (filters.agentName) {
+    conditions.push(`agentName LIKE ?`);
+    params.push(`%${filters.agentName}%`);
+  }
+
+  if (filters.type) {
+    conditions.push(`type = ?`);
+    params.push(filters.type);
+  }
+
+  if (filters.hasA2aEndpoint === true) {
+    conditions.push(`a2aEndpoint IS NOT NULL AND a2aEndpoint != ''`);
+  } else if (filters.hasA2aEndpoint === false) {
+    conditions.push(`(a2aEndpoint IS NULL OR a2aEndpoint = '')`);
+  }
+
+  if (filters.hasEnsEndpoint === true) {
+    conditions.push(`ensEndpoint IS NOT NULL AND ensEndpoint != ''`);
+  } else if (filters.hasEnsEndpoint === false) {
+    conditions.push(`(ensEndpoint IS NULL OR ensEndpoint = '')`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { where, params };
+}
+
+/**
  * Helper function to build ORDER BY clause
  */
 function buildOrderByClause(orderBy?: string, orderDirection?: string): string {
@@ -179,6 +237,24 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
       }
     },
 
+    agentByName: async (args: { agentName: string }) => {
+      try {
+        console.log('🔍 agentByName resolver:', args);
+        const normalizedName = args.agentName?.trim();
+        if (!normalizedName) {
+          return null;
+        }
+        const lowerName = normalizedName.toLowerCase();
+        console.log('🔍 lowerName:', lowerName);
+        const result = await executeQuerySingle(db, 'SELECT * FROM agents WHERE LOWER(agentName) = ? LIMIT 1', [lowerName]);
+        console.log('🔍 result:', JSON.stringify(result, null, 2)); 
+        return result;
+      } catch (error) {
+        console.error('❌ Error in agentByName resolver:', error);
+        throw error;
+      }
+    },
+
     agentsByChain: async (args: { chainId: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
       try {
         const { chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
@@ -217,25 +293,78 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
       try {
         const { query: searchQuery, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
         const searchPattern = `%${searchQuery}%`;
-        
+
         let sqlQuery = `
-          SELECT * FROM agents 
+          SELECT * FROM agents
           WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)
         `;
         const params: any[] = [searchPattern, searchPattern, searchPattern, searchPattern];
-        
+
         if (chainId !== undefined) {
           sqlQuery += ' AND chainId = ?';
           params.push(chainId);
         }
-        
+
         const orderByClause = buildOrderByClause(orderBy, orderDirection);
         sqlQuery += ` ${orderByClause} LIMIT ? OFFSET ?`;
         params.push(limit, offset);
-        
+
         return await executeQuery(db, sqlQuery, params);
       } catch (error) {
         console.error('❌ Error in searchAgents resolver:', error);
+        throw error;
+      }
+    },
+
+    searchAgentsAdvanced: async (args: { params: any }) => {
+      try {
+        const {
+          query,
+          chainId,
+          agentOwner,
+          agentName,
+          type,
+          hasA2aEndpoint,
+          hasEnsEndpoint,
+          limit = 20,
+          offset = 0,
+          orderBy,
+          orderDirection
+        } = args.params;
+
+        const filters = {
+          query,
+          chainId,
+          agentOwner,
+          agentName,
+          type,
+          hasA2aEndpoint,
+          hasEnsEndpoint
+        };
+
+        const { where, params } = buildAdvancedWhereClause(filters);
+        const orderByClause = buildOrderByClause(orderBy, orderDirection);
+
+        // Get agents with pagination
+        const agentsQuery = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
+        const agentsParams = [...params, limit, offset];
+        const agents = await executeQuery(db, agentsQuery, agentsParams);
+
+        // Get total count for pagination info
+        const countQuery = `SELECT COUNT(*) as count FROM agents ${where}`;
+        const countResult = await executeQuerySingle(db, countQuery, params);
+        const total = (countResult as any)?.count || 0;
+
+        // Calculate hasMore
+        const hasMore = (offset + limit) < total;
+
+        return {
+          agents,
+          total,
+          hasMore
+        };
+      } catch (error) {
+        console.error('❌ Error in searchAgentsAdvanced resolver:', error);
         throw error;
       }
     },

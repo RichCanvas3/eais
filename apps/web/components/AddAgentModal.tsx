@@ -701,7 +701,7 @@ export function AddAgentModal({ open, onClose, onAgentIndexed }: Props) {
         const { agentId, account } = await correctENSClient.getAgentIdentityByName(agentName.trim());
         if (account) {
           const agentAccountClient = await toMetaMaskSmartAccount({
-            address: account as `0x${string}`,
+            address:  as `0x${string}`,
             client: publicClient,
             implementation: Implementation.Hybrid,
             signatory: { walletClient },
