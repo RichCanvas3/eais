@@ -7,10 +7,16 @@ import { buildSchema, GraphQLSchema } from 'graphql';
 export const graphQLSchemaString = `
   type Agent {
     chainId: Int!
+
     agentId: String!
-    agentAddress: String!
-    agentOwner: String!
+    agentAccount: String!
     agentName: String!
+
+    didIdentity: String!
+    didAccount: String!
+    didName: String
+
+    agentOwner: String!
     metadataURI: String
     createdAtBlock: Int!
     createdAtTime: Int!

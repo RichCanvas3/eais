@@ -1,0 +1,118 @@
+# GraphQL query to test all Agent fields including new DID fields
+# Run this against your GraphQL endpoint (e.g., http://localhost:4000/graphql or your Cloudflare Worker URL)
+
+query GetAllAgentFields {
+  agents(limit: 5, offset: 0, orderBy: "createdAtTime", orderDirection: "DESC") {
+    # Core identification fields
+    chainId
+    agentId
+    agentAccount
+    agentName
+    agentOwner
+    
+    # New DID fields
+    didIdentity
+    didAccount
+    didName
+    
+    # Metadata fields
+    metadataURI
+    description
+    image
+    type
+    
+    # Endpoint fields
+    a2aEndpoint
+    ensEndpoint
+    agentAccountEndpoint
+    
+    # Trust and capabilities
+    supportedTrust
+    did
+    mcp
+    x402support
+    active
+    
+    # Timestamps
+    createdAtBlock
+    createdAtTime
+    updatedAtTime
+    
+    # Raw data
+    rawJson
+  }
+}
+
+# Alternative: Get a single agent by ID and chainId
+query GetSingleAgent {
+  agent(chainId: 11155111, agentId: "1") {
+    chainId
+    agentId
+    agentAccount
+    agentName
+    agentOwner
+    didIdentity
+    didAccount
+    didName
+    metadataURI
+    description
+    image
+    type
+    a2aEndpoint
+    ensEndpoint
+    agentAccountEndpoint
+    supportedTrust
+    did
+    mcp
+    x402support
+    active
+    createdAtBlock
+    createdAtTime
+    updatedAtTime
+    rawJson
+  }
+}
+
+# Alternative: Search agents with Graph-style query
+query SearchAgentsGraph {
+  searchAgentsGraph(
+    where: {
+      chainId: 11155111
+    }
+    first: 5
+    skip: 0
+    orderBy: agentId
+    orderDirection: DESC
+  ) {
+    total
+    hasMore
+    agents {
+      chainId
+      agentId
+      agentAccount
+      agentName
+      agentOwner
+      didIdentity
+      didAccount
+      didName
+      metadataURI
+      description
+      image
+      type
+      a2aEndpoint
+      ensEndpoint
+      agentAccountEndpoint
+      supportedTrust
+      did
+      mcp
+      x402support
+      active
+      createdAtBlock
+      createdAtTime
+      updatedAtTime
+      rawJson
+    }
+  }
+}
+
+

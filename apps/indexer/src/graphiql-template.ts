@@ -124,12 +124,31 @@ export const graphiqlHTML = `<!DOCTYPE html>
       
       // Set default query value
       const defaultQueryValue = \`query {
-  agentsByChain(chainId: 11155111, limit: 10, orderBy: "agentId", orderDirection: "desc") {
+  agents(limit: 5, offset: 0, orderBy: "createdAtTime", orderDirection: "DESC") {
+    chainId
     agentId
+    agentAccount
     agentName
-    agentAddress
+    agentOwner
+    didIdentity
+    didAccount
+    didName
+    metadataURI
     description
+    image
+    type
     a2aEndpoint
+    ensEndpoint
+    agentAccountEndpoint
+    supportedTrust
+    did
+    mcp
+    x402support
+    active
+    createdAtBlock
+    createdAtTime
+    updatedAtTime
+    rawJson
   }
 }\`;
       

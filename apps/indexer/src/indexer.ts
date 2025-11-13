@@ -265,7 +265,8 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
   console.info("............upsertFromTransfer: tokenURI: ", tokenURI)
   const agentId = toDecString(tokenId);
   const ownerAddress = to;
-  const agentAddress = to; // mirror owner for now
+  const agentAccount = to; // mirror owner for now
+  const agentAddress = to; // keep for backward compatibility
   let agentName = ""; // not modeled in ERC-721; leave empty
 
   console.info(".... ownerAddress", ownerAddress)
@@ -329,25 +330,39 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
     console.info("............insert into table: chainId: ", chainId)
     console.info("............insert into table: block: ", blockNumber)
     const currentTime = Math.floor(Date.now() / 1000);
+    
+    // Compute DID values
+    const didIdentity = `did:8004:${chainId}:${agentId}`;
+    const didAccount = agentAccount ? `did:ethr:${chainId}:${agentAccount}` : '';
+    const didName = agentName && agentName.endsWith('.eth') ? `did:ens:${chainId}:${agentName}` : null;
+    
     await dbInstance.prepare(`
-      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents(chainId, agentId, agentAddress, agentAccount, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime, didIdentity, didAccount, didName)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(chainId, agentId) DO UPDATE SET
         agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
+        agentAccount=CASE WHEN excluded.agentAccount IS NOT NULL AND excluded.agentAccount != '0x0000000000000000000000000000000000000000' THEN excluded.agentAccount ELSE COALESCE(agentAccount, agentAddress) END,
         agentOwner=excluded.agentOwner,
         agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
         a2aEndpoint=COALESCE(excluded.a2aEndpoint, a2aEndpoint),
-        metadataURI=COALESCE(excluded.metadataURI, metadataURI)
+        metadataURI=COALESCE(excluded.metadataURI, metadataURI),
+        didIdentity=COALESCE(excluded.didIdentity, didIdentity),
+        didAccount=COALESCE(excluded.didAccount, didAccount),
+        didName=COALESCE(excluded.didName, didName)
     `).run(
       chainId,
       agentId,
-      agentAddress,
+      agentAddress, // keep for backward compatibility
+      agentAccount,
       ownerAddress,
       agentName,
       tokenURI,
       a2aEndpoint,
       Number(blockNumber),
-      currentTime
+      currentTime,
+      didIdentity,
+      didAccount,
+      didName
     );
 
 
@@ -378,7 +393,7 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
         }
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
         console.info("............update into table: agentId: ", agentId)
-        console.info("............update into table: agentAddress: ", agentAddress)
+        console.info("............update into table: agentAccount: ", agentAccount)
         console.info("............update into table: type: ", type)
         console.info("............update into table: name: ", name)
         console.info("............update into table: description: ", desc)
@@ -386,6 +401,12 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
         console.info("............update into table: a2aEndpoint: ", a2aEndpoint)
         console.info("............update into table: ensEndpoint: ", ensEndpoint)
         const updateTime = Math.floor(Date.now() / 1000);
+        
+        // Compute DID values
+        const didIdentity = `did:8004:${chainId}:${agentId}`;
+        const didAccountValue = agentAccount ? `did:ethr:${chainId}:${agentAccount}` : '';
+        const didNameValue = name && name.endsWith('.eth') ? `did:ens:${chainId}:${name}` : null;
+        
         await dbInstance.prepare(`
           UPDATE agents SET
             type = COALESCE(type, ?),
@@ -398,6 +419,12 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
                    AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
               THEN ?
               ELSE agentAddress
+            END,
+            agentAccount = CASE
+              WHEN (agentAccount IS NULL OR agentAccount = '0x0000000000000000000000000000000000000000')
+                   AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
+              THEN ?
+              ELSE COALESCE(agentAccount, agentAddress)
             END,
             description = CASE 
               WHEN ? IS NOT NULL AND ? != '' THEN ? 
@@ -417,19 +444,26 @@ export async function upsertFromTransfer(to: string, tokenId: bigint, blockNumbe
             END,
             agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
             supportedTrust = COALESCE(?, supportedTrust),
+            didIdentity = COALESCE(?, didIdentity),
+            didAccount = COALESCE(?, didAccount),
+            didName = COALESCE(?, didName),
             rawJson = COALESCE(?, rawJson),
             updatedAtTime = ?
           WHERE chainId = ? AND agentId = ?
         `).run(
           type,
           name, name, name,
-          agentAddress, agentAddress, agentAddress,
+          agentAddress, agentAddress, agentAddress, // keep for backward compatibility
+          agentAccount, agentAccount, agentAccount,
           desc, desc, desc,
           img, img, img,
           a2aEndpoint, a2aEndpoint, a2aEndpoint,
           ensEndpoint, ensEndpoint, ensEndpoint,
           agentAccountEndpoint,
           JSON.stringify(supportedTrust),
+          didIdentity,
+          didAccountValue,
+          didNameValue,
           JSON.stringify(meta),
           updateTime,
           chainId,
@@ -474,7 +508,8 @@ export async function upsertFromTokenGraph(item: any, chainId: number) {
   if (tokenId <= 0n) return;
   const agentId = toDecString(tokenId);
   const ownerAddress = parseCaip10Address(item?.agentAccount) || '0x0000000000000000000000000000000000000000';
-  const agentAddress = ownerAddress;
+  const agentAccount = ownerAddress;
+  const agentAddress = ownerAddress; // keep for backward compatibility
   let agentName = typeof item?.agentName === 'string' ? item.agentName : '';
   const metadataURI = typeof item?.uri === 'string' ? item.uri : null;
 
@@ -516,18 +551,29 @@ export async function upsertFromTokenGraph(item: any, chainId: number) {
 
   console.info("@@@@@@@@@@@@@@@@@@@ upsertFromTokenGraph 1: agentName: ", agentId, agentName)
   const currentTime = Math.floor(Date.now() / 1000);
+  
+  // Compute DID values
+  const didIdentity = `did:8004:${chainId}:${agentId}`;
+  const didAccount = agentAccount ? `did:ethr:${chainId}:${agentAccount}` : '';
+  const didName = agentName && agentName.endsWith('.eth') ? `did:ens:${chainId}:${agentName}` : null;
+  
   await db.prepare(`
-    INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents(chainId, agentId, agentAddress, agentAccount, agentOwner, agentName, metadataURI, createdAtBlock, createdAtTime, didIdentity, didAccount, didName)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chainId, agentId) DO UPDATE SET
       agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
+      agentAccount=CASE WHEN excluded.agentAccount IS NOT NULL AND excluded.agentAccount != '0x0000000000000000000000000000000000000000' THEN excluded.agentAccount ELSE COALESCE(agentAccount, agentAddress) END,
       agentOwner=excluded.agentOwner,
       agentName=CASE WHEN excluded.agentName IS NOT NULL AND length(excluded.agentName) > 0 THEN excluded.agentName ELSE agentName END,
-      metadataURI=COALESCE(excluded.metadataURI, metadataURI)
+      metadataURI=COALESCE(excluded.metadataURI, metadataURI),
+      didIdentity=COALESCE(excluded.didIdentity, didIdentity),
+      didAccount=COALESCE(excluded.didAccount, didAccount),
+      didName=COALESCE(excluded.didName, didName)
   `).run(
     chainId,
     agentId,
-    agentAddress,
+    agentAddress, // keep for backward compatibility
+    agentAccount,
     ownerAddress,
     agentName,
     metadataURI,

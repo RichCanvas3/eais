@@ -363,9 +363,10 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0, orderBy, orderDirection } = args;
         const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
         const orderByClause = buildOrderByClause(orderBy, orderDirection);
-        const query = `SELECT * FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
+        const query = `SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
         const allParams = [...params, limit, offset];
-        return await executeQuery(db, query, allParams);
+        const results = await executeQuery(db, query, allParams);
+        return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in agents resolver:', error);
         throw error;
@@ -385,9 +386,10 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         const { where: whereSql, params } = buildGraphWhereClause(where);
         const orderByClause = buildOrderByClause(orderBy, orderDirection);
 
-        const agentsQuery = `SELECT * FROM agents ${whereSql} ${orderByClause} LIMIT ? OFFSET ?`;
+        const agentsQuery = `SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents ${whereSql} ${orderByClause} LIMIT ? OFFSET ?`;
         const agentsParams = [...params, first, skip];
-        const agents = await executeQuery(db, agentsQuery, agentsParams);
+        const agentsRaw = await executeQuery(db, agentsQuery, agentsParams);
+        const agents = enrichAgentRecords(agentsRaw);
 
         const countQuery = `SELECT COUNT(*) as count FROM agents ${whereSql}`;
         const countResult = await executeQuerySingle(db, countQuery, params);
@@ -404,7 +406,8 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
     agent: async (args: { chainId: number; agentId: string }) => {
       try {
         const { chainId, agentId } = args;
-        return await executeQuerySingle(db, 'SELECT * FROM agents WHERE chainId = ? AND agentId = ?', [chainId, agentId]);
+        const result = await executeQuerySingle(db, 'SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents WHERE chainId = ? AND agentId = ?', [chainId, agentId]);
+        return enrichAgentRecord(result);
       } catch (error) {
         console.error('❌ Error in agent resolver:', error);
         throw error;
@@ -420,9 +423,9 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         }
         const lowerName = normalizedName.toLowerCase();
         console.log('🔍 lowerName:', lowerName);
-        const result = await executeQuerySingle(db, 'SELECT * FROM agents WHERE LOWER(agentName) = ? LIMIT 1', [lowerName]);
+        const result = await executeQuerySingle(db, 'SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents WHERE LOWER(agentName) = ? LIMIT 1', [lowerName]);
         console.log('🔍 result:', JSON.stringify(result, null, 2)); 
-        return result;
+        return enrichAgentRecord(result);
       } catch (error) {
         console.error('❌ Error in agentByName resolver:', error);
         throw error;
@@ -433,8 +436,9 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
       try {
         const { chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
         const orderByClause = buildOrderByClause(orderBy, orderDirection);
-        const query = `SELECT * FROM agents WHERE chainId = ? ${orderByClause} LIMIT ? OFFSET ?`;
-        return await executeQuery(db, query, [chainId, limit, offset]);
+        const query = `SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents WHERE chainId = ? ${orderByClause} LIMIT ? OFFSET ?`;
+        const results = await executeQuery(db, query, [chainId, limit, offset]);
+        return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in agentsByChain resolver:', error);
         throw error;
@@ -444,7 +448,7 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
     agentsByOwner: async (args: { agentOwner: string; chainId?: number; limit?: number; offset?: number; orderBy?: string; orderDirection?: string }) => {
       try {
         const { agentOwner, chainId, limit = 100, offset = 0, orderBy, orderDirection } = args;
-        let query = 'SELECT * FROM agents WHERE agentOwner = ?';
+        let query = 'SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents WHERE agentOwner = ?';
         const params: any[] = [agentOwner];
         
         if (chainId !== undefined) {
@@ -456,7 +460,8 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         query += ` ${orderByClause} LIMIT ? OFFSET ?`;
         params.push(limit, offset);
         
-        return await executeQuery(db, query, params);
+        const results = await executeQuery(db, query, params);
+        return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in agentsByOwner resolver:', error);
         throw error;
@@ -469,8 +474,8 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         const searchPattern = `%${searchQuery}%`;
 
         let sqlQuery = `
-          SELECT * FROM agents
-          WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR agentAddress LIKE ?)
+          SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents
+          WHERE (agentName LIKE ? OR description LIKE ? OR agentId LIKE ? OR COALESCE(agentAccount, agentAddress) LIKE ?)
         `;
         const params: any[] = [searchPattern, searchPattern, searchPattern, searchPattern];
 
@@ -483,7 +488,8 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         sqlQuery += ` ${orderByClause} LIMIT ? OFFSET ?`;
         params.push(limit, offset);
 
-        return await executeQuery(db, sqlQuery, params);
+        const results = await executeQuery(db, sqlQuery, params);
+        return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in searchAgents resolver:', error);
         throw error;
@@ -562,6 +568,51 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
     // indexAgent will be added by the specific implementation (graphql.ts or worker-db.ts)
     // because it needs environment-specific logic
   };
+}
+
+/**
+ * Compute DID values for an agent record
+ */
+function computeDIDValues(agent: any): { didIdentity: string; didAccount: string; didName: string | null } {
+  const chainId = agent.chainId;
+  const agentId = agent.agentId;
+  const agentAccount = agent.agentAccount || agent.agentAddress; // Support both during migration
+  const agentName = agent.agentName;
+
+  const didIdentity = `did:8004:${chainId}:${agentId}`;
+  const didAccount = agentAccount ? `did:ethr:${chainId}:${agentAccount}` : '';
+  const didName = agentName && agentName.endsWith('.eth') ? `did:ens:${chainId}:${agentName}` : null;
+
+  return { didIdentity, didAccount, didName };
+}
+
+/**
+ * Enrich agent records with computed DID values and ensure agentAccount field
+ */
+function enrichAgentRecord(agent: any): any {
+  if (!agent) return agent;
+
+  // Ensure agentAccount exists (use agentAddress as fallback during migration)
+  if (!agent.agentAccount && agent.agentAddress) {
+    agent.agentAccount = agent.agentAddress;
+  }
+
+  // Compute DID values if not already present
+  if (!agent.didIdentity || !agent.didAccount) {
+    const dids = computeDIDValues(agent);
+    agent.didIdentity = agent.didIdentity || dids.didIdentity;
+    agent.didAccount = agent.didAccount || dids.didAccount;
+    agent.didName = agent.didName || dids.didName;
+  }
+
+  return agent;
+}
+
+/**
+ * Enrich an array of agent records
+ */
+function enrichAgentRecords(agents: any[]): any[] {
+  return agents.map(enrichAgentRecord);
 }
 
 /**

@@ -230,7 +230,7 @@ export async function processAgentDirectly(
   db: any
 ) {
   const agentId = tokenId.toString();
-  const agentAddress = ownerAddress;
+  const agentAccount = ownerAddress;
   let agentName = '';
 
   // Fetch metadata from tokenURI using improved parser
@@ -270,27 +270,40 @@ export async function processAgentDirectly(
   if (ownerAddress !== '0x000000000000000000000000000000000000dEaD') {
     const currentTime = Math.floor(Date.now() / 1000);
     
+    // Compute DID values
+    const didIdentity = `did:8004:${chainId}:${agentId}`;
+    const didAccount = agentAccount ? `did:ethr:${chainId}:${agentAccount}` : '';
+    const didName = agentName && agentName.endsWith('.eth') ? `did:ens:${chainId}:${agentName}` : null;
+    
     // Insert or update agent
-    console.log('********************* process-agent: inserting or updating agent: ', agentId, agentAddress, ownerAddress, agentName, tokenURI, a2aEndpoint, blockNumber, currentTime);
+    console.log('********************* process-agent: inserting or updating agent: ', agentId, agentAccount, ownerAddress, agentName, tokenURI, a2aEndpoint, blockNumber, currentTime);
     await executeUpdate(db, `
-      INSERT INTO agents(chainId, agentId, agentAddress, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents(chainId, agentId, agentAddress, agentAccount, agentOwner, agentName, metadataURI, a2aEndpoint, createdAtBlock, createdAtTime, didIdentity, didAccount, didName)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(chainId, agentId) DO UPDATE SET
         agentAddress=CASE WHEN excluded.agentAddress IS NOT NULL AND excluded.agentAddress != '0x0000000000000000000000000000000000000000' THEN excluded.agentAddress ELSE agentAddress END,
+        agentAccount=CASE WHEN excluded.agentAccount IS NOT NULL AND excluded.agentAccount != '0x0000000000000000000000000000000000000000' THEN excluded.agentAccount ELSE COALESCE(agentAccount, agentAddress) END,
         agentOwner=excluded.agentOwner,
         agentName=COALESCE(NULLIF(TRIM(excluded.agentName), ''), agentName),
         a2aEndpoint=COALESCE(excluded.a2aEndpoint, a2aEndpoint),
-        metadataURI=COALESCE(excluded.metadataURI, metadataURI)
+        metadataURI=COALESCE(excluded.metadataURI, metadataURI),
+        didIdentity=COALESCE(excluded.didIdentity, didIdentity),
+        didAccount=COALESCE(excluded.didAccount, didAccount),
+        didName=COALESCE(excluded.didName, didName)
     `, [
       chainId,
       agentId,
-      agentAddress,
+      agentAccount, // Keep agentAddress for backward compatibility
+      agentAccount,
       ownerAddress,
       agentName,
       tokenURI,
       a2aEndpoint,
       Number(blockNumber),
       currentTime,
+      didIdentity,
+      didAccount,
+      didName,
     ]);
 
     // Update metadata fields if available
@@ -311,7 +324,7 @@ export async function processAgentDirectly(
         const ensEndpoint = findEndpoint('ENS');
         let agentAccountEndpoint = findEndpoint('agentAccount');
         if (!agentAccountEndpoint || !/^eip155:/i.test(agentAccountEndpoint)) {
-          agentAccountEndpoint = `eip155:${chainId}:${ownerAddress}`;
+          agentAccountEndpoint = `eip155:${chainId}:${agentAccount}`;
         }
         const supportedTrust = Array.isArray(meta.supportedTrust) ? meta.supportedTrust.map(String) : [];
         const did = typeof meta.did === 'string' ? meta.did : null;
@@ -325,6 +338,11 @@ export async function processAgentDirectly(
         const mcpResources = Array.isArray(meta.mcpResources) ? meta.mcpResources : [];
         const updateTime = Math.floor(Date.now() / 1000);
         
+        // Compute DID values
+        const didIdentity = `did:8004:${chainId}:${agentId}`;
+        const didAccountValue = agentAccount ? `did:ethr:${chainId}:${agentAccount}` : '';
+        const didNameValue = name && name.endsWith('.eth') ? `did:ens:${chainId}:${name}` : null;
+        
         await executeUpdate(db, `
           UPDATE agents SET
             type = COALESCE(type, ?),
@@ -337,6 +355,12 @@ export async function processAgentDirectly(
                    AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
               THEN ?
               ELSE agentAddress
+            END,
+            agentAccount = CASE
+              WHEN (agentAccount IS NULL OR agentAccount = '0x0000000000000000000000000000000000000000')
+                   AND (? IS NOT NULL AND ? != '0x0000000000000000000000000000000000000000')
+              THEN ?
+              ELSE COALESCE(agentAccount, agentAddress)
             END,
             description = CASE 
               WHEN ? IS NOT NULL AND ? != '' THEN ? 
@@ -357,6 +381,9 @@ export async function processAgentDirectly(
             agentAccountEndpoint = COALESCE(?, agentAccountEndpoint),
             supportedTrust = COALESCE(?, supportedTrust),
             did = COALESCE(?, did),
+            didIdentity = COALESCE(?, didIdentity),
+            didAccount = COALESCE(?, didAccount),
+            didName = COALESCE(?, didName),
             mcp = COALESCE(?, mcp),
             x402support = COALESCE(?, x402support),
             active = COALESCE(?, active),
@@ -366,7 +393,8 @@ export async function processAgentDirectly(
         `, [
           type,
           name, name, name,
-          agentAddress, agentAddress, agentAddress,
+          agentAccount, agentAccount, agentAccount, // Keep agentAddress for backward compatibility
+          agentAccount, agentAccount, agentAccount,
           desc, desc, desc,
           img, img, img,
           a2aEp, a2aEp, a2aEp,
@@ -374,6 +402,9 @@ export async function processAgentDirectly(
           agentAccountEndpoint,
           JSON.stringify(supportedTrust),
           did,
+          didIdentity,
+          didAccountValue,
+          didNameValue,
           mcp ? 1 : 0,
           x402support ? 1 : 0,
           active ? 1 : 0,

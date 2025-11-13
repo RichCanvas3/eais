@@ -68,7 +68,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [address, setAddress] = React.useState("");
 	const [agentId, setAgentId] = React.useState("");
 	const [isLoading, setIsLoading] = React.useState(false);
-	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number }>({ rows: [], total: 0, page: 1, pageSize: 5 });
+	const [data, setData] = React.useState<{ rows: Agent[]; total: number; page: number; pageSize: number }>({ rows: [], total: 0, page: 1, pageSize: 20 });
 	const [mineOnly, setMineOnly] = React.useState(false);
 	const [selectedChainIdFilter, setSelectedChainIdFilter] = React.useState<number | null>(null);
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
@@ -385,12 +385,27 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			const agentIdentityClient = agentIdentityClients[chainIdHex] || null;
 			if (!agentIdentityClient) throw new Error(`Identity client unavailable for chain ${identityCurrentAgent.chainId}`);
 
-			console.log('********************* updateIdentityRegistration: agentId', identityCurrentAgent.agentId);
-			const agentName = await agentIdentityClient.getAgentName(BigInt(identityCurrentAgent.agentId));
-			console.log('********************* updateIdentityRegistration: agentName', agentName);
+			const agentDetails = await fetchAgentDetails(identityCurrentAgent.agentId, identityCurrentAgent.chainId);
+			const agentName = agentDetails?.agentName || null;
 			if (!agentName) throw new Error('Agent ENS name not found');
+
+			console.log('********************* updateIdentityRegistration: agentId', identityCurrentAgent.agentId);
+			console.log('********************* updateIdentityRegistration: agentName', agentName);
+
 			// Validate current EOA is the owner/signatory of the agent account
-			const accountOwner = await agentIdentityClient.getAgentEoaByAgentAccount(identityCurrentAgent.agentAddress as `0x${string}`);
+			let accountOwner: string | null = null;
+			const addressDetails = await fetchAgentByAddress(identityCurrentAgent.agentAddress, identityCurrentAgent.chainId);
+			if (addressDetails?.agentOwner) {
+				accountOwner = addressDetails.agentOwner;
+			} else {
+				try {
+					accountOwner = await agentIdentityClient.getAgentEoaByAgentAccount(
+						identityCurrentAgent.agentAddress as `0x${string}`
+					);
+				} catch (error) {
+					console.warn('Failed to resolve account owner from identity client:', error);
+				}
+			}
 			if (!eoa || !accountOwner || accountOwner.toLowerCase() !== eoa.toLowerCase()) {
 				console.log('********************* updateIdentityRegistration: accountOwner', accountOwner, eoa);
 				throw new Error('Connected wallet is not the owner of this agent account');
@@ -493,19 +508,31 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				tokenUri = row.metadataURI;
 				console.info("+++++++++++++++++++ openAgentInfo: using tokenUri from row", tokenUri);
 			}
+
+			const agentDetails = await fetchAgentDetails(agentId, chainId);
+			console.info("+++++++++++++++++++ openAgentInfo: agentDetails", agentDetails);
+			if (agentDetails) {
+				if (!name && typeof agentDetails.agentName === 'string' && agentDetails.agentName.trim().length > 0) {
+					name = agentDetails.agentName;
+				}
+				if (!account && typeof agentDetails.agentAddress === 'string') {
+					account = agentDetails.agentAddress;
+				}
+				if (!tokenUri) {
+					tokenUri = agentDetails.metadataURI || null;
+				}
+			}
 			
 			try {
-				console.info("++++++++++++++++++++++++ openAgentInfo: get agent name from agentIdentityClient for chain", chainId, "chainIdHex", chainIdHex);
+				console.info("++++++++++++++++++++++++ openAgentInfo: fetching supplemental agent info for chain", chainId, "chainIdHex", chainIdHex);
 				// client is guaranteed to exist here due to check above
 				console.info(`openAgentInfo: Fetching agent account for agentId ${agentIdNum} on chain ${chainId} (${chainIdHex})`);
 				
-				// Only fetch from chain if we don't have it from the row
-				if (!name) {
-					name = await client.getAgentName(agentIdNum);
+				if (!account) {
+					account = await client.getAgentAccount(agentIdNum);
 				}
-				account = await client.getAgentAccount(agentIdNum);
 				
-				// Fetch token URI from chain if not available from database
+				// Fetch token URI from chain if not available from database or REST endpoint
 				if (!tokenUri) {
 					try {
 						tokenUri = await (client as any).getTokenURI(agentIdNum);
@@ -516,7 +543,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				}
 			} catch (e: any) {
 				console.warn("Failed to get agent info from identity client:", e);
-				// If we have the agent name from the database, we can still show that
+				// If we have the agent name from the database or REST response, we can still show that
 				if (!name && row.agentName) {
 					name = row.agentName;
 				}
@@ -588,6 +615,45 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		}
 	};
 
+	const fetchAgentDetails = React.useCallback(
+		async (agentId: string, chainId?: number | null) => {
+			try {
+				if (!agentId) return null;
+				const query = typeof chainId === 'number' && Number.isFinite(chainId) ? `?chainId=${chainId}` : '';
+				const res = await fetch(`/api/agents/${agentId}${query}`);
+				if (!res.ok) {
+					return null;
+				}
+				const data = await res.json();
+				return data;
+			} catch (error) {
+				console.warn('Failed to fetch agent details:', error);
+				return null;
+			}
+		},
+		[]
+	);
+
+	const fetchAgentByAddress = React.useCallback(
+		async (address: string, chainId?: number | null) => {
+			try {
+				if (!address) return null;
+				const normalized = getAddress(address);
+				const query = typeof chainId === 'number' && Number.isFinite(chainId) ? `?chainId=${chainId}` : '';
+				const res = await fetch(`/api/agents/by-address/${normalized}${query}`);
+				if (!res.ok) {
+					return null;
+				}
+				const data = await res.json();
+				return data;
+			} catch (error) {
+				console.warn('Failed to fetch agent by address:', error);
+				return null;
+			}
+		},
+		[]
+	);
+
 	// Function to fetch agent URL from ENS (uses refs to prevent loops)
 	const fetchAgentUrl = React.useCallback(async (agentName: string) => {
 		try {
@@ -656,7 +722,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
                       
                       // Fetch name if database has null/empty name
                       if (!row.agentName || row.agentName.trim() === '') {
-							const name = await agentIdentityClient.getAgentName(agentIdNum);
+							const details = await fetchAgentDetails(row.agentId, row.chainId);
+							const name = details?.agentName || details?.name || null;
                           if (name) {
                               setMetadataNames(prev => ({ ...prev, [row.agentId]: name }));
                               const isENS = name.endsWith('.eth');
@@ -1026,12 +1093,15 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			if (idFilter) url.searchParams.set("id", idFilter);
 			if (chainIdFilter) url.searchParams.set("chainId", String(chainIdFilter));
         url.searchParams.set("page", String(page));
-        url.searchParams.set("pageSize", "5");
+        url.searchParams.set("pageSize", "20");
+        // Default ordering: newest agents first by agentId descending
+        url.searchParams.set("orderBy", "agentId");
+        url.searchParams.set("orderDirection", "DESC");
 		try {
 
 				const res = await fetch(url);
                 if (!res.ok) {
-                    setData({ page: page, pageSize: 5, total: 0, rows: [] });
+                    setData({ page: page, pageSize: 20, total: 0, rows: [] });
 					return;
 				}
 				const text = await res.text();
@@ -1041,10 +1111,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				}
 				
 				// Ensure the response has the correct structure
-                const responseData = json ?? { page, pageSize: 5, total: 0, rows: [] };
+                const responseData = json ?? { page, pageSize: 20, total: 0, rows: [] };
                 setData({
                     page: responseData.page ?? page,
-                    pageSize: responseData.pageSize ?? 5,
+                    pageSize: responseData.pageSize ?? 20,
                     total: responseData.total ?? 0,
                     rows: Array.isArray(responseData.rows) ? responseData.rows : []
                 });

@@ -60,11 +60,23 @@ export async function GET(request: NextRequest) {
       orderDirectionRaw === 'ASC' || orderDirectionRaw === 'DESC' ? (orderDirectionRaw as 'ASC' | 'DESC') : 'DESC';
 
     const mergedParams: DiscoverParams = { ...(params || {}) };
-    if (name) mergedParams.name = name;
+    // DiscoverParams in newer @agentic-trust/core uses agentName / agentAccount
+    if (name) {
+      // Prefer agentName for indexed name-based discovery
+      (mergedParams as any).agentName = name;
+    }
+    if (id) {
+      // Hint advanced discovery/indexer to treat this as an agentId filter
+      (mergedParams as any).agentId = id;
+    }
     if (address) {
-      mergedParams.owners = Array.isArray(mergedParams.owners)
-        ? Array.from(new Set([...mergedParams.owners, address]))
-        : [address];
+      // Prefer agentAccount for address-based discovery; keep owners if still supported
+      (mergedParams as any).agentAccount = address;
+      if (Array.isArray((mergedParams as any).owners)) {
+        (mergedParams as any).owners = Array.from(
+          new Set([...(mergedParams as any).owners, address])
+        );
+      }
     }
     if (chainIdNum != null) {
       mergedParams.chains = Array.isArray(mergedParams.chains)
@@ -72,6 +84,7 @@ export async function GET(request: NextRequest) {
         : [chainIdNum];
     }
 
+    console.log('>>>>>>>>>>>>>>>>>>>>> mergedParams', mergedParams);
     const response = await discoverAgents(
       {
         page,
@@ -83,6 +96,24 @@ export async function GET(request: NextRequest) {
       } satisfies DiscoverRequest,
       getAdminClient
     );
+    console.log('>>>>>>>>>>>>>>>>>>>>>>> response', response);
+
+    // Ensure default unfiltered listing is ordered by newest agentId first
+    const hasFilters =
+      !!(id && id.length > 0) ||
+      !!(name && name.length > 0) ||
+      !!(address && String(address).length > 0) ||
+      chainIdNum != null ||
+      !!(query && query.length > 0) ||
+      (params && Object.keys(params).length > 0);
+
+    if (!hasFilters && Array.isArray(response.agents)) {
+      response.agents.sort((a, b) => {
+        const idA = Number(a.agentId) || 0;
+        const idB = Number(b.agentId) || 0;
+        return idB - idA;
+      });
+    }
 
     return NextResponse.json(mapAgentsResponse(response));
   } catch (error: unknown) {
@@ -117,13 +148,21 @@ export async function POST(request: NextRequest) {
         : undefined;
 
     const mergedParams: DiscoverParams = { ...(params || {}) };
-    if (typeof body.name === 'string' && body.name.trim()) mergedParams.name = body.name.trim();
+    if (typeof body.name === 'string' && body.name.trim()) {
+      (mergedParams as any).agentName = body.name.trim();
+    }
+    if (typeof body.id === 'string' && body.id.trim()) {
+      (mergedParams as any).agentId = body.id.trim();
+    }
     if (typeof body.address === 'string' && body.address.trim()) {
       const addr = toAddress(body.address.trim());
       if (addr) {
-        mergedParams.owners = Array.isArray(mergedParams.owners)
-          ? Array.from(new Set([...mergedParams.owners, addr]))
-          : [addr];
+        (mergedParams as any).agentAccount = addr;
+        if (Array.isArray((mergedParams as any).owners)) {
+          (mergedParams as any).owners = Array.from(
+            new Set([...(mergedParams as any).owners, addr])
+          );
+        }
       }
     }
     if (typeof body.chainId === 'number' && Number.isFinite(body.chainId)) {

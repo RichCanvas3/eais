@@ -1,6 +1,18 @@
-import { AgenticTrustClient, type ApiClientConfig } from '@agentic-trust/core/server';
+type ClientConfig = {
+  graphQLUrl: string;
+  apiKey?: string;
+  privateKey?: string;
+  rpcUrl?: string;
+};
 
-let clientPromise: Promise<AgenticTrustClient> | null = null;
+type AdminClient = {
+  agents: {
+    getAgentFromGraphQL(chainId: number, agentId: string): Promise<any>;
+    searchAgents(options?: unknown): Promise<{ agents: any[]; total: number } | any>;
+  };
+};
+
+let clientPromise: Promise<AdminClient> | null = null;
 
 function resolveGraphQLUrl(): string {
   const baseUrl =
@@ -10,7 +22,6 @@ function resolveGraphQLUrl(): string {
     process.env.NEXT_PUBLIC_GRAPHQL_API_URL ||
     process.env.AGENTIC_TRUST_DISCOVERY_URL ||
     process.env.NEXT_PUBLIC_DISCOVERY_API_URL ||
-    process.env.DISCOVERY_API_URL ||
     '';
 
   if (!baseUrl) {
@@ -32,13 +43,13 @@ function resolveApiKey(): string | undefined {
   );
 }
 
-function buildClientConfig(): ApiClientConfig {
+function buildClientConfig(): ClientConfig {
   const graphQLUrl = resolveGraphQLUrl();
   const apiKey = resolveApiKey();
   const privateKey = process.env.AGENTIC_TRUST_PRIVATE_KEY;
   const rpcUrl = process.env.AGENTIC_TRUST_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL;
 
-  const config: ApiClientConfig = {
+  const config: ClientConfig = {
     graphQLUrl,
   };
 
@@ -55,10 +66,14 @@ function buildClientConfig(): ApiClientConfig {
   return config;
 }
 
-export async function getAdminClient(): Promise<AgenticTrustClient> {
+async function initializeClient(): Promise<AdminClient> {
+  const core = (await import('@agentic-trust/core/server')) as any;
+  return core.AgenticTrustClient.create(buildClientConfig()) as Promise<AdminClient>;
+}
+
+export async function getAdminClient(): Promise<AdminClient> {
   if (!clientPromise) {
-    const config = buildClientConfig();
-    clientPromise = AgenticTrustClient.create(config);
+    clientPromise = initializeClient();
   }
 
   return clientPromise;

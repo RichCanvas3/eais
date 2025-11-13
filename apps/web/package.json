@@ -10,7 +10,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@agentic-trust/core": "^1.0.4",
+    "@agentic-trust/core": "^1.0.6",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.0",
     "@ensdomains/ensjs": "4.0.2",
