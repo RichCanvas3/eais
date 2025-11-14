@@ -359,13 +359,26 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
       orderBy?: string;
       orderDirection?: string;
     }) => {
+
+      let execOrderBy = args.orderBy;
+      let execOrderDirection = args.orderDirection;
+      if (execOrderBy === undefined || execOrderBy === null) {
+        execOrderBy = 'agentId';
+      }
+      if (execOrderDirection === undefined || execOrderDirection === null) {
+        execOrderDirection = 'DESC';
+      }
+
+
       try {
+        
         const { chainId, agentId, agentOwner, agentName, limit = 100, offset = 0, orderBy, orderDirection } = args;
         const { where, params } = buildWhereClause({ chainId, agentId, agentOwner, agentName });
-        const orderByClause = buildOrderByClause(orderBy, orderDirection);
+        const orderByClause = buildOrderByClause(execOrderBy, execOrderDirection);
         const query = `SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents ${where} ${orderByClause} LIMIT ? OFFSET ?`;
         const allParams = [...params, limit, offset];
         const results = await executeQuery(db, query, allParams);
+        console.log('[agents] rows:', results.length, 'params:', { chainId, agentId, agentOwner, agentName, limit, offset, execOrderBy, execOrderDirection });
         return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in agents resolver:', error);
@@ -376,25 +389,30 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
     // Graph-like advanced search (where/first/skip/orderBy/orderDirection)
     searchAgentsGraph: async (args: {
       where?: any;
-      first?: number;
-      skip?: number;
-      orderBy?: string;
-      orderDirection?: string;
+      first?: number | null;
+      skip?: number | null;
+      execOrderBy?: string | null;
+      execOrderDirection?: string | null;
     }) => {
       try {
-        const { where, first = 20, skip = 0, orderBy, orderDirection } = args || {};
+        const { where, first, skip, execOrderBy, execOrderDirection } = args || {};
+        const pageSize = typeof first === 'number' && Number.isFinite(first) && first > 0 ? first : 20;
+        const offset = typeof skip === 'number' && Number.isFinite(skip) && skip >= 0 ? skip : 0;
+        const orderByField = typeof execOrderBy === 'string' ? execOrderBy : 'agentId';
+        const orderDir = typeof execOrderDirection === 'string' ? execOrderDirection : 'DESC';
         const { where: whereSql, params } = buildGraphWhereClause(where);
-        const orderByClause = buildOrderByClause(orderBy, orderDirection);
+        const orderByClause = buildOrderByClause(orderByField, orderDir);
 
         const agentsQuery = `SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents ${whereSql} ${orderByClause} LIMIT ? OFFSET ?`;
-        const agentsParams = [...params, first, skip];
+        const agentsParams = [...params, pageSize, offset];
         const agentsRaw = await executeQuery(db, agentsQuery, agentsParams);
         const agents = enrichAgentRecords(agentsRaw);
 
         const countQuery = `SELECT COUNT(*) as count FROM agents ${whereSql}`;
         const countResult = await executeQuerySingle(db, countQuery, params);
         const total = (countResult as any)?.count || 0;
-        const hasMore = (skip + first) < total;
+        const hasMore = (offset + pageSize) < total;
+        console.log('[searchAgentsGraph] rows:', agents.length, 'total:', total, 'args:', { where, first: pageSize, skip: offset, orderBy: orderByField, orderDirection: orderDir });
 
         return { agents, total, hasMore };
       } catch (error) {
@@ -438,6 +456,7 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         const orderByClause = buildOrderByClause(orderBy, orderDirection);
         const query = `SELECT *, COALESCE(agentAccount, agentAddress) as agentAccount FROM agents WHERE chainId = ? ${orderByClause} LIMIT ? OFFSET ?`;
         const results = await executeQuery(db, query, [chainId, limit, offset]);
+        console.log('[agentsByChain] rows:', results.length, 'chainId:', chainId, 'limit:', limit, 'offset:', offset);
         return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in agentsByChain resolver:', error);
@@ -461,6 +480,7 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         params.push(limit, offset);
         
         const results = await executeQuery(db, query, params);
+        console.log('[agentsByOwner] rows:', results.length, 'agentOwner:', agentOwner, 'chainId:', chainId, 'limit:', limit, 'offset:', offset);
         return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in agentsByOwner resolver:', error);
@@ -489,6 +509,7 @@ export function createGraphQLResolvers(db: any, options?: { env?: any }) {
         params.push(limit, offset);
 
         const results = await executeQuery(db, sqlQuery, params);
+        console.log('[searchAgents] rows:', results.length, 'query:', searchQuery, 'chainId:', chainId, 'limit:', limit, 'offset:', offset);
         return enrichAgentRecords(results);
       } catch (error) {
         console.error('❌ Error in searchAgents resolver:', error);

@@ -101,6 +101,8 @@ export async function GET(request: NextRequest) {
       mergedParams.chains = 'all';
     }
 
+    console.log(' orderBy: ', orderBy);
+    console.log(' orderDirection: ', orderDirection);
     console.log('>>>>>>>>>>>>>>>>>>>>> mergedParams', mergedParams);
     const response = await discoverAgents(
       {
@@ -113,7 +115,7 @@ export async function GET(request: NextRequest) {
       } satisfies DiscoverRequest,
       getAdminClient
     );
-    console.log('>>>>>>>>>>>>>>>>>>>>>>> response', response);
+    console.log('>>>>>>>>>>>>>>>>>>>>>>> response length: ', response.agents.length);
 
     return NextResponse.json(mapAgentsResponse(response));
   } catch (error: unknown) {
