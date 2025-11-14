@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAddress } from 'viem';
-import { getIPFSStorage } from '@agentic-trust/core';
-import { getAdminClient } from '@/lib/client';
+//import { getIPFSStorage } from '@agentic-trust/core';
+import { getAdminClient } from '@/lib/server/adminClient';
 
 const DEFAULT_CHAIN_ID = 11155111;
 const METADATA_KEYS = ['agentName', 'agentAccount'] as const;
@@ -11,11 +11,6 @@ export const dynamic = 'force-dynamic';
 type IdentityMetadata = {
   tokenURI: string | null;
   metadata: Record<string, string>;
-};
-
-type IdentityRegistration = {
-  tokenURI: string;
-  registration: any | null;
 };
 
 async function getIdentityClient() {
@@ -78,7 +73,7 @@ export async function GET(
     const chainId = chainIdFilter ?? discovery.chainId ?? DEFAULT_CHAIN_ID;
 
     let identityMetadata: IdentityMetadata | null = null;
-    let identityRegistration: IdentityRegistration | null = null;
+    let identityRegistration: any = null;
 
     if (agentId) {
       try {
@@ -110,6 +105,7 @@ export async function GET(
         };
 
         if (tokenURI) {
+          /*
           try {
             const ipfsStorage = getIPFSStorage();
             const registration = await ipfsStorage.getJson(tokenURI);
@@ -124,6 +120,7 @@ export async function GET(
               registration: null,
             };
           }
+            */
         }
       } catch (error) {
         console.warn('Failed to fetch identity metadata for address:', error);
@@ -132,7 +129,7 @@ export async function GET(
 
     const flattened: Record<string, any> = {};
 
-    if (identityRegistration?.registration) {
+    if (identityRegistration && identityRegistration.registration) {
       const reg = identityRegistration.registration;
       if (reg.name) flattened.name = reg.name;
       if (reg.description) flattened.description = reg.description;

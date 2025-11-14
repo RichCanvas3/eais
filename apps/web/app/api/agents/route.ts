@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Address } from 'viem';
 import type { DiscoverParams, DiscoverResponse } from '@agentic-trust/core/server';
 import { discoverAgents, type DiscoverRequest } from '@agentic-trust/core/server';
-import { getAdminClient } from '@/lib/client';
+import { getAdminClient } from '@/lib/server/adminClient';
 
 export const dynamic = 'force-dynamic';
 

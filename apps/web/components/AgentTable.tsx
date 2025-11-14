@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 
-import { buildDidEthr, buildDid8004 } from '@agentic-trust/core';
+import {  buildDidEthr, buildDid8004 } from '@agentic-trust/core';
 import { getAddress } from 'viem';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel, Avatar, LinearProgress } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';

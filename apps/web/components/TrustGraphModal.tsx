@@ -1,6 +1,5 @@
 'use client';
 import * as React from 'react';
-import { buildDid8004 } from '@agentic-trust/core';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Box, Paper, Stack } from '@mui/material';
 
 type GraphNode = {

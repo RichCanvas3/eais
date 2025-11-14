@@ -6,10 +6,6 @@
 
 import { AgenticTrustClient, type ApiClientConfig, getChainRpcUrl, getChainEnvVar, DEFAULT_CHAIN_ID } from '@agentic-trust/core/server';
 
-// Singleton instance
-let agenticTrustClientInstance: AgenticTrustClient | null = null;
-let initializationPromise: Promise<AgenticTrustClient> | null = null;
-
 /**
  * Get or create the server-side AgenticTrustClient singleton for the admin app
  * Uses admin configuration from environment variables or session
@@ -101,10 +97,3 @@ export async function getAdminClient(): Promise<AgenticTrustClient> {
   }
 }
 
-/**
- * Reset the client instance (useful for testing)
- */
-export function resetAdminClient(): void {
-  agenticTrustClientInstance = null;
-  initializationPromise = null;
-}

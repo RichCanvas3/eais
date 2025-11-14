@@ -3,20 +3,26 @@ import { AgentTable } from "@/components/AgentTable";
 import { StatsPanel } from "@/components/StatsPanel";
 import { Container, Typography, Box, Paper, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
+import { useWallet } from '@/components/WalletProvider';
 import * as React from 'react';
 import { AddAgentModal } from '@/components/AddAgentModal';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import AddIcon from '@mui/icons-material/Add';
+import { useRouter } from 'next/navigation';
 
 export default function Page() {
-  const { isLoggedIn, login, logout, address } = useWeb3Auth();
+  const router = useRouter();
+  const { isLoggedIn, logout, address } = useWeb3Auth();
+  const { connected: walletConnected, disconnect: disconnectWallet, address: walletAddress } = useWallet();
+  const hasAccess = isLoggedIn || walletConnected;
+  const effectiveAddress = address ?? walletAddress ?? null;
   const [open, setOpen] = React.useState(false);
   const [statsOpen, setStatsOpen] = React.useState(false);
   const [accessCode, setAccessCode] = React.useState<string | null>(null);
   const [accessCodeLoading, setAccessCodeLoading] = React.useState(false);
 
   const handleGetAccessCode = async () => {
-    if (!address) return;
+    if (!effectiveAddress) return;
     
     // If already fetched, don't fetch again
     if (accessCode) {
@@ -30,7 +36,7 @@ export default function Page() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ address }),
+        body: JSON.stringify({ address: effectiveAddress }),
       });
 
       if (!response.ok) {
@@ -89,7 +95,7 @@ export default function Page() {
   };
 
   const handleOpenGraphQL = async () => {
-    if (!address) return;
+    if (!effectiveAddress) return;
     
     try {
       // Get access code
@@ -98,7 +104,7 @@ export default function Page() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ address }),
+        body: JSON.stringify({ address: effectiveAddress }),
       });
 
       if (!response.ok) {
@@ -166,6 +172,22 @@ export default function Page() {
     }
   };
   
+  const navigateToLogin = React.useCallback(() => {
+    router.push('/login');
+  }, [router]);
+
+  const handleSignInOut = React.useCallback(async () => {
+    if (hasAccess) {
+      if (isLoggedIn) {
+        await logout();
+      } else if (walletConnected) {
+        await disconnectWallet();
+      }
+    } else {
+      navigateToLogin();
+    }
+  }, [hasAccess, isLoggedIn, walletConnected, logout, disconnectWallet, navigateToLogin]);
+
   return (
     <Container maxWidth="xl" sx={{ py: 0 }}>
       <Box sx={{ mb: 1, mx: { xs: 1.5, sm: 2.5 }, mt: { xs: 2, sm: 2 } }}>
@@ -251,15 +273,15 @@ export default function Page() {
               )}
               <Button 
                 variant="outlined" 
-                onClick={isLoggedIn ? logout : login} 
+                onClick={handleSignInOut} 
                 disableElevation 
                 size="small" 
                 sx={{ borderColor: 'divider', color: 'text.primary' }}
               >
-                {isLoggedIn ? 'Sign Out' : 'Sign In'}
+                {hasAccess ? 'Sign Out' : 'Sign In'}
               </Button>
             </Box>
-            {isLoggedIn && (
+            {hasAccess && (
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -286,7 +308,7 @@ export default function Page() {
             <Typography variant="h5" fontWeight={500} color="text.primary" sx={{ fontSize: '1rem' }}>
               Agentic Trust Layer
             </Typography>
-            {isLoggedIn && (
+            {hasAccess && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 0.5 }}>
                 {!accessCode && (
                   <Typography
@@ -406,7 +428,7 @@ export default function Page() {
               )}
               <Button 
                 variant="outlined" 
-                onClick={isLoggedIn ? logout : login} 
+                onClick={handleSignInOut} 
                 disableElevation 
                 size="small" 
                 sx={{ 
@@ -414,10 +436,10 @@ export default function Page() {
                   color: 'text.primary',
                 }}
               >
-                {isLoggedIn ? 'Sign Out' : 'Sign In'}
+                {hasAccess ? 'Sign Out' : 'Sign In'}
               </Button>
             </Box>
-            {isLoggedIn && (
+            {hasAccess && (
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -439,7 +461,7 @@ export default function Page() {
         </Box>
       </Box>
       
-      {isLoggedIn ? (
+      {hasAccess ? (
         <AgentTable 
             addAgentOpen={open}
             onAddAgentClose={() => setOpen(false)}
@@ -461,7 +483,7 @@ export default function Page() {
             <Button 
               variant="outlined" 
               size="medium" 
-              onClick={login} 
+              onClick={navigateToLogin} 
               disableElevation
               sx={{ 
                 px: 4, 

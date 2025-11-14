@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildAgentDetail } from '@agentic-trust/core/server';
-import { getAdminClient } from '@/lib/client';
+import { getAdminClient } from '@/lib/server/adminClient';
 
 export async function GET(
   request: NextRequest,
