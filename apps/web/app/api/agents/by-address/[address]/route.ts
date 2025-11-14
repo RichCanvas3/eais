@@ -56,7 +56,7 @@ export async function GET(
     try {
       const result = await client.agents.searchAgents({
         params: {
-          walletAddress: address,
+          agentAccount: address as `0x${string}`,
           chains: chainIdFilter ? [chainIdFilter] : undefined,
         },
         page: 1,
@@ -64,7 +64,7 @@ export async function GET(
       });
       const agent = result?.agents?.[0];
       if (agent) {
-        discovery = typeof agent.toJSON === 'function' ? agent.toJSON() : agent;
+        discovery = agent;
       }
     } catch (error) {
       console.warn('Failed to discover agent by address:', error);

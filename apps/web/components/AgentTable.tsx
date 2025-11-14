@@ -1,5 +1,7 @@
 'use client';
 import * as React from 'react';
+
+import { buildDidEthr, buildDid8004 } from '@agentic-trust/core';
 import { getAddress } from 'viem';
 import { Box, Paper, TextField, Button, Grid, Chip, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack, FormControlLabel, IconButton, Divider, Tooltip, Card, CardContent, CardHeader, Link, useTheme, useMediaQuery, FormLabel, Avatar, LinearProgress } from '@mui/material';
 import { useWeb3Auth } from '@/components/Web3AuthProvider';
@@ -28,9 +30,9 @@ import IpfsService from '@/service/ipfsService';
 import IdentityRegistryABI from '@erc8004/sdk/abis/IdentityRegistry.json';
 import { AIAgentENSClient, AIAgentIdentityClient, OrgIdentityClient } from '@erc8004/agentic-trust-sdk';
 import { EthersAdapter } from '@erc8004/sdk';
-import { 
-	setAgentNameUri as adapterSetAgentNameUri, 
-	setAgentIdentityRegistrationUri as adapterSetAgentIdentityRegistrationUri 
+import {
+	setAgentNameUri as adapterSetAgentNameUri,
+	setAgentIdentityRegistrationUri as adapterSetAgentIdentityRegistrationUri
 } from '@/lib/agentAdapter';
 import ReputationRegistryABI from '@erc8004/sdk/abis/ReputationRegistry.json';
 
@@ -45,6 +47,7 @@ import { getExplorerUrl, getExplorerName, getIdentityRegistry, getBundlerUrl, ge
 const registryAbi = IdentityRegistryABI as any;
 const reputationRegistryAbi = ReputationRegistryABI as any;
 
+
 export type Agent = {
 	chainId: number;
 	agentId: string;
@@ -54,9 +57,9 @@ export type Agent = {
 	metadataURI?: string | null;
 	createdAtBlock: number;
 	createdAtTime: number;
-  description?: string | null;
-  a2aEndpoint?: string | null;
-  ensEndpoint?: string | null;
+	description?: string | null;
+	a2aEndpoint?: string | null;
+	ensEndpoint?: string | null;
 };
 
 type AgentTableProps = { chainIdHex?: string; addAgentOpen?: boolean; onAddAgentClose?: () => void; onAgentIndexed?: (agentName?: string) => void; refreshKey?: number };
@@ -74,7 +77,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	const [owned, setOwned] = React.useState<Record<string, boolean>>({});
 	const [refreshing, setRefreshing] = React.useState(false);
 	const [preferCardView, setPreferCardView] = React.useState(true); // Default to card view
-    const { provider, address: eoa } = useWeb3Auth();
+	const { provider, address: eoa } = useWeb3Auth();
 
 	// Discover state
 	const [discoverQuery, setDiscoverQuery] = React.useState("");
@@ -175,7 +178,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	// Modal states - use external if provided, otherwise use internal state
 	const [internalAddAgentOpen, setInternalAddAgentOpen] = React.useState(false);
 	const addAgentOpen = externalAddAgentOpen !== undefined ? externalAddAgentOpen : internalAddAgentOpen;
-	const setAddAgentOpen = externalAddAgentOpen !== undefined ? (onAddAgentClose || (() => {})) : setInternalAddAgentOpen;
+	const setAddAgentOpen = externalAddAgentOpen !== undefined ? (onAddAgentClose || (() => { })) : setInternalAddAgentOpen;
 	const [didWebOpen, setDidWebOpen] = React.useState(false);
 	const [didAgentOpen, setDidAgentOpen] = React.useState(false);
 	const [currentAgentForDid, setCurrentAgentForDid] = React.useState<Agent | null>(null);
@@ -225,9 +228,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			setIdentityJsonError(null);
 			setIdentityJsonData(null);
 			setIdentityTokenUri(null);
-			
+
 			let fetched: any | null = null;
-			
+
 			// Check if metadataURI is an inline data URI (contains the JSON data directly)
 			if (row.metadataURI && row.metadataURI.startsWith('data:application/json')) {
 				try {
@@ -236,7 +239,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					if (commaIndex !== -1) {
 						const jsonData = row.metadataURI.substring(commaIndex + 1);
 						let parsed;
-						
+
 						// Check if it's base64 encoded or plain JSON
 						if (row.metadataURI.startsWith('data:application/json;base64,')) {
 							try {
@@ -262,7 +265,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								parsed = JSON.parse(decodedJson);
 							}
 						}
-						
+
 						fetched = parsed;
 						setIdentityTokenUri(row.metadataURI);
 						console.info("............openIdentityJson: parsed inline data:", fetched);
@@ -282,19 +285,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					console.warn("............openIdentityJson: Failed to parse plain JSON:", e);
 				}
 			}
-			
+
 			// If we didn't get data from inline URI, fetch from storage
 			if (!fetched) {
 				// Get chain-specific configuration based on the agent's chainId
 				const agentChainId = row.chainId;
 				const rpcUrl = getRpcUrl(agentChainId);
 				const identityRegistry = getIdentityRegistry(agentChainId);
-				
+
 				if (!rpcUrl || !identityRegistry) {
 					console.warn(`Missing configuration for chain ${agentChainId}`);
 					return;
 				}
-				
+
 				const { ethers } = await import('ethers');
 				const ethersProvider = new ethers.JsonRpcProvider(rpcUrl);
 				const { EthersAdapter } = await import('@erc8004/sdk');
@@ -322,22 +325,22 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									const res = await fetch(`/api/ipfs/download/${cid}`);
 									fetched = await res.json().catch(() => null);
 								}
-							} catch {}
+							} catch { }
 						} else if (/^https?:\/\//i.test(u)) {
 							// Proxy through Next API to avoid mixed-content
 							try {
 								const res = await fetch(`/api/proxy?url=${encodeURIComponent(u)}`);
 								fetched = await res.json().catch(() => null);
-							} catch {}
+							} catch { }
 						}
 					}
-				} catch {}
+				} catch { }
 				// Fallback to SDK helper if direct fetch failed
 				if (!fetched) {
-					try { fetched = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId)); } catch {}
+					try { fetched = await erc8004Client.identity.getRegistrationFile(BigInt(row.agentId)); } catch { }
 				}
 			}
-			
+
 			if (fetched) setIdentityJsonData(fetched);
 			try {
 				setIdentityJsonText(JSON.stringify(fetched, null, 2));
@@ -374,12 +377,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			setIdentityUpdateLoading(true);
 			setIdentityUpdateError(null);
 			// Merge endpoints into JSON
-			const merged: any = { ...(identityJsonData || {}) , endpoints: identityEndpoints };
+			const merged: any = { ...(identityJsonData || {}), endpoints: identityEndpoints };
 			// Upload to IPFS
 			console.log('********************* updateIdentityRegistration: merged', merged);
 			const { url } = await IpfsService.uploadJson({ data: merged, filename: `agent-${identityCurrentAgent.agentId}-registration.json` });
 			console.log('********************* updateIdentityRegistration: url', url);
-			
+
 			// Resolve agent ENS name - get the correct client for this agent's chain
 			const chainIdHex = getChainIdHex(identityCurrentAgent.chainId) || '0xaa36a7';
 			const agentIdentityClient = agentIdentityClients[chainIdHex] || null;
@@ -399,11 +402,29 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				accountOwner = addressDetails.agentOwner;
 			} else {
 				try {
-					accountOwner = await agentIdentityClient.getAgentEoaByAgentAccount(
+					console.log('********************* updateIdentityRegistration: resolving account owner via did:ethr', identityCurrentAgent.chainId, identityCurrentAgent.agentAddress);
+					// Fallback: resolve via web API using did:ethr
+					const didEthr = buildDidEthr(
+						identityCurrentAgent.chainId,
 						identityCurrentAgent.agentAddress as `0x${string}`
 					);
+					const res = await fetch(
+						`/api/accounts/owner/by-account/${encodeURIComponent(didEthr)}`
+					);
+					if (res.ok) {
+						const json = await res.json();
+						if (json?.owner) {
+							accountOwner = String(json.owner);
+						}
+					} else {
+						console.warn(
+							'Failed to resolve account owner via /api/accounts/owner/by-account:',
+							res.status,
+							res.statusText
+						);
+					}
 				} catch (error) {
-					console.warn('Failed to resolve account owner from identity client:', error);
+					console.warn('Failed to resolve account owner from owner-by-account API:', error);
 				}
 			}
 			if (!eoa || !accountOwner || accountOwner.toLowerCase() !== eoa.toLowerCase()) {
@@ -412,17 +433,17 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			}
 			// Build agent account client for AA
 			if (!provider || !eoa) throw new Error('Not connected');
-			
-		// Get chain-specific configuration based on the agent's chainId
-		const agentChainId = identityCurrentAgent.chainId;
-		const rpcUrl = getRpcUrl(agentChainId);
-		const chain = getViemChain(agentChainId);
-		const bundlerUrl = getBundlerUrl(agentChainId);
-		
-		if (!rpcUrl || !chain || !bundlerUrl) {
-			throw new Error(`Missing configuration for chain ${agentChainId}`);
-		}
-			
+
+			// Get chain-specific configuration based on the agent's chainId
+			const agentChainId = identityCurrentAgent.chainId;
+			const rpcUrl = getRpcUrl(agentChainId);
+			const chain = getViemChain(agentChainId);
+			const bundlerUrl = getBundlerUrl(agentChainId);
+
+			if (!rpcUrl || !chain || !bundlerUrl) {
+				throw new Error(`Missing configuration for chain ${agentChainId}`);
+			}
+
 			const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 			const walletClient = createWalletClient({ chain: chain as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 			const agentAccountClient = await toMetaMaskSmartAccount({
@@ -478,7 +499,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			console.info("+++++++++++++++++++ openAgentInfo: row", row);
 			console.info("+++++++++++++++++++ openAgentInfo: agentId", agentId, "chainId", chainId, "type:", typeof chainId);
 			const agentIdNum = BigInt(agentId);
-			
+
 			// Get the correct agent identity client for this chain
 			const chainIdHex = getChainIdHex(chainId);
 			if (!chainIdHex) {
@@ -492,17 +513,17 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			if (!client) {
 				throw new Error(`No identity client available for chainId ${chainId} (${chainIdHex})`);
 			}
-			
+
 			let name: string | null = null;
 			let account: string | null = null;
 			let tokenUri: string | null = null;
-			
+
 			// Try to use the agent name from the row if available
 			if (row.agentName) {
 				name = row.agentName;
 				console.info("+++++++++++++++++++ openAgentInfo: using agentName from row", name);
 			}
-			
+
 			// Get the token URI from the database row
 			if (row.metadataURI) {
 				tokenUri = row.metadataURI;
@@ -522,16 +543,16 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					tokenUri = agentDetails.metadataURI || null;
 				}
 			}
-			
+
 			try {
 				console.info("++++++++++++++++++++++++ openAgentInfo: fetching supplemental agent info for chain", chainId, "chainIdHex", chainIdHex);
 				// client is guaranteed to exist here due to check above
 				console.info(`openAgentInfo: Fetching agent account for agentId ${agentIdNum} on chain ${chainId} (${chainIdHex})`);
-				
+
 				if (!account) {
 					account = await client.getAgentAccount(agentIdNum);
 				}
-				
+
 				// Fetch token URI from chain if not available from database or REST endpoint
 				if (!tokenUri) {
 					try {
@@ -619,8 +640,13 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		async (agentId: string, chainId?: number | null) => {
 			try {
 				if (!agentId) return null;
-				const query = typeof chainId === 'number' && Number.isFinite(chainId) ? `?chainId=${chainId}` : '';
-				const res = await fetch(`/api/agents/${agentId}${query}`);
+				// Build did:8004 identifier (include chainId if provided)
+				// Use encode: false so Next.js can properly encode it in the URL
+				const did8004 =
+					typeof chainId === 'number' && Number.isFinite(chainId)
+						? buildDid8004(chainId, agentId, { encode: false })
+						: `did:8004:${agentId}`;
+				const res = await fetch(`/api/agents/${encodeURIComponent(did8004)}`);
 				if (!res.ok) {
 					return null;
 				}
@@ -694,125 +720,125 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		}
 	}, [agentENSClient]);
 
-	
+
 	// Fetch ENS names when data changes
 	/*
   React.useEffect(() => {
-      if (data?.rows && Array.isArray(data.rows)) {
-          data.rows.forEach(async (row) => {
-              try {
+	  if (data?.rows && Array.isArray(data.rows)) {
+		  data.rows.forEach(async (row) => {
+			  try {
 
 				// Get the correct agent identity client based on the row's chainId
 				const chainIdHex = getChainIdHex(row.chainId);
-                
-                // Only proceed if we have a valid chain configuration for this chainId
-                if (!chainIdHex) {
-                    console.warn(`AgentTable: No chain configuration found for chainId ${row.chainId}, skipping getAgentAccount`);
-                    return; // Skip this row
-                }
+			    
+				// Only proceed if we have a valid chain configuration for this chainId
+				if (!chainIdHex) {
+					console.warn(`AgentTable: No chain configuration found for chainId ${row.chainId}, skipping getAgentAccount`);
+					return; // Skip this row
+				}
 
-                  const agentIdentityClient = agentIdentityClients[chainIdHex];
-                  if (agentIdentityClient) {
-                      const agentIdNum = BigInt(row.agentId);
-                      
-                      // Fetch account address using the row's chainId
-                      console.info(`AgentTable: Fetching agent account for agentId ${row.agentId} on chain ${row.chainId} (${chainIdHex})`);
-                      const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
-                      setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
-                      
-                      // Fetch name if database has null/empty name
-                      if (!row.agentName || row.agentName.trim() === '') {
+				  const agentIdentityClient = agentIdentityClients[chainIdHex];
+				  if (agentIdentityClient) {
+					  const agentIdNum = BigInt(row.agentId);
+					  
+					  // Fetch account address using the row's chainId
+					  console.info(`AgentTable: Fetching agent account for agentId ${row.agentId} on chain ${row.chainId} (${chainIdHex})`);
+					  const acct = await agentIdentityClient.getAgentAccount(agentIdNum);
+					  setMetadataAccounts(prev => ({ ...prev, [row.agentId]: acct ?? null }));
+					  
+					  // Fetch name if database has null/empty name
+					  if (!row.agentName || row.agentName.trim() === '') {
 							const details = await fetchAgentDetails(row.agentId, row.chainId);
 							const name = details?.agentName || details?.name || null;
-                          if (name) {
-                              setMetadataNames(prev => ({ ...prev, [row.agentId]: name }));
-                              const isENS = name.endsWith('.eth');
-                              setMetadataNamesIsENS(prev => ({ ...prev, [row.agentId]: isENS }));
-                          }
-                      }
-                      
-                      // Fetch ENS name for the account address if not already fetched
-                      if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
-                          fetchEnsName(acct);
-                      }
-                  } else {
-                      console.warn("............AgentTable: No client found for chain:", row.chainId, "chainIdHex:", chainIdHex);
-                  }
-              } catch (e) {
-                  console.warn("............AgentTable: Error fetching agent name/account:", e);
-              }
-              // Fetch ENS name for agent address if not already fetched
-              if (!agentEnsNames[row.agentAddress]) {
-                  fetchEnsName(row.agentAddress);
-              }
-          });
-      }
+						  if (name) {
+							  setMetadataNames(prev => ({ ...prev, [row.agentId]: name }));
+							  const isENS = name.endsWith('.eth');
+							  setMetadataNamesIsENS(prev => ({ ...prev, [row.agentId]: isENS }));
+						  }
+					  }
+					  
+					  // Fetch ENS name for the account address if not already fetched
+					  if (acct && (!agentEnsNames[acct] || agentEnsNames[acct] === null)) {
+						  fetchEnsName(acct);
+					  }
+				  } else {
+					  console.warn("............AgentTable: No client found for chain:", row.chainId, "chainIdHex:", chainIdHex);
+				  }
+			  } catch (e) {
+				  console.warn("............AgentTable: Error fetching agent name/account:", e);
+			  }
+			  // Fetch ENS name for agent address if not already fetched
+			  if (!agentEnsNames[row.agentAddress]) {
+				  fetchEnsName(row.agentAddress);
+			  }
+		  });
+	  }
   }, [data]);
   */
 
-   /*
-	React.useEffect(() => {
-		try {
-			const rows = data?.rows || [];
-			rows.forEach((row) => {
-				const uri = row.metadataURI;
-				//if (!isValidRegistrationUri(uri)) {
-				//	if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: false }));
-				//	return;
-				//}
-				if (tokenUriValidById[row.agentId] !== undefined) return;
-				const target = (() => {
-					if (!uri) return null;
-					const u = String(uri).trim().replace(/^@+/, '');
-					if (/^ipfs:\/\//i.test(u)) {
-						try {
-							const rest = u.slice('ipfs://'.length);
-							const cid = rest.split('/')[0]?.trim();
-							if (cid) return `/api/ipfs/download/${cid}`;
-						} catch {}
-						return null;
-					}
-					return u;
-				})();
-        if (!target) {
-          if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: null }));
-          return;
-        }
-
-
-				fetch(target)
-					.then(async (res) => {
-						// Try JSON; on failure, inspect error message and fallback to text heuristics
-						try {
-							await res.clone().json();
-							return true;
-						} catch (err: any) {
-							const msg = typeof err?.message === 'string' ? err.message : '';
-							// Common browser error message when HTML is returned
-							if (/Unexpected token\s*</i.test(msg) || /not valid JSON/i.test(msg)) return false;
-							try {
-								const text = await res.text();
-								const trimmed = (text || '').trim();
-								if (/^</.test(trimmed)) return false; // looks like HTML/XML
-								// If it looks like JSON text, try to parse
-								if (/^[{\[]/.test(trimmed)) {
-									try { JSON.parse(trimmed); return true; } catch {}
-								}
-							} catch {}
-							return false;
-						}
-					})
-					.then((ok) => {
-						setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
-					})
-					.catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
-						});
-					 } catch {}
-					}
-
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [data?.rows]);
-	*/
+	/*
+	 React.useEffect(() => {
+		 try {
+			 const rows = data?.rows || [];
+			 rows.forEach((row) => {
+				 const uri = row.metadataURI;
+				 //if (!isValidRegistrationUri(uri)) {
+				 //	if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: false }));
+				 //	return;
+				 //}
+				 if (tokenUriValidById[row.agentId] !== undefined) return;
+				 const target = (() => {
+					 if (!uri) return null;
+					 const u = String(uri).trim().replace(/^@+/, '');
+					 if (/^ipfs:\/\//i.test(u)) {
+						 try {
+							 const rest = u.slice('ipfs://'.length);
+							 const cid = rest.split('/')[0]?.trim();
+							 if (cid) return `/api/ipfs/download/${cid}`;
+						 } catch {}
+						 return null;
+					 }
+					 return u;
+				 })();
+		 if (!target) {
+		   if (tokenUriValidById[row.agentId] === undefined) setTokenUriValidById((p) => ({ ...p, [row.agentId]: null }));
+		   return;
+		 }
+ 
+ 
+				 fetch(target)
+					 .then(async (res) => {
+						 // Try JSON; on failure, inspect error message and fallback to text heuristics
+						 try {
+							 await res.clone().json();
+							 return true;
+						 } catch (err: any) {
+							 const msg = typeof err?.message === 'string' ? err.message : '';
+							 // Common browser error message when HTML is returned
+							 if (/Unexpected token\s*</i.test(msg) || /not valid JSON/i.test(msg)) return false;
+							 try {
+								 const text = await res.text();
+								 const trimmed = (text || '').trim();
+								 if (/^</.test(trimmed)) return false; // looks like HTML/XML
+								 // If it looks like JSON text, try to parse
+								 if (/^[{\[]/.test(trimmed)) {
+									 try { JSON.parse(trimmed); return true; } catch {}
+								 }
+							 } catch {}
+							 return false;
+						 }
+					 })
+					 .then((ok) => {
+						 setTokenUriValidById((p) => ({ ...p, [row.agentId]: ok ?? null }));
+					 })
+					 .catch(() => setTokenUriValidById((p) => ({ ...p, [row.agentId]: null })));
+						 });
+					  } catch {}
+					 }
+ 
+		 // eslint-disable-next-line react-hooks/exhaustive-deps
+	 }, [data?.rows]);
+	 */
 
 	/*
 	React.useEffect(() => {
@@ -872,7 +898,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		try {
 			const cleanName = cleanEnsName(orgName);
 			console.log('🧹 Cleaned ENS name:', cleanName);
-			
+
 			// Create public client for reading contract data
 			const publicClient = createPublicClient({
 				chain: sepolia,
@@ -889,14 +915,14 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			if (orgIdentityClient) {
 				orgAccount = await orgIdentityClient.getOrgAccountByName(orgName) as `0x${string}`;
 			}
-			
-			
+
+
 			if (orgAccount === '0x0000000000000000000000000000000000000000') {
 				console.log('❌ Parent domain does not exist or has no owner');
 				setEnsError(`Parent domain "${cleanName}.eth" does not exist or has no owner`);
 				return;
 			}
-			
+
 			setOrgOwner(orgAccount);
 
 		} catch (error) {
@@ -954,7 +980,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				.split(',')
 				.map((x: string) => x.trim())
 				.filter(Boolean);
-		const capabilities = { 
+		const capabilities = {
 			streaming: !!cardFields.capStream,
 			pushNotifications: !!cardFields.capPush,
 			stateTransitionHistory: !!cardFields.capStateTransitionHistory
@@ -1018,7 +1044,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 	async function populateFieldsFromObj(obj: any) {
 		const skills = Array.isArray(obj?.skills) ? obj.skills : [];
-		
+
 		// Regenerate signature if it's truncated
 		let regeneratedSignature = null;
 		if (obj?.registrations?.[0]?.signature && obj.registrations[0].signature.includes('…')) {
@@ -1026,7 +1052,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				// Get the domain from the card or use a default
 				const domain = cardDomain || 'example.com';
 				console.log('Signature is truncated, regenerating for domain:', domain);
-				
+
 				// Regenerate signature by signing the domain
 				if (provider) {
 					const signature = await provider.request({
@@ -1040,7 +1066,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				console.log('Could not regenerate signature:', e);
 			}
 		}
-		
+
 		setCardFields({
 			name: obj?.name ?? '',
 			description: obj?.description ?? '',
@@ -1067,7 +1093,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				outputModes: Array.isArray(s?.outputModes) ? s.outputModes : [],
 			})),
 		});
-		
+
 		// If we regenerated a signature, update the card
 		if (regeneratedSignature && obj?.registrations?.[0]) {
 			obj.registrations[0].signature = regeneratedSignature;
@@ -1078,53 +1104,53 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	}
 
 
-		async function fetchData(page = 1, overrides?: { name?: string; address?: string; agentId?: string; chainId?: number }) {
+	async function fetchData(page = 1, overrides?: { name?: string; address?: string; agentId?: string; chainId?: number }) {
 		setIsLoading(true);
 		console.info("&&&&&&&&&&&& fetchData: page: ", page)
 		console.info("&&&&&&&&&&&& fetchData: overrides: ", overrides)
-			const url = new URL("/api/agents", window.location.origin);
-			const nameFilter = overrides?.name ?? domain;
-			const addressFilter = overrides?.address ?? address;
-			const idFilter = overrides?.agentId ?? agentId;
-			const chainIdFilter = overrides?.chainId ?? selectedChainIdFilter;
-			
-			if (nameFilter) url.searchParams.set("name", nameFilter);
-			if (addressFilter) url.searchParams.set("address", addressFilter);
-			if (idFilter) url.searchParams.set("id", idFilter);
-			if (chainIdFilter) url.searchParams.set("chainId", String(chainIdFilter));
-        url.searchParams.set("page", String(page));
-        url.searchParams.set("pageSize", "20");
-        // Default ordering: newest agents first by agentId descending
-        url.searchParams.set("orderBy", "agentId");
-        url.searchParams.set("orderDirection", "DESC");
+		const url = new URL("/api/agents", window.location.origin);
+		const nameFilter = overrides?.name ?? domain;
+		const addressFilter = overrides?.address ?? address;
+		const idFilter = overrides?.agentId ?? agentId;
+		const chainIdFilter = overrides?.chainId ?? selectedChainIdFilter;
+
+		if (nameFilter) url.searchParams.set("name", nameFilter);
+		if (addressFilter) url.searchParams.set("address", addressFilter);
+		if (idFilter) url.searchParams.set("id", idFilter);
+		if (chainIdFilter) url.searchParams.set("chainId", String(chainIdFilter));
+		url.searchParams.set("page", String(page));
+		url.searchParams.set("pageSize", "20");
+		// Default ordering: newest agents first by agentId descending
+		url.searchParams.set("orderBy", "agentId");
+		url.searchParams.set("orderDirection", "DESC");
 		try {
 
-				const res = await fetch(url);
-                if (!res.ok) {
-                    setData({ page: page, pageSize: 20, total: 0, rows: [] });
-					return;
-				}
-				const text = await res.text();
-				let json: any = null;
-				if (text && text.trim().length > 0) {
-					try { json = JSON.parse(text); } catch { json = null; }
-				}
-				
-				// Ensure the response has the correct structure
-                const responseData = json ?? { page, pageSize: 20, total: 0, rows: [] };
-                setData({
-                    page: responseData.page ?? page,
-                    pageSize: responseData.pageSize ?? 20,
-                    total: responseData.total ?? 0,
-                    rows: Array.isArray(responseData.rows) ? responseData.rows : []
-                });
+			const res = await fetch(url);
+			if (!res.ok) {
+				setData({ page: page, pageSize: 20, total: 0, rows: [] });
+				return;
+			}
+			const text = await res.text();
+			let json: any = null;
+			if (text && text.trim().length > 0) {
+				try { json = JSON.parse(text); } catch { json = null; }
+			}
+
+			// Ensure the response has the correct structure
+			const responseData = json ?? { page, pageSize: 20, total: 0, rows: [] };
+			setData({
+				page: responseData.page ?? page,
+				pageSize: responseData.pageSize ?? 20,
+				total: responseData.total ?? 0,
+				rows: Array.isArray(responseData.rows) ? responseData.rows : []
+			});
 		} finally {
 			setIsLoading(false);
 		}
 	}
 
 	React.useEffect(() => { fetchData(); }, []);
-	
+
 	// Refresh when refreshKey changes
 	React.useEffect(() => {
 		if (refreshKey !== undefined && refreshKey > 0) {
@@ -1132,70 +1158,70 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		}
 	}, [refreshKey]);
 
-    React.useEffect(() => {
-        (async () => {
-            try {
-                const { ethers } = await import('ethers');
+	React.useEffect(() => {
+		(async () => {
+			try {
+				const { ethers } = await import('ethers');
 				const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string);
-                const adapter = new EthersAdapter(provider);
+				const adapter = new EthersAdapter(provider);
 
 				agentENSClientRef.current = agentENSClient;
-                agentIdentityClientRef.current = agentIdentityClient;
-                orgIdentityClientRef.current = orgIdentityClient;
-            } catch {}
-        })();
-        async function computeOwnership() {
-            if (!Array.isArray(data.rows) || data.rows.length === 0 || !provider || !eoa) { setOwned({}); return; }
-				const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-            const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-            const entries: Record<string, boolean> = {};
-            for (const row of data.rows) {
-                try {
-                    const addr = row.agentAddress as `0x${string}`;
-                    const code = await publicClient.getBytecode({ address: addr });
-                    if (!code || code === '0x') {
-                        // Agent is an EOA; ownership = EOA matches connected EOA
-                        entries[row.agentId] = (eoa?.toLowerCase() === addr.toLowerCase());
-                    } else {
-                        // Contract: check owner() / getOwner() / owners()
-                        let controller: string | null = null;
-                        try {
-                            controller = await publicClient.readContract({
-                                address: addr,
-                                abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-                                functionName: 'owner' as any,
-                                args: [],
-                            }) as `0x${string}`;
-                        } catch {}
-                        if (!controller) {
-                            try {
-                                controller = await publicClient.readContract({
-                                    address: addr,
-                                    abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
-                                    functionName: 'getOwner' as any,
-                                    args: [],
-                                }) as `0x${string}`;
-                            } catch {}
-                        }
-                        if (!controller) {
-                            try {
-                                const owners = await publicClient.readContract({
-                                    address: addr,
-                                    abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
-                                    functionName: 'owners' as any,
-                                    args: [],
-                                }) as `0x${string}`[];
-                                controller = owners?.[0] ?? null;
-                            } catch {}
-                        }
-                        entries[row.agentId] = !!controller && controller.toLowerCase() === eoa?.toLowerCase();
-                    }
-                } catch {}
-            }
-            setOwned(entries);
-        }
-        computeOwnership();
-    }, [data, provider, eoa]);
+				agentIdentityClientRef.current = agentIdentityClient;
+				orgIdentityClientRef.current = orgIdentityClient;
+			} catch { }
+		})();
+		async function computeOwnership() {
+			if (!Array.isArray(data.rows) || data.rows.length === 0 || !provider || !eoa) { setOwned({}); return; }
+			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+			const entries: Record<string, boolean> = {};
+			for (const row of data.rows) {
+				try {
+					const addr = row.agentAddress as `0x${string}`;
+					const code = await publicClient.getBytecode({ address: addr });
+					if (!code || code === '0x') {
+						// Agent is an EOA; ownership = EOA matches connected EOA
+						entries[row.agentId] = (eoa?.toLowerCase() === addr.toLowerCase());
+					} else {
+						// Contract: check owner() / getOwner() / owners()
+						let controller: string | null = null;
+						try {
+							controller = await publicClient.readContract({
+								address: addr,
+								abi: [{ name: 'owner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+								functionName: 'owner' as any,
+								args: [],
+							}) as `0x${string}`;
+						} catch { }
+						if (!controller) {
+							try {
+								controller = await publicClient.readContract({
+									address: addr,
+									abi: [{ name: 'getOwner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }],
+									functionName: 'getOwner' as any,
+									args: [],
+								}) as `0x${string}`;
+							} catch { }
+						}
+						if (!controller) {
+							try {
+								const owners = await publicClient.readContract({
+									address: addr,
+									abi: [{ name: 'owners', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address[]' }] }],
+									functionName: 'owners' as any,
+									args: [],
+								}) as `0x${string}`[];
+								controller = owners?.[0] ?? null;
+							} catch { }
+						}
+						entries[row.agentId] = !!controller && controller.toLowerCase() === eoa?.toLowerCase();
+					}
+				} catch { }
+			}
+			setOwned(entries);
+		}
+		computeOwnership();
+	}, [data, provider, eoa]);
 
 	function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
@@ -1231,7 +1257,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				fetchingUrlsRef.current.add(ens);
 				fetchAgentUrl(ens)
 					.then(() => fetchedUrlsRef.current.add(ens))
-					.catch(() => {})
+					.catch(() => { })
 					.finally(() => fetchingUrlsRef.current.delete(ens));
 			}
 
@@ -1243,7 +1269,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				fetchingAvatarsRef.current.add(ens);
 				fetchAgentAvatar(ens)
 					.then(() => fetchedAvatarsRef.current.add(ens))
-					.catch(() => {})
+					.catch(() => { })
 					.finally(() => fetchingAvatarsRef.current.delete(ens));
 			}
 
@@ -1271,7 +1297,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		data.rows.forEach((row) => {
 			const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
 			const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
-			
+
 			if (ens && typeof ens === 'string') {
 				// Add to queue if not already fetched (check both ref and state for safety)
 				if (!fetchedUrlsRef.current.has(ens) && !agentUrls[ens]) {
@@ -1311,7 +1337,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			if (indexResponse.ok) {
 				const indexData = await indexResponse.json();
 				console.log('✅ Full index triggered successfully:', indexData);
-				
+
 				// Refresh the table data
 				await fetchData(data.page);
 			} else {
@@ -1327,7 +1353,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 	async function handleOpenGraphQL() {
 		if (!eoa) return;
-		
+
 		try {
 			// Get access code
 			const response = await fetch('/api/getAccessCode', {
@@ -1347,14 +1373,14 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 			// Get GraphQL base URL from environment variable
 			const graphqlBaseUrl = process.env.NEXT_PUBLIC_GRAPHQL_API_URL || '';
-			
+
 			if (!graphqlBaseUrl) {
 				throw new Error('GraphQL API URL not configured');
 			}
 
 			// Remove trailing slash and any existing /graphql or /graphiql path
 			let baseUrl = graphqlBaseUrl.trim().replace(/\/+$/, '').replace(/\/(graphql|graphiql)\/?$/i, '');
-			
+
 			// Ensure base URL has protocol
 			if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
 				baseUrl = `https://${baseUrl}`;
@@ -1376,8 +1402,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		setAgentId("");
 		setMineOnly(false);
 		setSelectedChainIdFilter(null);
-			// Force-refresh immediately with cleared filters (state updates are async)
-			fetchData(1, { name: "", address: "", agentId: "", chainId: undefined });
+		// Force-refresh immediately with cleared filters (state updates are async)
+		fetchData(1, { name: "", address: "", agentId: "", chainId: undefined });
 	}
 
 	async function runDiscover() {
@@ -1439,7 +1465,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	}
 
 	function setStoredCard(domain: string, value: string) {
-		try { localStorage.setItem(`agent_card:${domain.trim().toLowerCase()}`, value); } catch {}
+		try { localStorage.setItem(`agent_card:${domain.trim().toLowerCase()}`, value); } catch { }
 	}
 
 	async function loadIdentityDefaults(row: Agent): Promise<{ name?: string; description?: string; url?: string }> {
@@ -1483,9 +1509,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							}
 						}
 					}
-				} catch {}
+				} catch { }
 			}
-		} catch {}
+		} catch { }
 		return out;
 	}
 
@@ -1520,7 +1546,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		let existing = getStoredCard(agentName);
 		if (existing) {
 			setCardJson(existing);
-			try { await populateFieldsFromObj(JSON.parse(existing)); } catch {}
+			try { await populateFieldsFromObj(JSON.parse(existing)); } catch { }
 			setCardOpen(true);
 			return;
 		}
@@ -1551,7 +1577,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				} catch {}
 			}
 			*/
-                    const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+			const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
 			if (!provider || !eoa) throw new Error('Not connected');
 			const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 			const cardObj = await buildAgentCard({
@@ -1606,40 +1632,40 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		setFeedbackError(null);
 		setFeedbackData([]);
 
-    try {
-		console.info("............xxxx openFeedbackFor for agentId: ", row.agentId)
-        const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
-        const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-        const reputationRegistry = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`;
-        if (!reputationRegistry) throw new Error('Reputation registry not configured');
-        const zero32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
-        console.info("............readAllFeedback for agentId: ", row.agentId)
-		const res: any = await publicClient.readContract({
-            address: reputationRegistry,
-            abi: reputationRegistryAbi as any,
-            functionName: 'readAllFeedback' as any,
-            args: [BigInt(row.agentId), [], zero32, zero32, true],
-        });
-		console.info("............res: ", res)
-        const clients = (res?.outClients ?? res?.[0]) || [];
-        const scores = (res?.scores ?? res?.[1]) || [];
-        const tag1s = (res?.tag1s ?? res?.[2]) || [];
-        const tag2s = (res?.tag2s ?? res?.[3]) || [];
-        const revoked = (res?.revokedStatuses ?? res?.[4]) || [];
-        const list = clients.map((addr: string, i: number) => ({
-            client: addr,
-            score: Number(scores[i] ?? 0),
-            tag1: tag1s[i] as `0x${string}`,
-            tag2: tag2s[i] as `0x${string}`,
-            revoked: Boolean(revoked[i]),
-        }));
-        setFeedbackData(list);
-    } catch (error: any) {
-        console.error('Error fetching feedback data:', error);
-        setFeedbackError(error.message || 'Failed to fetch feedback data');
-    } finally {
-        setFeedbackLoading(false);
-    }
+		try {
+			console.info("............xxxx openFeedbackFor for agentId: ", row.agentId)
+			const rpcUrl = process.env.NEXT_PUBLIC_ETH_SEPOLIA_RPC_URL as string;
+			const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+			const reputationRegistry = process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`;
+			if (!reputationRegistry) throw new Error('Reputation registry not configured');
+			const zero32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
+			console.info("............readAllFeedback for agentId: ", row.agentId)
+			const res: any = await publicClient.readContract({
+				address: reputationRegistry,
+				abi: reputationRegistryAbi as any,
+				functionName: 'readAllFeedback' as any,
+				args: [BigInt(row.agentId), [], zero32, zero32, true],
+			});
+			console.info("............res: ", res)
+			const clients = (res?.outClients ?? res?.[0]) || [];
+			const scores = (res?.scores ?? res?.[1]) || [];
+			const tag1s = (res?.tag1s ?? res?.[2]) || [];
+			const tag2s = (res?.tag2s ?? res?.[3]) || [];
+			const revoked = (res?.revokedStatuses ?? res?.[4]) || [];
+			const list = clients.map((addr: string, i: number) => ({
+				client: addr,
+				score: Number(scores[i] ?? 0),
+				tag1: tag1s[i] as `0x${string}`,
+				tag2: tag2s[i] as `0x${string}`,
+				revoked: Boolean(revoked[i]),
+			}));
+			setFeedbackData(list);
+		} catch (error: any) {
+			console.error('Error fetching feedback data:', error);
+			setFeedbackError(error.message || 'Failed to fetch feedback data');
+		} finally {
+			setFeedbackLoading(false);
+		}
 	}
 
 
@@ -1650,7 +1676,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		setEnsError(null);
 		setEnsData(null);
 		setEnsSubdomainName('');
-		
+
 		// Set parent name from environment variables
 		const parentEnsName = process.env.NEXT_PUBLIC_ETH_SEPOLIA_ENS_NAME as string;
 		if (parentEnsName) {
@@ -1660,10 +1686,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		try {
 			// First check parent domain wrap status
 			await checkParentWrapStatus();
-			
+
 			// Perform reverse lookup to get ENS name for the agent address
 			const ensName = await ensService.getEnsName(row.agentAddress, sepolia);
-			
+
 			if (ensName) {
 				// Get comprehensive ENS data including avatar
 				const comprehensiveData = await ensService.getEnsComprehensiveData(row.agentAddress, sepolia);
@@ -1695,42 +1721,42 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 		setSessionLoading(true);
 		setSessionProgressActive(true);
 		setSessionProgress(0);
-		
+
 		// Start progress bar that runs for 60 seconds
 		const startTime = Date.now();
 		const duration = 60000; // 60 seconds in milliseconds
 		let progressInterval: NodeJS.Timeout | null = null;
-		
+
 		progressInterval = setInterval(() => {
 			const elapsed = Date.now() - startTime;
 			const progress = Math.min((elapsed / duration) * 100, 100);
 			setSessionProgress(progress);
-			
+
 			if (progress >= 100) {
 				if (progressInterval) clearInterval(progressInterval);
 				setSessionProgressActive(false);
 			}
 		}, 100); // Update every 100ms
-		
+
 		try {
 			if (!provider || !eoa) throw new Error('Not connected');
-			
+
 			// Get chain-specific configuration based on the agent's chainId
 			const agentChainId = row.chainId;
 			const rpcUrl = getRpcUrl(agentChainId);
 			const chain = getViemChain(agentChainId);
 			const bundlerUrl = getBundlerUrl(agentChainId);
 			const identityRegistry = getIdentityRegistry(agentChainId);
-			
+
 			if (!rpcUrl || !chain || !bundlerUrl) {
 				throw new Error(`Chain configuration not found for chainId ${agentChainId}`);
 			}
-			
+
 			// Switch wallet to the agent's chain
 			const chainIdHex = getChainIdHex(agentChainId);
 			const web3AuthProvider = provider as any;
 			const eip1193 = web3AuthProvider;
-			
+
 			try {
 				await eip1193.request({
 					method: "wallet_switchEthereumChain",
@@ -1753,10 +1779,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 					throw switchError;
 				}
 			}
-			
+
 			// Add delay to allow wallet to adapt to chain switch
 			await new Promise(resolve => setTimeout(resolve, 1000));
-			
+
 			const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 			const walletClient = createWalletClient({ chain: chain as any, transport: custom(provider as any), account: eoa as `0x${string}` });
 
@@ -1811,9 +1837,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			const pk = generatePrivateKey() as `0x${string}`;
 			const sk = privateKeyToAccount(pk);
 			const skAddr = sk.address as `0x${string}`;
-			const now = Math.floor(Date.now()/1000);
+			const now = Math.floor(Date.now() / 1000);
 			const validAfter = now - 60;
-			const validUntil = now + 60*30;
+			const validUntil = now + 60 * 30;
 
 			const paymasterUrl = (process.env.NEXT_PUBLIC_PAYMASTER_URL as string) || undefined;
 			const reputationRegistry = (process.env.NEXT_PUBLIC_REPUTATION_REGISTRY as `0x${string}`) || '0x0000000000000000000000000000000000000000';
@@ -1842,7 +1868,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				const { fast: fee } = await pimlico.getUserOperationGasPrice();
 				const userOperationHash = await bundlerClient.sendUserOperation({
 					account: burnerAccountClient as any,
-					calls: [ { to: zeroAddress } ],
+					calls: [{ to: zeroAddress }],
 					...fee,
 				});
 				await bundlerClient.waitForUserOperationReceipt({ hash: userOperationHash });
@@ -1863,9 +1889,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				.build();
 
 
-			const del = await (createDelegation as any)({ 
-				from: aa as `0x${string}`, 
-				to: sessionAA as `0x${string}`, 
+			const del = await (createDelegation as any)({
+				from: aa as `0x${string}`,
+				to: sessionAA as `0x${string}`,
 				caveats: caveats
 			});
 			let signature: `0x${string}`;
@@ -1877,7 +1903,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				throw new Error('signDelegation helper not available');
 			}
 			signedDelegation = { message: del, signature };
-		
+
 
 			const session = {
 				agentId: row.agentId,
@@ -1942,7 +1968,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 	}
 
 	// Compute filtered rows once to avoid recalculating
-	const filteredRowsForDisplay = React.useMemo(() => 
+	const filteredRowsForDisplay = React.useMemo(() =>
 		data.rows.filter((row) => {
 			const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
 			return inDiscover && (!mineOnly || owned[row.agentId]);
@@ -2033,7 +2059,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			<Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, borderColor: '#d0d7de', bgcolor: '#ffffff', borderRadius: '6px' }}>
 				<Stack spacing={2}>
 					{/* Search Form */}
-				<Box component="form" onSubmit={handleSubmit} sx={{ display: 'block' }}>
+					<Box component="form" onSubmit={handleSubmit} sx={{ display: 'block' }}>
 						<Grid container spacing={2}>
 							<Grid item xs={12} md={2} sx={{ display: { xs: 'none', sm: 'block' } }}>
 								<TextField
@@ -2062,12 +2088,12 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								</TextField>
 							</Grid>
 							<Grid item xs={12} md={2} sx={{ display: { xs: 'none', sm: 'block' } }}>
-								<TextField 
-									fullWidth 
-									label="address" 
-									placeholder="0x…" 
-									value={address} 
-									onChange={(e) => setAddress(e.target.value)} 
+								<TextField
+									fullWidth
+									label="address"
+									placeholder="0x…"
+									value={address}
+									onChange={(e) => setAddress(e.target.value)}
 									size="small"
 									sx={{
 										'& .MuiOutlinedInput-root': {
@@ -2082,152 +2108,152 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									}}
 								/>
 							</Grid>
-						<Grid item xs={7} sm={12} md={3}>
-							<TextField 
-								fullWidth 
-								label="name" 
-								placeholder={isMobile ? "Filter by name" : "Filter by name (ENS or metadata)"}
-								value={domain} 
-								onChange={(e) => setDomain(e.target.value)} 
-								size="small"
-								sx={{
-									'& .MuiOutlinedInput-root': {
-										borderColor: '#d0d7de',
-										'&:hover': {
-											borderColor: '#d0d7de',
-										},
-										'&.Mui-focused': {
-											borderColor: '#0969da',
-										},
-									},
-								}}
-							/>
-						</Grid>
-						<Grid item xs={5} sm={12} md={2}>
-							<TextField 
-								fullWidth 
-								label="id" 
-								placeholder="Filter by id" 
-								value={agentId} 
-								onChange={(e) => {
-									const value = e.target.value;
-									// Only allow digits and limit to 5 characters
-									if (value === '' || (/^\d+$/.test(value) && value.length <= 5)) {
-										setAgentId(value);
-									}
-								}} 
-								size="small"
-								inputProps={{
-									maxLength: 5,
-								}}
-								sx={{
-									'& .MuiOutlinedInput-root': {
-										borderColor: '#d0d7de',
-										'&:hover': {
-											borderColor: '#d0d7de',
-										},
-										'&.Mui-focused': {
-											borderColor: '#0969da',
-										},
-									},
-								}}
-							/>
-						</Grid>
-						<Grid item xs={12} md={1} sx={{ display: { xs: 'none', sm: 'block' } }}>
-							<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
-						</Grid>
-						<Grid item xs={12} md={2}>
-							<Stack direction="row" spacing={1} sx={{ height: '100%', flexWrap: { xs: 'nowrap', sm: 'nowrap' } }}>
-								<Button 
-									type="submit" 
-									variant="contained" 
-									disableElevation 
-									sx={{ 
-										flex: { xs: 1, sm: 1 },
-										minWidth: { xs: 'auto', sm: 'auto' },
-										backgroundColor: 'rgb(31, 136, 61)',
-										color: '#ffffff',
-										'&:hover': {
-											backgroundColor: 'rgb(26, 115, 51)',
-										},
-										'&:disabled': {
-											backgroundColor: 'rgba(31, 136, 61, 0.5)',
-											color: '#ffffff',
-										},
-									}} 
-									disabled={isLoading}
-								>
-									{isLoading ? 'Searching…' : 'Search'}
-								</Button>
-								<Button 
-									type="button" 
-									variant="outlined" 
+							<Grid item xs={7} sm={12} md={3}>
+								<TextField
+									fullWidth
+									label="name"
+									placeholder={isMobile ? "Filter by name" : "Filter by name (ENS or metadata)"}
+									value={domain}
+									onChange={(e) => setDomain(e.target.value)}
 									size="small"
-									sx={{ 
-										flex: { xs: 0, sm: 1 },
-										minWidth: { xs: 'auto', sm: 'auto' },
-										px: { xs: 1, sm: 1.5 },
-										borderColor: '#d0d7de',
-										color: '#24292f',
-										whiteSpace: 'nowrap',
-										'&:hover': {
+									sx={{
+										'& .MuiOutlinedInput-root': {
 											borderColor: '#d0d7de',
-											backgroundColor: '#f6f8fa',
+											'&:hover': {
+												borderColor: '#d0d7de',
+											},
+											'&.Mui-focused': {
+												borderColor: '#0969da',
+											},
 										},
-									}} 
-									disabled={isLoading} 
-									onClick={clearFilters}
-								>
-									Clear
-								</Button>
-							</Stack>
+									}}
+								/>
+							</Grid>
+							<Grid item xs={5} sm={12} md={2}>
+								<TextField
+									fullWidth
+									label="id"
+									placeholder="Filter by id"
+									value={agentId}
+									onChange={(e) => {
+										const value = e.target.value;
+										// Only allow digits and limit to 5 characters
+										if (value === '' || (/^\d+$/.test(value) && value.length <= 5)) {
+											setAgentId(value);
+										}
+									}}
+									size="small"
+									inputProps={{
+										maxLength: 5,
+									}}
+									sx={{
+										'& .MuiOutlinedInput-root': {
+											borderColor: '#d0d7de',
+											'&:hover': {
+												borderColor: '#d0d7de',
+											},
+											'&.Mui-focused': {
+												borderColor: '#0969da',
+											},
+										},
+									}}
+								/>
+							</Grid>
+							<Grid item xs={12} md={1} sx={{ display: { xs: 'none', sm: 'block' } }}>
+								<FormControlLabel control={<Checkbox checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} size="small" />} label="Mine" />
+							</Grid>
+							<Grid item xs={12} md={2}>
+								<Stack direction="row" spacing={1} sx={{ height: '100%', flexWrap: { xs: 'nowrap', sm: 'nowrap' } }}>
+									<Button
+										type="submit"
+										variant="contained"
+										disableElevation
+										sx={{
+											flex: { xs: 1, sm: 1 },
+											minWidth: { xs: 'auto', sm: 'auto' },
+											backgroundColor: 'rgb(31, 136, 61)',
+											color: '#ffffff',
+											'&:hover': {
+												backgroundColor: 'rgb(26, 115, 51)',
+											},
+											'&:disabled': {
+												backgroundColor: 'rgba(31, 136, 61, 0.5)',
+												color: '#ffffff',
+											},
+										}}
+										disabled={isLoading}
+									>
+										{isLoading ? 'Searching…' : 'Search'}
+									</Button>
+									<Button
+										type="button"
+										variant="outlined"
+										size="small"
+										sx={{
+											flex: { xs: 0, sm: 1 },
+											minWidth: { xs: 'auto', sm: 'auto' },
+											px: { xs: 1, sm: 1.5 },
+											borderColor: '#d0d7de',
+											color: '#24292f',
+											whiteSpace: 'nowrap',
+											'&:hover': {
+												borderColor: '#d0d7de',
+												backgroundColor: '#f6f8fa',
+											},
+										}}
+										disabled={isLoading}
+										onClick={clearFilters}
+									>
+										Clear
+									</Button>
+								</Stack>
+							</Grid>
 						</Grid>
-				</Grid>
-			</Box>
+					</Box>
 
-			{/* Discover below search - Hidden for now */}
-			<Box component="form" onSubmit={(e) => { e.preventDefault(); runDiscover(); }} sx={{ display: 'none' }}>
-				<Grid container spacing={2} alignItems="center">
-					<Grid item xs={12} md={9}>
-						<TextField fullWidth label="discover agents" placeholder="Describe what you're looking for…" value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} size="small" />
-					</Grid>
-					<Grid item xs={12} md={3}>
-						<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
-							<Button 
-								type="submit" 
-								variant="contained" 
-								disableElevation 
-								sx={{ 
-									flex: 1,
-									backgroundColor: 'rgb(31, 136, 61)',
-									color: '#ffffff',
-									'&:hover': {
-										backgroundColor: 'rgb(26, 115, 51)',
-									},
-									'&:disabled': {
-										backgroundColor: 'rgba(31, 136, 61, 0.5)',
-										color: '#ffffff',
-									},
-								}} 
-								disabled={discoverLoading || !discoverQuery.trim()}
-							>
-								{discoverLoading ? 'Discovering…' : 'Discover'}
-							</Button>
-							<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={discoverLoading && !discoverMatches} onClick={clearDiscover}>Clear</Button>
-						</Stack>
-					</Grid>
-					{discoverError && (
-						<Grid item xs={12}>
-							<Typography variant="body2" color="error">{discoverError}</Typography>
+					{/* Discover below search - Hidden for now */}
+					<Box component="form" onSubmit={(e) => { e.preventDefault(); runDiscover(); }} sx={{ display: 'none' }}>
+						<Grid container spacing={2} alignItems="center">
+							<Grid item xs={12} md={9}>
+								<TextField fullWidth label="discover agents" placeholder="Describe what you're looking for…" value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} size="small" />
+							</Grid>
+							<Grid item xs={12} md={3}>
+								<Stack direction="row" spacing={1} sx={{ height: '100%' }}>
+									<Button
+										type="submit"
+										variant="contained"
+										disableElevation
+										sx={{
+											flex: 1,
+											backgroundColor: 'rgb(31, 136, 61)',
+											color: '#ffffff',
+											'&:hover': {
+												backgroundColor: 'rgb(26, 115, 51)',
+											},
+											'&:disabled': {
+												backgroundColor: 'rgba(31, 136, 61, 0.5)',
+												color: '#ffffff',
+											},
+										}}
+										disabled={discoverLoading || !discoverQuery.trim()}
+									>
+										{discoverLoading ? 'Discovering…' : 'Discover'}
+									</Button>
+									<Button type="button" variant="outlined" sx={{ flex: 1 }} disabled={discoverLoading && !discoverMatches} onClick={clearDiscover}>Clear</Button>
+								</Stack>
+							</Grid>
+							{discoverError && (
+								<Grid item xs={12}>
+									<Typography variant="body2" color="error">{discoverError}</Typography>
+								</Grid>
+							)}
+							{discoverMatches && (
+								<Grid item xs={12}>
+									<Typography variant="caption" color="text.secondary">Showing {discoverMatches.size} discovered match(es)</Typography>
+								</Grid>
+							)}
 						</Grid>
-					)}
-					{discoverMatches && (
-						<Grid item xs={12}>
-							<Typography variant="caption" color="text.secondary">Showing {discoverMatches.size} discovered match(es)</Typography>
-						</Grid>
-					)}
-				</Grid>
-			</Box>
+					</Box>
 				</Stack>
 			</Paper>
 
@@ -2261,17 +2287,17 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						const displayName = dbName || fetchedName || null;
 						const nameText = displayName || ens || '—';
 						const registryAddress = getIdentityRegistry(row.chainId);
-						
+
 						// Get agent URL if already fetched
 						const agentUrl = ens ? agentUrls[ens] : null;
-						
+
 						return (
-							<Card 
+							<Card
 								key={`${row.chainId}-${row.agentId}`}
-								variant="outlined" 
-								sx={{ 
-									borderColor: '#d0d7de', 
-									bgcolor: '#ffffff', 
+								variant="outlined"
+								sx={{
+									borderColor: '#d0d7de',
+									bgcolor: '#ffffff',
 									borderRadius: '6px',
 									cursor: { xs: 'pointer', sm: 'default' },
 									width: { xs: '100%', md: 'calc(33.333% - 11px)' },
@@ -2315,9 +2341,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									<Stack spacing={2}>
 										{/* Name */}
 										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-											<Avatar 
-												src={agentAvatars[ens || ''] || undefined} 
-												alt={nameText} 
+											<Avatar
+												src={agentAvatars[ens || ''] || undefined}
+												alt={nameText}
 												sx={{ width: 40, height: 40 }}
 											/>
 											{ens ? (
@@ -2328,10 +2354,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													rel="noopener noreferrer"
 													variant="body1"
 													onClick={(e) => e.stopPropagation()}
-													sx={{ 
-														fontFamily: 'ui-monospace, monospace', 
-														color: 'primary.main', 
-														textDecoration: 'underline', 
+													sx={{
+														fontFamily: 'ui-monospace, monospace',
+														color: 'primary.main',
+														textDecoration: 'underline',
 														cursor: 'pointer',
 														fontWeight: 600,
 														display: 'block',
@@ -2397,15 +2423,15 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														{sessionLoading ? 'Loading...' : 'session file'}
 													</Typography>
 													{sessionProgressActive && (
-														<LinearProgress 
-															variant="determinate" 
-															value={sessionProgress} 
-															sx={{ 
+														<LinearProgress
+															variant="determinate"
+															value={sessionProgress}
+															sx={{
 																width: '100px',
 																height: 4,
 																mt: 0.5,
 																borderRadius: 2,
-															}} 
+															}}
 														/>
 													)}
 												</Box>
@@ -2423,11 +2449,11 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														default: return `chain-${chainId}`;
 													}
 												};
-												
+
 												return (
-													<Typography 
-														variant="body2" 
-														sx={{ 
+													<Typography
+														variant="body2"
+														sx={{
 															fontFamily: 'ui-monospace, monospace',
 															fontSize: '0.75rem',
 															color: '#24292f',
@@ -2460,23 +2486,23 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											>
 												account
 											</Typography>
-											
+
 										</Box>
-										
+
 
 										{/* Description */}
 										{row.description && (
-											<Box sx={{ 
-												bgcolor: '#f8f9fa', 
-												border: '1px solid #e1e4e8', 
+											<Box sx={{
+												bgcolor: '#f8f9fa',
+												border: '1px solid #e1e4e8',
 												borderRadius: '6px',
 												p: 1.5,
 												position: 'relative',
 											}}>
-												<FormLabel sx={{ 
-													fontSize: '0.625rem', 
-													fontWeight: 600, 
-													color: 'text.secondary', 
+												<FormLabel sx={{
+													fontSize: '0.625rem',
+													fontWeight: 600,
+													color: 'text.secondary',
 													position: 'absolute',
 													top: -8,
 													left: 8,
@@ -2494,17 +2520,17 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 										{/* Agent URL from ENS */}
 										{agentUrl && (
-											<Box sx={{ 
-												bgcolor: '#f8f9fa', 
-												border: '1px solid #e1e4e8', 
+											<Box sx={{
+												bgcolor: '#f8f9fa',
+												border: '1px solid #e1e4e8',
 												borderRadius: '6px',
 												p: 1.5,
 												position: 'relative',
 											}}>
-												<FormLabel sx={{ 
-													fontSize: '0.625rem', 
-													fontWeight: 600, 
-													color: 'text.secondary', 
+												<FormLabel sx={{
+													fontSize: '0.625rem',
+													fontWeight: 600,
+													color: 'text.secondary',
 													position: 'absolute',
 													top: -8,
 													left: 8,
@@ -2514,15 +2540,15 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												}}>
 													url
 												</FormLabel>
-												<Typography 
+												<Typography
 													component="a"
 													href={agentUrl}
 													target="_blank"
 													rel="noopener noreferrer"
 													onClick={(e) => e.stopPropagation()}
-													variant="caption" 
+													variant="caption"
 													color="primary"
-													sx={{ 
+													sx={{
 														fontSize: '0.75rem',
 														textDecoration: 'underline',
 														cursor: 'pointer',
@@ -2542,7 +2568,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 										{/* Trust Score (if discover is active) */}
 										{discoverMatches && discoverTrustScores[row.agentId] && (
-											<Chip 
+											<Chip
 												label={`Trust: ${discoverTrustScores[row.agentId].score.toFixed(2)}`}
 												size="small"
 												color="primary"
@@ -2551,10 +2577,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 										)}
 
 										{/* Actions */}
-										<Stack 
-											direction="row" 
-											spacing={0.5} 
-											flexWrap="wrap" 
+										<Stack
+											direction="row"
+											spacing={0.5}
+											flexWrap="wrap"
 											useFlexGap
 											onClick={(e) => e.stopPropagation()}
 										>
@@ -2606,42 +2632,42 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													<LocalFireDepartmentIcon fontSize="small" />
 												</IconButton>
 											)}
-											<Button 
-												size="small" 
+											<Button
+												size="small"
 												onClick={(e) => {
 													e.stopPropagation();
 													openAgentInfo(row);
-												}} 
+												}}
 												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
 											>
 												Info
 											</Button>
-											<Button 
-														size="small" 
-														onClick={(e) => {
-															e.stopPropagation();
-															openIdentityJson(row);
-														}}
-														disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false}
-														sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
-													>
-														Reg
-													</Button>
+											<Button
+												size="small"
+												onClick={(e) => {
+													e.stopPropagation();
+													openIdentityJson(row);
+												}}
+												disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false}
+												sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+											>
+												Reg
+											</Button>
 											{owned[row.agentId] && (
 												<>
-													
-													<Button 
-														size="small" 
+
+													<Button
+														size="small"
 														onClick={(e) => {
 															e.stopPropagation();
 															viewOrCreateCard(row);
-														}} 
+														}}
 														sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
 													>
 														Card
 													</Button>
-													<Button 
-														size="small" 
+													<Button
+														size="small"
 														onClick={(e) => {
 															e.stopPropagation();
 															openDidWebModal(row);
@@ -2650,8 +2676,8 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 													>
 														DID:Web
 													</Button>
-													<Button 
-														size="small" 
+													<Button
+														size="small"
 														onClick={(e) => {
 															e.stopPropagation();
 															openDidAgentModal(row);
@@ -2661,7 +2687,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														DID:Agent
 													</Button>
 													{row.a2aEndpoint && (
-														<Button 
+														<Button
 															component="a"
 															href={row.a2aEndpoint}
 															target="_blank"
@@ -2685,223 +2711,223 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 			</Box>
 
 			{/* Desktop Table View */}
-			<TableContainer 
-				component={Paper} 
-				variant="outlined" 
-				sx={{ 
+			<TableContainer
+				component={Paper}
+				variant="outlined"
+				sx={{
 					display: showCardView ? { xs: 'none', sm: 'none' } : { xs: 'none', sm: 'block' },
-					overflowX: 'auto', 
-					borderColor: '#d0d7de', 
-					bgcolor: '#ffffff', 
+					overflowX: 'auto',
+					borderColor: '#d0d7de',
+					bgcolor: '#ffffff',
 					borderRadius: '6px',
 					'-webkit-overflow-scrolling': 'touch',
 					width: '100%',
 				}}
 			>
 				<Table size="small" sx={{ minWidth: 1200 }}>
-                            <TableHead sx={{ display: { xs: 'none', sm: 'table-header-group' } }}>
-								<TableRow sx={{ bgcolor: '#f6f8fa', borderBottom: '1px solid #d0d7de' }}>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', width: '60px' }}>Image</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Chain</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Account Address</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Name</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Description</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Identity ID</TableCell>
-								<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>A2A</TableCell>
-								{discoverMatches && <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Trust Score</TableCell>}
-							</TableRow>
-						</TableHead>
+					<TableHead sx={{ display: { xs: 'none', sm: 'table-header-group' } }}>
+						<TableRow sx={{ bgcolor: '#f6f8fa', borderBottom: '1px solid #d0d7de' }}>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', width: '60px' }}>Image</TableCell>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Chain</TableCell>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Account Address</TableCell>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Name</TableCell>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Description</TableCell>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Identity ID</TableCell>
+							<TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>A2A</TableCell>
+							{discoverMatches && <TableCell sx={{ fontWeight: 600, color: '#24292f', fontSize: { xs: '0.65rem', sm: '0.75rem' }, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Trust Score</TableCell>}
+						</TableRow>
+					</TableHead>
 					<TableBody>
-					{!isLoading && data.rows.filter((row) => {
-						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
-						return inDiscover && (!mineOnly || owned[row.agentId]);
-					}).length === 0 && (
-                            <TableRow>
-                                <TableCell colSpan={discoverMatches ? 8 : 7} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
-									<Typography variant="body2" color="text.secondary">No agents found.</Typography>
-								</TableCell>
-							</TableRow>
-						)}
+						{!isLoading && data.rows.filter((row) => {
+							const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+							return inDiscover && (!mineOnly || owned[row.agentId]);
+						}).length === 0 && (
+								<TableRow>
+									<TableCell colSpan={discoverMatches ? 8 : 7} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
+										<Typography variant="body2" color="text.secondary">No agents found.</Typography>
+									</TableCell>
+								</TableRow>
+							)}
 						{isLoading && (
-                            <TableRow>
-                                <TableCell colSpan={discoverMatches ? 8 : 7} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
+							<TableRow>
+								<TableCell colSpan={discoverMatches ? 8 : 7} align="center" sx={{ py: 3, color: '#656d76', fontSize: '0.875rem', borderBottom: '1px solid #d0d7de' }}>
 									<Typography variant="body2" color="text.secondary">Loading…</Typography>
 								</TableCell>
 							</TableRow>
 						)}
-					{data.rows.filter((row) => {
-						const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
-						return inDiscover && (!mineOnly || owned[row.agentId]);
-					}).sort((a, b) => {
-						// Sort by trust score if discover is active (highest first)
-						if (discoverMatches && discoverTrustScores[a.agentId] && discoverTrustScores[b.agentId]) {
-							return discoverTrustScores[b.agentId].score - discoverTrustScores[a.agentId].score;
-						}
-						// If only one has a score, prioritize it
-						if (discoverMatches && discoverTrustScores[a.agentId]) return -1;
-						if (discoverMatches && discoverTrustScores[b.agentId]) return 1;
-						// Default: maintain original order
-						return 0;
-					})?.map((row) => (
-									<TableRow 
-										key={`${row.chainId}-${row.agentId}`} 
-										hover
-										sx={{
-											borderBottom: '1px solid #d0d7de',
-											'&:hover': {
-												backgroundColor: '#f6f8fa',
-											},
-											'&:last-child': {
-												borderBottom: 'none',
-											},
-										}}
-									>
+						{data.rows.filter((row) => {
+							const inDiscover = !discoverMatches || discoverMatches.has(row.agentId);
+							return inDiscover && (!mineOnly || owned[row.agentId]);
+						}).sort((a, b) => {
+							// Sort by trust score if discover is active (highest first)
+							if (discoverMatches && discoverTrustScores[a.agentId] && discoverTrustScores[b.agentId]) {
+								return discoverTrustScores[b.agentId].score - discoverTrustScores[a.agentId].score;
+							}
+							// If only one has a score, prioritize it
+							if (discoverMatches && discoverTrustScores[a.agentId]) return -1;
+							if (discoverMatches && discoverTrustScores[b.agentId]) return 1;
+							// Default: maintain original order
+							return 0;
+						})?.map((row) => (
+							<TableRow
+								key={`${row.chainId}-${row.agentId}`}
+								hover
+								sx={{
+									borderBottom: '1px solid #d0d7de',
+									'&:hover': {
+										backgroundColor: '#f6f8fa',
+									},
+									'&:last-child': {
+										borderBottom: 'none',
+									},
+								}}
+							>
+								{(() => {
+									const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+									const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+									const avatar = ens ? agentAvatars[ens] : null;
+
+									return (
+										<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 }, width: '60px' }}>
+											{avatar ? (
+												<Avatar
+													src={avatar}
+													alt={row.agentName || ens || 'Agent'}
+													sx={{ width: 40, height: 40 }}
+												/>
+											) : (
+												<Avatar sx={{ width: 40, height: 40, bgcolor: 'grey.300' }}>
+													{row.agentName?.charAt(0).toUpperCase() || '?'}
+												</Avatar>
+											)}
+										</TableCell>
+									);
+								})()}
+								<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
+									{(() => {
+										// Map chainId to lowercase hyphenated format
+										const getChainDisplayName = (chainId: number): string => {
+											switch (chainId) {
+												case 11155111: return 'eth-sepolia';
+												case 84532: return 'base-sepolia';
+												case 11155420: return 'op-sepolia';
+												default: return `chain-${chainId}`;
+											}
+										};
+
+										return (
+											<Typography
+												variant="body2"
+												sx={{
+													fontFamily: 'ui-monospace, monospace',
+													fontSize: { xs: '0.75rem', sm: '0.875rem' },
+													color: '#24292f',
+												}}
+											>
+												{getChainDisplayName(row.chainId)}
+											</Typography>
+										);
+									})()}
+								</TableCell>
+								<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
+									<Stack direction="row" spacing={0.25} alignItems="center">
 										{(() => {
-											const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
-											const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
-											const avatar = ens ? agentAvatars[ens] : null;
-											
-											return (
-												<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 }, width: '60px' }}>
-													{avatar ? (
-														<Avatar 
-															src={avatar} 
-															alt={row.agentName || ens || 'Agent'} 
-															sx={{ width: 40, height: 40 }}
-														/>
-													) : (
-														<Avatar sx={{ width: 40, height: 40, bgcolor: 'grey.300' }}>
-															{row.agentName?.charAt(0).toUpperCase() || '?'}
-														</Avatar>
-													)}
-												</TableCell>
-											);
-										})()}
-										<TableCell sx={{ color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
-											{(() => {
-												// Map chainId to lowercase hyphenated format
-												const getChainDisplayName = (chainId: number): string => {
-													switch (chainId) {
-														case 11155111: return 'eth-sepolia';
-														case 84532: return 'base-sepolia';
-														case 11155420: return 'op-sepolia';
-														default: return `chain-${chainId}`;
-													}
-												};
-												
+											const acct = (metadataAccounts[row.agentId] as `0x${string}` | undefined) || (row.agentAddress as `0x${string}` | undefined);
+											if (!acct) {
 												return (
-													<Typography 
-														variant="body2" 
-														sx={{ 
-															fontFamily: 'ui-monospace, monospace',
-															fontSize: { xs: '0.75rem', sm: '0.875rem' },
-															color: '#24292f',
-														}}
-													>
-														{getChainDisplayName(row.chainId)}
+													<Typography component="span" variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }} noWrap>
+														—
 													</Typography>
 												);
-											})()}
-										</TableCell>
-										<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: { xs: 0.75, sm: 1 } }}>
-											<Stack direction="row" spacing={0.25} alignItems="center">
-												{(() => {
-													const acct = (metadataAccounts[row.agentId] as `0x${string}` | undefined) || (row.agentAddress as `0x${string}` | undefined);
-													if (!acct) {
-														return (
-															<Typography component="span" variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }} noWrap>
-																—
-															</Typography>
-														);
-													}
-													const display = `${acct.slice(0, 6)}...${acct.slice(-4)}`;
-													return (
-														<Typography 
-															component="span" 
-															variant="body2" 
-															sx={{ fontFamily: 'ui-monospace, monospace', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-															onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
-															noWrap 
-															title={`Click to view on ${getExplorerName(row.chainId)}: ${acct}`}
-															onClick={() => window.open(`${getExplorerUrl(row.chainId)}/address/${acct}`, '_blank')}
-														>
-															{display}
-														</Typography>
-													);
-												})()}
-											</Stack>
-                                        </TableCell>
-                        <TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
-                            {(() => {
-                                const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
-                                const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
-                                // Use fetched name if database name is empty, otherwise use database name
-                                const dbName = row.agentName || '';
-                                const fetchedName = metadataNames[row.agentId] || null;
-                                const displayName = dbName || fetchedName || null;
-                                const a2aPreview = a2aJsonById[row.agentId];
-                                const tooltip = a2aPreview ? `${displayName || ens || ''}\n\n${a2aPreview}` : (displayName || ens || '—');
-                                const nameText = displayName || ens || '—';
-                                if (ens) {
-                                    return (
-                                        <Typography
-                                            component="a"
-                                            href={`https://sepolia.app.ens.domains/${ens as string}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            variant="body2"
-                                            noWrap
-                                            sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
-                                            title={tooltip}
-                                        >
-                                            {nameText}
-                                        </Typography>
-                                    );
-                                }
-                                return (
-                                    <Typography
-                                        variant="body2"
-                                        noWrap
-                                        sx={{ fontFamily: 'ui-monospace, monospace' }}
-                                        title={tooltip}
-                                    >
-                                        {nameText}
-                                    </Typography>
-                                );
-                            })()}
-                            {(row.ensEndpoint || agentEnsNames[row.agentAddress]) && (
-                                <>
-                                    <Button 
-                                        size="small" 
-                                        onClick={() => openEnsDetails(row)}
-                                        sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
-                                    >
-                                        ENS
-                                    </Button>
-                                </>
-                            )}
-                            {/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
-                        </TableCell>
-                                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: '0.875rem', py: 1 }}>
-                                            <Typography
-                                                variant="body2"
-                                                noWrap
-                                                sx={{ fontFamily: 'ui-monospace, monospace' }}
-                                                title={row.description || ''}
-                                            >
-                                                {(row.description || '—').slice(0, 5)}
-                                            </Typography>
-                                        </TableCell>
+											}
+											const display = `${acct.slice(0, 6)}...${acct.slice(-4)}`;
+											return (
+												<Typography
+													component="span"
+													variant="body2"
+													sx={{ fontFamily: 'ui-monospace, monospace', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+													onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
+													noWrap
+													title={`Click to view on ${getExplorerName(row.chainId)}: ${acct}`}
+													onClick={() => window.open(`${getExplorerUrl(row.chainId)}/address/${acct}`, '_blank')}
+												>
+													{display}
+												</Typography>
+											);
+										})()}
+									</Stack>
+								</TableCell>
+								<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+									{(() => {
+										const acct = metadataAccounts[row.agentId] || (row.agentAddress as `0x${string}`);
+										const ens = row.ensEndpoint || agentEnsNames[acct] || agentEnsNames[row.agentAddress];
+										// Use fetched name if database name is empty, otherwise use database name
+										const dbName = row.agentName || '';
+										const fetchedName = metadataNames[row.agentId] || null;
+										const displayName = dbName || fetchedName || null;
+										const a2aPreview = a2aJsonById[row.agentId];
+										const tooltip = a2aPreview ? `${displayName || ens || ''}\n\n${a2aPreview}` : (displayName || ens || '—');
+										const nameText = displayName || ens || '—';
+										if (ens) {
+											return (
+												<Typography
+													component="a"
+													href={`https://sepolia.app.ens.domains/${ens as string}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													variant="body2"
+													noWrap
+													sx={{ fontFamily: 'ui-monospace, monospace', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', '&:hover': { color: 'primary.dark', textDecoration: 'none' } }}
+													title={tooltip}
+												>
+													{nameText}
+												</Typography>
+											);
+										}
+										return (
+											<Typography
+												variant="body2"
+												noWrap
+												sx={{ fontFamily: 'ui-monospace, monospace' }}
+												title={tooltip}
+											>
+												{nameText}
+											</Typography>
+										);
+									})()}
+									{(row.ensEndpoint || agentEnsNames[row.agentAddress]) && (
+										<>
+											<Button
+												size="small"
+												onClick={() => openEnsDetails(row)}
+												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+											>
+												ENS
+											</Button>
+										</>
+									)}
+									{/* Non-owner sees same info buttons already rendered in the previous block; no duplicates needed */}
+								</TableCell>
+								<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' }, color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+									<Typography
+										variant="body2"
+										noWrap
+										sx={{ fontFamily: 'ui-monospace, monospace' }}
+										title={row.description || ''}
+									>
+										{(row.description || '—').slice(0, 5)}
+									</Typography>
+								</TableCell>
 
-									<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
-										<Stack direction="row" spacing={1} alignItems="center">
-											{(() => {
-												// Get chain-specific registry address
-												const registryAddress = getIdentityRegistry(row.chainId);
-												
-												if (registryAddress) {
-													return (
-														<>
+								<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+									<Stack direction="row" spacing={1} alignItems="center">
+										{(() => {
+											// Get chain-specific registry address
+											const registryAddress = getIdentityRegistry(row.chainId);
+
+											if (registryAddress) {
+												return (
+													<>
 														<Typography
 															component="a"
 															href={`${getExplorerUrl(row.chainId)}/nft/${registryAddress}/${row.agentId}`}
@@ -2913,571 +2939,571 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														>
 															{row.agentId}
 														</Typography>
-														
-														</>
-													);
-												} else {
-													return (
-														<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
-													);
-												}
-											})()}
 
-											{/* Always-visible actions (read-only) */}
-											<Button 
-												size="small" 
-												onClick={() => openAgentInfo(row)}
-												sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
-											>
-												Info
-											</Button>
-											<Tooltip title={row.metadataURI || 'No registration URI'}>
-												<span>
-													<Button 
-														size="small" 
-														onClick={() => openIdentityJson(row)}
-														disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														Reg
-													</Button>
-												</span>
-											</Tooltip>
-											{owned[row.agentId] && (
-												<>
-													
-													<Button 
-														size="small" 
-														onClick={() => viewOrCreateCard(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														Card
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openDidWebModal(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														DID:Web
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openDidAgentModal(row)}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														DID:Agent
-													</Button>
-													<Button 
-														size="small" 
-														onClick={() => openSessionFor(row)} 
-														disabled={sessionLoading}
-														sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
-													>
-														{sessionLoading ? 'Loading...' : 'Session'}
-													</Button>
-													<Tooltip title="Burn Identity (send to 0x000…dEaD)">
-													<span>
-													<IconButton
-														size="small"
-														color="error"
-														onClick={async () => {
-															try {
-                                            const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
-																if (!registry) throw new Error('Registry address not configured');
-																const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
-																const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
-																const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+													</>
+												);
+											} else {
+												return (
+													<Chip label={row.agentId} size="small" sx={{ fontFamily: 'ui-monospace, monospace' }} />
+												);
+											}
+										})()}
 
-																const domainOwnerAddress = row.agentAddress;
-																const smartAccountClient = await toMetaMaskSmartAccount({
-																	address: domainOwnerAddress as `0x${string}`,
-																	client: publicClient,
-																	implementation: Implementation.Hybrid,
-																	signatory: { walletClient },
-																});
-
-																// Build calldata for transferFrom(from=AA, to=0x000...dEaD, tokenId)
-																const calldata = encodeFunctionData({
-																	abi: registryAbi as any,
-																	functionName: 'transferFrom' as any,
-																	args: [domainOwnerAddress, '0x000000000000000000000000000000000000dEaD' as `0x${string}`, BigInt(row.agentId)],
-																});
-
-																// Send UO via bundler
-																const bundlerUrl2 = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
-																const pimlicoClient2 = createPimlicoClient({ transport: http(bundlerUrl2) });
-																const bundlerClient2 = createBundlerClient({
-																	transport: http(bundlerUrl2),
-																	paymaster: true as any,
-																	chain: sepolia as any,
-																	paymasterContext: { mode: 'SPONSORED' },
-																} as any);
-																const { fast: fee2 } = await pimlicoClient2.getUserOperationGasPrice();
-
-																console.info(" send user operation to burn identity");
-																const userOpHash = await bundlerClient2.sendUserOperation({
-																	account: smartAccountClient as any,
-																	calls: [{ to: registry, data: calldata }],
-																	...fee2,
-																});
-																await bundlerClient2.waitForUserOperationReceipt({ hash: userOpHash });
-																console.info(" burn completed");
-																fetchData(data?.page ?? 1);
-															} catch (err) {
-																console.error('Failed to burn identity', err);
-															}
-														}}
-														sx={{ minWidth: 'auto', p: 0.5, lineHeight: 1, height: 'auto' }}
-													>
-														<LocalFireDepartmentIcon fontSize="small" />
-												</IconButton>
-													{/* JSON link moved outside tooltip to avoid burn hover text */}
-												</span>
-												</Tooltip>
-												</>
-											)}
-
-									
-											
-												
-											
-										
-										</Stack>
-									</TableCell>
-
-							<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
-								{row.a2aEndpoint ? (
-									<Button 
-										size="small" 
-										onClick={() => window.open(row.a2aEndpoint as string, '_blank')}
-										sx={{ 
-											minWidth: 'auto',
-											px: 0.5,
-											py: 0.25,
-											fontSize: '0.65rem',
-											lineHeight: 1,
-											height: 'auto'
-										}}
-									>
-										A2A
-									</Button>
-								) : (
-									<Typography variant="body2" color="text.secondary">—</Typography>
-								)}
-							</TableCell>
-
-							{discoverMatches && (
-								<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
-									{discoverTrustScores[row.agentId] ? (
-										<Tooltip title={discoverTrustScores[row.agentId].reasoning || 'Trust score based on feedback and relationships'} arrow>
-											<Chip 
-												label={`${discoverTrustScores[row.agentId].score}/100`}
-												size="small"
-												color={discoverTrustScores[row.agentId].score >= 70 ? 'success' : discoverTrustScores[row.agentId].score >= 40 ? 'warning' : 'error'}
-												sx={{ fontWeight: 600 }}
-											/>
+										{/* Always-visible actions (read-only) */}
+										<Button
+											size="small"
+											onClick={() => openAgentInfo(row)}
+											sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto', ml: 0.5 }}
+										>
+											Info
+										</Button>
+										<Tooltip title={row.metadataURI || 'No registration URI'}>
+											<span>
+												<Button
+													size="small"
+													onClick={() => openIdentityJson(row)}
+													disabled={!isValidRegistrationUri(row.metadataURI) || tokenUriValidById[row.agentId] === false /* allow null (unknown) */}
+													sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+												>
+													Reg
+												</Button>
+											</span>
 										</Tooltip>
+										{owned[row.agentId] && (
+											<>
+
+												<Button
+													size="small"
+													onClick={() => viewOrCreateCard(row)}
+													sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+												>
+													Card
+												</Button>
+												<Button
+													size="small"
+													onClick={() => openDidWebModal(row)}
+													sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+												>
+													DID:Web
+												</Button>
+												<Button
+													size="small"
+													onClick={() => openDidAgentModal(row)}
+													sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+												>
+													DID:Agent
+												</Button>
+												<Button
+													size="small"
+													onClick={() => openSessionFor(row)}
+													disabled={sessionLoading}
+													sx={{ minWidth: 'auto', px: 0.5, py: 0.25, fontSize: '0.65rem', lineHeight: 1, height: 'auto' }}
+												>
+													{sessionLoading ? 'Loading...' : 'Session'}
+												</Button>
+												<Tooltip title="Burn Identity (send to 0x000…dEaD)">
+													<span>
+														<IconButton
+															size="small"
+															color="error"
+															onClick={async () => {
+																try {
+																	const registry = process.env.NEXT_PUBLIC_ETH_SEPOLIA_IDENTITY_REGISTRY as `0x${string}`;
+																	if (!registry) throw new Error('Registry address not configured');
+																	const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL as string) || 'https://rpc.ankr.com/eth_sepolia';
+																	const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+																	const walletClient = createWalletClient({ chain: sepolia as any, transport: custom(provider as any), account: eoa as `0x${string}` });
+
+																	const domainOwnerAddress = row.agentAddress;
+																	const smartAccountClient = await toMetaMaskSmartAccount({
+																		address: domainOwnerAddress as `0x${string}`,
+																		client: publicClient,
+																		implementation: Implementation.Hybrid,
+																		signatory: { walletClient },
+																	});
+
+																	// Build calldata for transferFrom(from=AA, to=0x000...dEaD, tokenId)
+																	const calldata = encodeFunctionData({
+																		abi: registryAbi as any,
+																		functionName: 'transferFrom' as any,
+																		args: [domainOwnerAddress, '0x000000000000000000000000000000000000dEaD' as `0x${string}`, BigInt(row.agentId)],
+																	});
+
+																	// Send UO via bundler
+																	const bundlerUrl2 = (process.env.NEXT_PUBLIC_BUNDLER_URL as string) || '';
+																	const pimlicoClient2 = createPimlicoClient({ transport: http(bundlerUrl2) });
+																	const bundlerClient2 = createBundlerClient({
+																		transport: http(bundlerUrl2),
+																		paymaster: true as any,
+																		chain: sepolia as any,
+																		paymasterContext: { mode: 'SPONSORED' },
+																	} as any);
+																	const { fast: fee2 } = await pimlicoClient2.getUserOperationGasPrice();
+
+																	console.info(" send user operation to burn identity");
+																	const userOpHash = await bundlerClient2.sendUserOperation({
+																		account: smartAccountClient as any,
+																		calls: [{ to: registry, data: calldata }],
+																		...fee2,
+																	});
+																	await bundlerClient2.waitForUserOperationReceipt({ hash: userOpHash });
+																	console.info(" burn completed");
+																	fetchData(data?.page ?? 1);
+																} catch (err) {
+																	console.error('Failed to burn identity', err);
+																}
+															}}
+															sx={{ minWidth: 'auto', p: 0.5, lineHeight: 1, height: 'auto' }}
+														>
+															<LocalFireDepartmentIcon fontSize="small" />
+														</IconButton>
+														{/* JSON link moved outside tooltip to avoid burn hover text */}
+													</span>
+												</Tooltip>
+											</>
+										)}
+
+
+
+
+
+
+									</Stack>
+								</TableCell>
+
+								<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+									{row.a2aEndpoint ? (
+										<Button
+											size="small"
+											onClick={() => window.open(row.a2aEndpoint as string, '_blank')}
+											sx={{
+												minWidth: 'auto',
+												px: 0.5,
+												py: 0.25,
+												fontSize: '0.65rem',
+												lineHeight: 1,
+												height: 'auto'
+											}}
+										>
+											A2A
+										</Button>
 									) : (
 										<Typography variant="body2" color="text.secondary">—</Typography>
 									)}
 								</TableCell>
-							)}
+
+								{discoverMatches && (
+									<TableCell sx={{ color: '#24292f', fontSize: '0.875rem', py: 1 }}>
+										{discoverTrustScores[row.agentId] ? (
+											<Tooltip title={discoverTrustScores[row.agentId].reasoning || 'Trust score based on feedback and relationships'} arrow>
+												<Chip
+													label={`${discoverTrustScores[row.agentId].score}/100`}
+													size="small"
+													color={discoverTrustScores[row.agentId].score >= 70 ? 'success' : discoverTrustScores[row.agentId].score >= 40 ? 'warning' : 'error'}
+													sx={{ fontWeight: 600 }}
+												/>
+											</Tooltip>
+										) : (
+											<Typography variant="body2" color="text.secondary">—</Typography>
+										)}
+									</TableCell>
+								)}
 							</TableRow>
 						))}
 					</TableBody>
 				</Table>
 			</TableContainer>
 
-		{/* Identity JSON dialog */}
-		<Dialog open={identityJsonOpen} onClose={() => setIdentityJsonOpen(false)} fullWidth maxWidth="md">
-			<DialogTitle>Agent Identity Registration</DialogTitle>
-			<DialogContent dividers>
-                {/* Always show NFT/registration URI if we know it */}
-                {identityCurrentAgent?.agentId && (
-                    <Box sx={{ mb: 1 }}>
-                        <Typography variant="caption" color="text.secondary">
-                            NFT URL:&nbsp;
-                            {(() => {
-                                // Get chain-specific registry address
-                                const reg = getIdentityRegistry(identityCurrentAgent.chainId);
-                                if (reg) {
-                                    const href = `${getExplorerUrl(identityCurrentAgent.chainId)}/nft/${reg}/${identityCurrentAgent.agentId}`;
-                                    return (
-                                        <Typography component="a" href={href} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
-                                            {href}
-                                        </Typography>
-                                    );
-                                }
-                                return <Typography component="span" variant="caption">—</Typography>;
-                            })()}
-                        </Typography>
-                        {identityTokenUri && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                tokenURI:&nbsp;
-                                <Typography component="a" href={identityTokenUri} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
-                                    {identityTokenUri}
-                                </Typography>
-                            </Typography>
-                        )}
-                    </Box>
-                )}
-                {identityJsonLoading ? (
-                    <Typography variant="body2" color="text.secondary">Loading…</Typography>
-                ) : identityJsonError ? (
-                    <Typography variant="body2" color="error">{identityJsonError}</Typography>
-                ) : identityJsonData ? (
-					<Grid container spacing={2}>
-						{/* Left: endpoints editor */}
-						{identityCurrentAgent && owned[identityCurrentAgent.agentId] && (
-						<Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' } }}>
-						<Stack spacing={1}>
-								{identityUpdateError && (
-									<Box sx={{ p: 1, bgcolor: 'error.light', borderRadius: 1 }}>
-										<Typography variant="caption" color="error">{identityUpdateError}</Typography>
-									</Box>
-								)}
-								<Stack direction="row" alignItems="center" justifyContent="space-between">
-									<Typography variant="subtitle2">Endpoints</Typography>
-									<IconButton size="small" onClick={addEndpointRow}><AddIcon fontSize="inherit" /></IconButton>
-								</Stack>
-								<Stack spacing={1}>
-									{identityEndpoints.map((ep, idx) => (
-										<Box key={idx} sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}>
-											<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-												<Typography variant="caption">Endpoint #{idx + 1}</Typography>
-												<IconButton 
-													size="small" 
-													disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
-													onClick={() => removeEndpointRow(idx)}
-												>
-													<DeleteIcon fontSize="inherit" />
-												</IconButton>
-											</Stack>
-											<Grid container spacing={1}>
-												<Grid item xs={12} sm={6}>
-													<TextField 
-														fullWidth 
-														size="small" 
-														label="name" 
-														value={ep.name} 
-														disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
-														onChange={(e) => handleEndpointFieldChange(idx, 'name', e.target.value)} 
-													/>
-												</Grid>
-												<Grid item xs={12} sm={6}>
-													<TextField 
-														fullWidth 
-														size="small" 
-														label="version" 
-														value={ep.version || ''} 
-														disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
-														onChange={(e) => handleEndpointFieldChange(idx, 'version', e.target.value)} 
-													/>
-												</Grid>
-												<Grid item xs={12}>
-													<TextField 
-														fullWidth 
-														size="small" 
-														label="endpoint" 
-														value={ep.endpoint} 
-														disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
-														onChange={(e) => handleEndpointFieldChange(idx, 'endpoint', e.target.value)} 
-													/>
-												</Grid>
-											</Grid>
-										</Box>
-									))}
-								</Stack>
-							</Stack>
-						</Grid>
-						)}
-						{/* Right: merged JSON preview */}
-						<Grid item xs={12} md={identityCurrentAgent && owned[identityCurrentAgent.agentId] ? 6 : 12}>
-							<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-								<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints }; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => {}); } catch {} }} sx={{ position: 'absolute', top: 4, right: 4 }}>
-									<ContentCopyIcon fontSize="inherit" />
-								</IconButton>
-								<Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>
-									{(() => {
-										try {
-											const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints };
-											return JSON.stringify(merged, null, 2);
-										} catch {
-											return identityJsonText;
-										}
-									})()}
-								</Box>
-							</Box>
-						</Grid>
-					</Grid>
-                ) : (
-                    <Typography variant="body2" color="text.secondary">No data</Typography>
-                )}
-			</DialogContent>
-			<DialogActions>
-				{identityCurrentAgent && owned[identityCurrentAgent.agentId] && (
-				<>
-					<Button 
-						variant="contained" 
-						size="small" 
-						disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
-						onClick={updateIdentityRegistration}
-						sx={{
-							display: { xs: 'none', sm: 'inline-flex' },
-							backgroundColor: 'rgb(31, 136, 61)',
-							color: '#ffffff',
-							'&:hover': {
-								backgroundColor: 'rgb(26, 115, 51)',
-							},
-							'&:disabled': {
-								backgroundColor: 'rgba(31, 136, 61, 0.5)',
-								color: '#ffffff',
-							},
-						}}
-					>
-						{identityUpdateLoading ? 'Updating…' : 'Update'}
-					</Button>
-					<Button 
-						onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}
-						sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-					>
-						Reset
-					</Button>
-				</>
-				)}
-				<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
-			</DialogActions>
-		</Dialog>
-
-		{/* ENS details dialog */}
-		<Dialog open={ensDetailsOpen} onClose={() => setEnsDetailsOpen(false)} fullWidth maxWidth="sm">
-			<DialogTitle>ENS Details</DialogTitle>
-			<DialogContent dividers>
-				{ensDetailsLoading ? (
-					<Typography variant="body2" color="text.secondary">Loading…</Typography>
-				) : ensDetailsError ? (
-					<Typography variant="body2" color="error">{ensDetailsError}</Typography>
-				) : ensDetails ? (
-					<Stack spacing={1}>
-						<Typography variant="body2"><strong>Name:</strong> {ensDetails.name}</Typography>
-						<Typography variant="body2"><strong>NFT tokenId:</strong> {ensDetails.tokenId}</Typography>
-						<Typography variant="body2"><strong>URL:</strong> {ensDetails.urlText ?? '—'}</Typography>
-						<Typography variant="body2"><strong>agent-identity:</strong> {ensDetails.agentIdentity ?? '—'}</Typography>
-						{ensDetails.decodedIdentity && (
-							<Stack spacing={0.5} sx={{ pl: 1 }}>
-								<Typography variant="caption" color="text.secondary">chainId: {ensDetails.decodedIdentity.chainId}</Typography>
-								<Typography variant="caption" color="text.secondary">address: {ensDetails.decodedIdentity.address}</Typography>
-								<Typography variant="caption" color="text.secondary">agentId: {ensDetails.decodedIdentity.agentId}</Typography>
-							</Stack>
-						)}
-					</Stack>
-				) : (
-					<Typography variant="body2" color="text.secondary">No details</Typography>
-				)}
-			</DialogContent>
-			<DialogActions>
-				<Button onClick={() => setEnsDetailsOpen(false)}>Close</Button>
-			</DialogActions>
-		</Dialog>
-
-		{/* Agent INFO dialog - ENS Name Card Style */}
-		<Dialog open={infoOpen} onClose={() => setInfoOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: 2 } }}>
-			{infoLoading ? (
-				<>
-					<DialogTitle>Loading…</DialogTitle>
-					<DialogContent>
-						<Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading agent information…</Typography>
-					</DialogContent>
-				</>
-			) : infoError ? (
-				<>
-					<DialogTitle>Error</DialogTitle>
-					<DialogContent>
-						<Typography variant="body2" color="error" sx={{ py: 2 }}>{infoError}</Typography>
-					</DialogContent>
-					<DialogActions>
-						<Button onClick={() => setInfoOpen(false)}>Close</Button>
-					</DialogActions>
-				</>
-			) : infoData ? (
-				<>
-					{/* Header - Domain Name */}
-					<Box sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', p: 3, position: 'relative' }}>
-						<Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 0.5, wordBreak: 'break-word' }}>
-							{infoData.agentName || 'Unnamed Agent'}
-						</Typography>
-						{infoData.agentName && (
-							<Link 
-								href={`https://sepolia.app.ens.domains/${infoData.agentName}`} 
-								target="_blank" 
-								rel="noopener noreferrer"
-								sx={{ color: 'primary.contrastText', opacity: 0.9, textDecoration: 'none', fontSize: '0.875rem', '&:hover': { textDecoration: 'underline' } }}
-							>
-								View on ENS App →
-							</Link>
-						)}
-					</Box>
-
-					<DialogContent sx={{ p: 0 }}>
-						<Stack spacing={0}>
-							{/* Address Records Card */}
-							<Card variant="outlined" sx={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
-								<CardHeader 
-									title="Address" 
-									titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}
-									sx={{ pb: 1 }}
-								/>
-								<CardContent sx={{ pt: 0 }}>
-									{infoData.agentAccount ? (
-										<Stack spacing={1}>
-											<Box>
-												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-													{infoData.chainId ? getExplorerName(infoData.chainId) : 'Ethereum'}
-												</Typography>
-												<Stack direction="row" spacing={1} alignItems="center">
-													{infoData.chainId && getExplorerUrl(infoData.chainId) && infoData.agentAccount ? (
-														<Link 
-															href={`${getExplorerUrl(infoData.chainId)}/address/${infoData.agentAccount}`} 
-															target="_blank" 
-															rel="noopener noreferrer"
-															sx={{ 
-																fontFamily: 'monospace', 
-																wordBreak: 'break-all',
-																fontWeight: 500,
-																textDecoration: 'none',
-																color: 'inherit',
-																flex: 1,
-																'&:hover': { textDecoration: 'underline' }
-															}}
-														>
-															{infoData.agentAccount}
-														</Link>
-													) : (
-														<Typography 
-															variant="body2" 
-															sx={{ 
-																fontFamily: 'monospace', 
-																wordBreak: 'break-all',
-																fontWeight: 500,
-																flex: 1
-															}}
-														>
-															{infoData.agentAccount}
-														</Typography>
-													)}
-													<Tooltip title="Copy address">
-														<IconButton 
-															size="small" 
-															onClick={() => navigator.clipboard.writeText(infoData.agentAccount!)}
-														>
-															<ContentCopyIcon fontSize="small" />
-														</IconButton>
-													</Tooltip>
-												</Stack>
+			{/* Identity JSON dialog */}
+			<Dialog open={identityJsonOpen} onClose={() => setIdentityJsonOpen(false)} fullWidth maxWidth="md">
+				<DialogTitle>Agent Identity Registration</DialogTitle>
+				<DialogContent dividers>
+					{/* Always show NFT/registration URI if we know it */}
+					{identityCurrentAgent?.agentId && (
+						<Box sx={{ mb: 1 }}>
+							<Typography variant="caption" color="text.secondary">
+								NFT URL:&nbsp;
+								{(() => {
+									// Get chain-specific registry address
+									const reg = getIdentityRegistry(identityCurrentAgent.chainId);
+									if (reg) {
+										const href = `${getExplorerUrl(identityCurrentAgent.chainId)}/nft/${reg}/${identityCurrentAgent.agentId}`;
+										return (
+											<Typography component="a" href={href} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
+												{href}
+											</Typography>
+										);
+									}
+									return <Typography component="span" variant="caption">—</Typography>;
+								})()}
+							</Typography>
+							{identityTokenUri && (
+								<Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+									tokenURI:&nbsp;
+									<Typography component="a" href={identityTokenUri} target="_blank" rel="noopener noreferrer" variant="caption" sx={{ color: 'primary.main', textDecoration: 'underline' }}>
+										{identityTokenUri}
+									</Typography>
+								</Typography>
+							)}
+						</Box>
+					)}
+					{identityJsonLoading ? (
+						<Typography variant="body2" color="text.secondary">Loading…</Typography>
+					) : identityJsonError ? (
+						<Typography variant="body2" color="error">{identityJsonError}</Typography>
+					) : identityJsonData ? (
+						<Grid container spacing={2}>
+							{/* Left: endpoints editor */}
+							{identityCurrentAgent && owned[identityCurrentAgent.agentId] && (
+								<Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' } }}>
+									<Stack spacing={1}>
+										{identityUpdateError && (
+											<Box sx={{ p: 1, bgcolor: 'error.light', borderRadius: 1 }}>
+												<Typography variant="caption" color="error">{identityUpdateError}</Typography>
 											</Box>
+										)}
+										<Stack direction="row" alignItems="center" justifyContent="space-between">
+											<Typography variant="subtitle2">Endpoints</Typography>
+											<IconButton size="small" onClick={addEndpointRow}><AddIcon fontSize="inherit" /></IconButton>
 										</Stack>
-									) : (
-										<Typography variant="body2" color="text.secondary">No address set</Typography>
-									)}
-								</CardContent>
-							</Card>
-
-							{/* Text Records Card */}
-							<Card variant="outlined" sx={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
-								<CardHeader 
-									title="Records" 
-									titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}
-									sx={{ pb: 1 }}
-								/>
-								<CardContent sx={{ pt: 0 }}>
-									<Stack spacing={2}>
-										{infoData.agentId && (
-											<Box>
-												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Agent ID</Typography>
-												<Stack direction="row" spacing={1} alignItems="center">
-													<Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-														{infoData.agentId}
-													</Typography>
-													{infoData.chainId && (() => {
-														const identityRegistry = getIdentityRegistry(infoData.chainId);
-														const explorerBase = getExplorerUrl(infoData.chainId);
-														if (identityRegistry && explorerBase) {
-															const nftUrl = `${explorerBase}/nft/${identityRegistry}/${infoData.agentId}`;
-															return (
-																<Link 
-																	href={nftUrl} 
-																	target="_blank" 
-																	rel="noopener noreferrer"
-																	sx={{ 
-																		fontSize: '0.875rem',
-																		textDecoration: 'none',
-																		'&:hover': { textDecoration: 'underline' }
-																	}}
-																>
-																	View on {getExplorerName(infoData.chainId)} →
-																</Link>
-															);
-														}
-														return null;
-													})()}
-												</Stack>
-											</Box>
-										)}
-										{infoData.a2aEndpoint && (
-											<Box>
-												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>A2A Endpoint</Typography>
-												<Link 
-													href={infoData.a2aEndpoint} 
-													target="_blank" 
-													rel="noopener noreferrer"
-													sx={{ 
-														wordBreak: 'break-all',
-														fontSize: '0.875rem',
-														textDecoration: 'none',
-														'&:hover': { textDecoration: 'underline' }
-													}}
-												>
-													{infoData.a2aEndpoint}
-												</Link>
-											</Box>
-										)}
-										
-										{infoData.tokenUri && (
-											<Box>
-												<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Token URI</Typography>
-												<Typography 
-													variant="body2" 
-													sx={{ 
-														wordBreak: 'break-all',
-														fontFamily: 'monospace',
-														fontSize: '0.875rem'
-													}}
-												>
-													{infoData.tokenUri}
-												</Typography>
-											</Box>
-										)}
+										<Stack spacing={1}>
+											{identityEndpoints.map((ep, idx) => (
+												<Box key={idx} sx={{ p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1 }}>
+													<Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+														<Typography variant="caption">Endpoint #{idx + 1}</Typography>
+														<IconButton
+															size="small"
+															disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+															onClick={() => removeEndpointRow(idx)}
+														>
+															<DeleteIcon fontSize="inherit" />
+														</IconButton>
+													</Stack>
+													<Grid container spacing={1}>
+														<Grid item xs={12} sm={6}>
+															<TextField
+																fullWidth
+																size="small"
+																label="name"
+																value={ep.name}
+																disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+																onChange={(e) => handleEndpointFieldChange(idx, 'name', e.target.value)}
+															/>
+														</Grid>
+														<Grid item xs={12} sm={6}>
+															<TextField
+																fullWidth
+																size="small"
+																label="version"
+																value={ep.version || ''}
+																disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+																onChange={(e) => handleEndpointFieldChange(idx, 'version', e.target.value)}
+															/>
+														</Grid>
+														<Grid item xs={12}>
+															<TextField
+																fullWidth
+																size="small"
+																label="endpoint"
+																value={ep.endpoint}
+																disabled={!identityCurrentAgent || !owned[identityCurrentAgent.agentId]}
+																onChange={(e) => handleEndpointFieldChange(idx, 'endpoint', e.target.value)}
+															/>
+														</Grid>
+													</Grid>
+												</Box>
+											))}
+										</Stack>
 									</Stack>
-								</CardContent>
-							</Card>
+								</Grid>
+							)}
+							{/* Right: merged JSON preview */}
+							<Grid item xs={12} md={identityCurrentAgent && owned[identityCurrentAgent.agentId] ? 6 : 12}>
+								<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+									<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints }; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => { }); } catch { } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
+										<ContentCopyIcon fontSize="inherit" />
+									</IconButton>
+									<Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>
+										{(() => {
+											try {
+												const merged = { ...(identityJsonData || {}), endpoints: identityEndpoints };
+												return JSON.stringify(merged, null, 2);
+											} catch {
+												return identityJsonText;
+											}
+										})()}
+									</Box>
+								</Box>
+							</Grid>
+						</Grid>
+					) : (
+						<Typography variant="body2" color="text.secondary">No data</Typography>
+					)}
+				</DialogContent>
+				<DialogActions>
+					{identityCurrentAgent && owned[identityCurrentAgent.agentId] && (
+						<>
+							<Button
+								variant="contained"
+								size="small"
+								disabled={identityUpdateLoading || identityJsonLoading || !identityJsonData}
+								onClick={updateIdentityRegistration}
+								sx={{
+									display: { xs: 'none', sm: 'inline-flex' },
+									backgroundColor: 'rgb(31, 136, 61)',
+									color: '#ffffff',
+									'&:hover': {
+										backgroundColor: 'rgb(26, 115, 51)',
+									},
+									'&:disabled': {
+										backgroundColor: 'rgba(31, 136, 61, 0.5)',
+										color: '#ffffff',
+									},
+								}}
+							>
+								{identityUpdateLoading ? 'Updating…' : 'Update'}
+							</Button>
+							<Button
+								onClick={() => { try { const eps = Array.isArray((identityJsonData as any)?.endpoints) ? (identityJsonData as any).endpoints : []; setIdentityEndpoints(eps.map((e: any) => ({ name: String(e?.name ?? ''), endpoint: String(e?.endpoint ?? ''), version: e?.version ? String(e.version) : '' }))); } catch { setIdentityEndpoints([]); } }}
+								sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+							>
+								Reset
+							</Button>
+						</>
+					)}
+					<Button onClick={() => setIdentityJsonOpen(false)}>Close</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* ENS details dialog */}
+			<Dialog open={ensDetailsOpen} onClose={() => setEnsDetailsOpen(false)} fullWidth maxWidth="sm">
+				<DialogTitle>ENS Details</DialogTitle>
+				<DialogContent dividers>
+					{ensDetailsLoading ? (
+						<Typography variant="body2" color="text.secondary">Loading…</Typography>
+					) : ensDetailsError ? (
+						<Typography variant="body2" color="error">{ensDetailsError}</Typography>
+					) : ensDetails ? (
+						<Stack spacing={1}>
+							<Typography variant="body2"><strong>Name:</strong> {ensDetails.name}</Typography>
+							<Typography variant="body2"><strong>NFT tokenId:</strong> {ensDetails.tokenId}</Typography>
+							<Typography variant="body2"><strong>URL:</strong> {ensDetails.urlText ?? '—'}</Typography>
+							<Typography variant="body2"><strong>agent-identity:</strong> {ensDetails.agentIdentity ?? '—'}</Typography>
+							{ensDetails.decodedIdentity && (
+								<Stack spacing={0.5} sx={{ pl: 1 }}>
+									<Typography variant="caption" color="text.secondary">chainId: {ensDetails.decodedIdentity.chainId}</Typography>
+									<Typography variant="caption" color="text.secondary">address: {ensDetails.decodedIdentity.address}</Typography>
+									<Typography variant="caption" color="text.secondary">agentId: {ensDetails.decodedIdentity.agentId}</Typography>
+								</Stack>
+							)}
 						</Stack>
-					</DialogContent>
-					<DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-						<Button onClick={() => setInfoOpen(false)} variant="outlined">Close</Button>
-					</DialogActions>
-				</>
-			) : (
-				<>
-					<DialogTitle>No Information</DialogTitle>
-					<DialogContent>
-						<Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No agent information available</Typography>
-					</DialogContent>
-					<DialogActions>
-						<Button onClick={() => setInfoOpen(false)}>Close</Button>
-					</DialogActions>
-				</>
-			)}
-		</Dialog>
+					) : (
+						<Typography variant="body2" color="text.secondary">No details</Typography>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setEnsDetailsOpen(false)}>Close</Button>
+				</DialogActions>
+			</Dialog>
+
+			{/* Agent INFO dialog - ENS Name Card Style */}
+			<Dialog open={infoOpen} onClose={() => setInfoOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: { borderRadius: 2 } }}>
+				{infoLoading ? (
+					<>
+						<DialogTitle>Loading…</DialogTitle>
+						<DialogContent>
+							<Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading agent information…</Typography>
+						</DialogContent>
+					</>
+				) : infoError ? (
+					<>
+						<DialogTitle>Error</DialogTitle>
+						<DialogContent>
+							<Typography variant="body2" color="error" sx={{ py: 2 }}>{infoError}</Typography>
+						</DialogContent>
+						<DialogActions>
+							<Button onClick={() => setInfoOpen(false)}>Close</Button>
+						</DialogActions>
+					</>
+				) : infoData ? (
+					<>
+						{/* Header - Domain Name */}
+						<Box sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', p: 3, position: 'relative' }}>
+							<Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 0.5, wordBreak: 'break-word' }}>
+								{infoData.agentName || 'Unnamed Agent'}
+							</Typography>
+							{infoData.agentName && (
+								<Link
+									href={`https://sepolia.app.ens.domains/${infoData.agentName}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									sx={{ color: 'primary.contrastText', opacity: 0.9, textDecoration: 'none', fontSize: '0.875rem', '&:hover': { textDecoration: 'underline' } }}
+								>
+									View on ENS App →
+								</Link>
+							)}
+						</Box>
+
+						<DialogContent sx={{ p: 0 }}>
+							<Stack spacing={0}>
+								{/* Address Records Card */}
+								<Card variant="outlined" sx={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
+									<CardHeader
+										title="Address"
+										titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}
+										sx={{ pb: 1 }}
+									/>
+									<CardContent sx={{ pt: 0 }}>
+										{infoData.agentAccount ? (
+											<Stack spacing={1}>
+												<Box>
+													<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+														{infoData.chainId ? getExplorerName(infoData.chainId) : 'Ethereum'}
+													</Typography>
+													<Stack direction="row" spacing={1} alignItems="center">
+														{infoData.chainId && getExplorerUrl(infoData.chainId) && infoData.agentAccount ? (
+															<Link
+																href={`${getExplorerUrl(infoData.chainId)}/address/${infoData.agentAccount}`}
+																target="_blank"
+																rel="noopener noreferrer"
+																sx={{
+																	fontFamily: 'monospace',
+																	wordBreak: 'break-all',
+																	fontWeight: 500,
+																	textDecoration: 'none',
+																	color: 'inherit',
+																	flex: 1,
+																	'&:hover': { textDecoration: 'underline' }
+																}}
+															>
+																{infoData.agentAccount}
+															</Link>
+														) : (
+															<Typography
+																variant="body2"
+																sx={{
+																	fontFamily: 'monospace',
+																	wordBreak: 'break-all',
+																	fontWeight: 500,
+																	flex: 1
+																}}
+															>
+																{infoData.agentAccount}
+															</Typography>
+														)}
+														<Tooltip title="Copy address">
+															<IconButton
+																size="small"
+																onClick={() => navigator.clipboard.writeText(infoData.agentAccount!)}
+															>
+																<ContentCopyIcon fontSize="small" />
+															</IconButton>
+														</Tooltip>
+													</Stack>
+												</Box>
+											</Stack>
+										) : (
+											<Typography variant="body2" color="text.secondary">No address set</Typography>
+										)}
+									</CardContent>
+								</Card>
+
+								{/* Text Records Card */}
+								<Card variant="outlined" sx={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
+									<CardHeader
+										title="Records"
+										titleTypographyProps={{ variant: 'subtitle2', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}
+										sx={{ pb: 1 }}
+									/>
+									<CardContent sx={{ pt: 0 }}>
+										<Stack spacing={2}>
+											{infoData.agentId && (
+												<Box>
+													<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Agent ID</Typography>
+													<Stack direction="row" spacing={1} alignItems="center">
+														<Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
+															{infoData.agentId}
+														</Typography>
+														{infoData.chainId && (() => {
+															const identityRegistry = getIdentityRegistry(infoData.chainId);
+															const explorerBase = getExplorerUrl(infoData.chainId);
+															if (identityRegistry && explorerBase) {
+																const nftUrl = `${explorerBase}/nft/${identityRegistry}/${infoData.agentId}`;
+																return (
+																	<Link
+																		href={nftUrl}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		sx={{
+																			fontSize: '0.875rem',
+																			textDecoration: 'none',
+																			'&:hover': { textDecoration: 'underline' }
+																		}}
+																	>
+																		View on {getExplorerName(infoData.chainId)} →
+																	</Link>
+																);
+															}
+															return null;
+														})()}
+													</Stack>
+												</Box>
+											)}
+											{infoData.a2aEndpoint && (
+												<Box>
+													<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>A2A Endpoint</Typography>
+													<Link
+														href={infoData.a2aEndpoint}
+														target="_blank"
+														rel="noopener noreferrer"
+														sx={{
+															wordBreak: 'break-all',
+															fontSize: '0.875rem',
+															textDecoration: 'none',
+															'&:hover': { textDecoration: 'underline' }
+														}}
+													>
+														{infoData.a2aEndpoint}
+													</Link>
+												</Box>
+											)}
+
+											{infoData.tokenUri && (
+												<Box>
+													<Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Token URI</Typography>
+													<Typography
+														variant="body2"
+														sx={{
+															wordBreak: 'break-all',
+															fontFamily: 'monospace',
+															fontSize: '0.875rem'
+														}}
+													>
+														{infoData.tokenUri}
+													</Typography>
+												</Box>
+											)}
+										</Stack>
+									</CardContent>
+								</Card>
+							</Stack>
+						</DialogContent>
+						<DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+							<Button onClick={() => setInfoOpen(false)} variant="outlined">Close</Button>
+						</DialogActions>
+					</>
+				) : (
+					<>
+						<DialogTitle>No Information</DialogTitle>
+						<DialogContent>
+							<Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No agent information available</Typography>
+						</DialogContent>
+						<DialogActions>
+							<Button onClick={() => setInfoOpen(false)}>Close</Button>
+						</DialogActions>
+					</>
+				)}
+			</Dialog>
 
 			{/* Agent Card dialog */}
 			<Dialog open={cardOpen} onClose={() => setCardOpen(false)} fullWidth maxWidth="md">
@@ -3492,38 +3518,38 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								<TextField label="version" size="small" value={cardFields.version ?? ''} onChange={(e) => handleFieldChange('version', e.target.value)} />
 								<TextField label="preferredTransport" size="small" value={cardFields.preferredTransport ?? ''} onChange={(e) => handleFieldChange('preferredTransport', e.target.value)} />
 								<TextField label="protocolVersion" size="small" value={cardFields.protocolVersion ?? ''} onChange={(e) => handleFieldChange('protocolVersion', e.target.value)} />
-								
+
 								<Divider sx={{ my: 1 }} />
 								<Typography variant="subtitle2">Provider</Typography>
 								<TextField label="Provider Organization" size="small" value={cardFields.providerOrganization ?? ''} onChange={(e) => handleFieldChange('providerOrganization', e.target.value)} />
 								<TextField label="Provider URL" size="small" value={cardFields.providerUrl ?? ''} onChange={(e) => handleFieldChange('providerUrl', e.target.value)} />
-		
+
 								<Divider sx={{ my: 1 }} />
 								<Typography variant="subtitle2">Capabilities</Typography>
-								<FormControlLabel 
-									control={<Checkbox checked={!!cardFields.capStream} onChange={(e) => handleFieldChange('capStream', e.target.checked)} />} 
-									label="Streaming" 
+								<FormControlLabel
+									control={<Checkbox checked={!!cardFields.capStream} onChange={(e) => handleFieldChange('capStream', e.target.checked)} />}
+									label="Streaming"
 								/>
-								<FormControlLabel 
-									control={<Checkbox checked={!!cardFields.capPush} onChange={(e) => handleFieldChange('capPush', e.target.checked)} />} 
-									label="Push Notifications" 
+								<FormControlLabel
+									control={<Checkbox checked={!!cardFields.capPush} onChange={(e) => handleFieldChange('capPush', e.target.checked)} />}
+									label="Push Notifications"
 								/>
-								<FormControlLabel 
-									control={<Checkbox checked={!!cardFields.capStateTransitionHistory} onChange={(e) => handleFieldChange('capStateTransitionHistory', e.target.checked)} />} 
-									label="State Transition History" 
+								<FormControlLabel
+									control={<Checkbox checked={!!cardFields.capStateTransitionHistory} onChange={(e) => handleFieldChange('capStateTransitionHistory', e.target.checked)} />}
+									label="State Transition History"
 								/>
-								
+
 								<Divider sx={{ my: 1 }} />
 								<Typography variant="subtitle2">Extended Card</Typography>
-								<FormControlLabel 
-									control={<Checkbox checked={!!cardFields.supportsAuthenticatedExtendedCard} onChange={(e) => handleFieldChange('supportsAuthenticatedExtendedCard', e.target.checked)} />} 
-									label="Supports Authenticated Extended Card" 
+								<FormControlLabel
+									control={<Checkbox checked={!!cardFields.supportsAuthenticatedExtendedCard} onChange={(e) => handleFieldChange('supportsAuthenticatedExtendedCard', e.target.checked)} />}
+									label="Supports Authenticated Extended Card"
 								/>
 
 								<Divider sx={{ my: 1 }} />
 								<Stack direction="row" alignItems="center" justifyContent="space-between">
 									<Typography variant="subtitle2">Skills</Typography>
-									<IconButton size="small" onClick={() => handleFieldChange('skills', [ ...(cardFields.skills || []), { id: '', name: '', description: '', tags: [], examples: [], inputModes: [], outputModes: [] } ])}><AddIcon fontSize="inherit" /></IconButton>
+									<IconButton size="small" onClick={() => handleFieldChange('skills', [...(cardFields.skills || []), { id: '', name: '', description: '', tags: [], examples: [], inputModes: [], outputModes: [] }])}><AddIcon fontSize="inherit" /></IconButton>
 								</Stack>
 								<Stack spacing={1}>
 									{(cardFields.skills || []).map((s: any, idx: number) => (
@@ -3578,20 +3604,25 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 						<Grid item xs={12} md={6}>
 							<Box>
 								<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-									<IconButton size="small" aria-label="Copy JSON" onClick={() => { try { const base = cardJson ? JSON.parse(cardJson) : {}; const merged = { ...base,
-										name: cardFields.name || base.name,
-										description: cardFields.description || base.description,
-										homepage: cardFields.homepage || base.homepage,
-										url: cardFields.url || base.url,
-										version: cardFields.version || base.version,
-										preferredTransport: cardFields.preferredTransport || base.preferredTransport,
-										protocolVersion: cardFields.protocolVersion || base.protocolVersion,
-										trustModels: Array.isArray(cardFields.trustModels) ? cardFields.trustModels : String(cardFields.trustModels || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-										capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
-										defaultInputModes: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-										defaultOutputModes: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
-										skills: [{ id: cardFields.skillId || undefined, name: cardFields.skillName || undefined, description: cardFields.skillDesc || undefined, tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean), examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean) }]
-									}; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => {});} catch { navigator.clipboard.writeText(cardJson || '').catch(() => {}); } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
+									<IconButton size="small" aria-label="Copy JSON" onClick={() => {
+										try {
+											const base = cardJson ? JSON.parse(cardJson) : {}; const merged = {
+												...base,
+												name: cardFields.name || base.name,
+												description: cardFields.description || base.description,
+												homepage: cardFields.homepage || base.homepage,
+												url: cardFields.url || base.url,
+												version: cardFields.version || base.version,
+												preferredTransport: cardFields.preferredTransport || base.preferredTransport,
+												protocolVersion: cardFields.protocolVersion || base.protocolVersion,
+												trustModels: Array.isArray(cardFields.trustModels) ? cardFields.trustModels : String(cardFields.trustModels || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+												capabilities: { pushNotifications: !!cardFields.capPush, streaming: !!cardFields.capStream },
+												defaultInputModes: String(cardFields.defaultInputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+												defaultOutputModes: String(cardFields.defaultOutputModes || '').split(',').map((x: string) => x.trim()).filter(Boolean),
+												skills: [{ id: cardFields.skillId || undefined, name: cardFields.skillName || undefined, description: cardFields.skillDesc || undefined, tags: String(cardFields.skillTags || '').split(',').map((x: string) => x.trim()).filter(Boolean), examples: String(cardFields.skillExamples || '').split(/\n|,/).map((x: string) => x.trim()).filter(Boolean) }]
+											}; navigator.clipboard.writeText(JSON.stringify(merged, null, 2)).catch(() => { });
+										} catch { navigator.clipboard.writeText(cardJson || '').catch(() => { }); }
+									}} sx={{ position: 'absolute', top: 4, right: 4 }}>
 										<ContentCopyIcon fontSize="inherit" />
 									</IconButton>
 									{cardJson && (() => {
@@ -3616,11 +3647,11 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							</Box>
 						</Grid>
 					</Grid>
-			</DialogContent>
-			<DialogActions>
-				<Button onClick={async () => { if (currentAgentForCard) { await regenerateCard(currentAgentForCard); } }}>Reset</Button>
-				<Button onClick={() => { if (cardJson && cardDomain) setStoredCard(cardDomain, cardJson); setCardOpen(false); }}>Close</Button>
-			</DialogActions>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={async () => { if (currentAgentForCard) { await regenerateCard(currentAgentForCard); } }}>Reset</Button>
+					<Button onClick={() => { if (cardJson && cardDomain) setStoredCard(cardDomain, cardJson); setCardOpen(false); }}>Close</Button>
+				</DialogActions>
 			</Dialog>
 
 			{/* Session dialog */}
@@ -3628,7 +3659,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				<DialogTitle>session file</DialogTitle>
 				<DialogContent dividers>
 					<Box sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-						<IconButton size="small" aria-label="Copy" onClick={() => { if (sessionJson) { navigator.clipboard.writeText(sessionJson).catch(() => {}); } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
+						<IconButton size="small" aria-label="Copy" onClick={() => { if (sessionJson) { navigator.clipboard.writeText(sessionJson).catch(() => { }); } }} sx={{ position: 'absolute', top: 4, right: 4 }}>
 							<ContentCopyIcon fontSize="inherit" />
 						</IconButton>
 						<Box component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, monospace', m: 0 }}>
@@ -3652,19 +3683,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							<Typography>Loading feedback data...</Typography>
 						</Box>
 					)}
-					
+
 					{feedbackError && (
 						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
 							<Typography color="error">{feedbackError}</Typography>
 						</Box>
 					)}
-					
+
 					{!feedbackLoading && !feedbackError && feedbackData.length === 0 && (
 						<Box sx={{ p: 2, textAlign: 'center' }}>
 							<Typography color="text.secondary">No feedback data available</Typography>
 						</Box>
 					)}
-					
+
 					{!feedbackLoading && !feedbackError && feedbackData.length > 0 && (
 						<Stack spacing={2}>
 							{feedbackData.map((item, index) => (
@@ -3675,7 +3706,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												<Typography variant="subtitle2" color="primary" sx={{ fontWeight: 600 }}>
 													{key}:
 												</Typography>
-												<Typography variant="body2" sx={{ 
+												<Typography variant="body2" sx={{
 													fontFamily: typeof value === 'object' ? 'ui-monospace, monospace' : 'inherit',
 													whiteSpace: 'pre-wrap',
 													wordBreak: 'break-word'
@@ -3688,10 +3719,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								</Paper>
 							))}
 							<Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-								<Button 
-									variant="contained" 
-									size="small" 
-									disabled={identityUpdateLoading} 
+								<Button
+									variant="contained"
+									size="small"
+									disabled={identityUpdateLoading}
 									onClick={updateIdentityRegistration}
 									sx={{
 										backgroundColor: 'rgb(31, 136, 61)',
@@ -3717,39 +3748,39 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 				</DialogActions>
 			</Dialog>
 
-		{/* All Feedback Dialog */}
-		<Dialog open={allFeedbackOpen} onClose={() => setAllFeedbackOpen(false)} maxWidth="md" fullWidth>
-			<DialogTitle>
-				All Feedback for {currentAgent?.agentName}
-			</DialogTitle>
-			<DialogContent dividers>
-				{allFeedbackLoading && (
-					<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-						<Typography>Loading…</Typography>
-					</Box>
-				)}
-				{allFeedbackError && (
-					<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
-						<Typography color="error">{allFeedbackError}</Typography>
-					</Box>
-				)}
-				{!allFeedbackLoading && !allFeedbackError && allFeedbackData.length === 0 && (
-					<Typography variant="body2" color="text.secondary">No feedback found.</Typography>
-				)}
-				{!allFeedbackLoading && !allFeedbackError && allFeedbackData.length > 0 && (
-					<Stack spacing={1}>
-						{allFeedbackData.map((fb: any, idx: number) => (
-							<Box key={idx} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-								<Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{typeof fb === 'string' ? fb : JSON.stringify(fb)}</Typography>
-							</Box>
-						))}
-					</Stack>
-				)}
-			</DialogContent>
-			<DialogActions>
-				<Button onClick={() => setAllFeedbackOpen(false)}>Close</Button>
-			</DialogActions>
-		</Dialog>
+			{/* All Feedback Dialog */}
+			<Dialog open={allFeedbackOpen} onClose={() => setAllFeedbackOpen(false)} maxWidth="md" fullWidth>
+				<DialogTitle>
+					All Feedback for {currentAgent?.agentName}
+				</DialogTitle>
+				<DialogContent dividers>
+					{allFeedbackLoading && (
+						<Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+							<Typography>Loading…</Typography>
+						</Box>
+					)}
+					{allFeedbackError && (
+						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 2 }}>
+							<Typography color="error">{allFeedbackError}</Typography>
+						</Box>
+					)}
+					{!allFeedbackLoading && !allFeedbackError && allFeedbackData.length === 0 && (
+						<Typography variant="body2" color="text.secondary">No feedback found.</Typography>
+					)}
+					{!allFeedbackLoading && !allFeedbackError && allFeedbackData.length > 0 && (
+						<Stack spacing={1}>
+							{allFeedbackData.map((fb: any, idx: number) => (
+								<Box key={idx} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+									<Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{typeof fb === 'string' ? fb : JSON.stringify(fb)}</Typography>
+								</Box>
+							))}
+						</Stack>
+					)}
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={() => setAllFeedbackOpen(false)}>Close</Button>
+				</DialogActions>
+			</Dialog>
 
 			{/* ENS Dialog */}
 			<Dialog open={ensOpen} onClose={() => setEnsOpen(false)} maxWidth="md" fullWidth>
@@ -3760,10 +3791,10 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 								Agent ENS Domain
 							</Typography>
 							{ensData?.name && (
-								<Typography 
-									variant="h6" 
-									sx={{ 
-										fontFamily: 'ui-monospace, monospace', 
+								<Typography
+									variant="h6"
+									sx={{
+										fontFamily: 'ui-monospace, monospace',
 										color: 'primary.main',
 										fontWeight: 500,
 										cursor: 'pointer',
@@ -3787,19 +3818,19 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 							<Typography>Loading ENS data...</Typography>
 						</Box>
 					)}
-					
+
 					{isCheckingWrapStatus && (
 						<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
 							<Typography>Checking parent domain status...</Typography>
 						</Box>
 					)}
-					
+
 					{ensError && (
 						<Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 2, mb: 3 }}>
 							<Typography color="error">{ensError}</Typography>
 						</Box>
 					)}
-					
+
 					{!ensLoading && !ensError && ensData && (
 						<Stack spacing={3}>
 							{ensData.name ? (
@@ -3813,9 +3844,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												<Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
 													Owner
 												</Typography>
-												<Typography 
-													variant="body1" 
-													sx={{ 
+												<Typography
+													variant="body1"
+													sx={{
 														fontFamily: 'ui-monospace, monospace',
 														color: 'primary.main',
 														cursor: 'pointer',
@@ -3834,9 +3865,9 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 												<Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
 													NFT Wrapper
 												</Typography>
-												<Box sx={{ 
-													p: 2, 
-													bgcolor: 'white', 
+												<Box sx={{
+													p: 2,
+													bgcolor: 'white',
 													borderRadius: 1,
 													border: '1px solid',
 													borderColor: 'info.main',
@@ -3851,23 +3882,23 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 														}
 													}
 												}}
-												onClick={() => {
-													if (ensData.name) {
-														const tokenId = BigInt(namehash(ensData.name as string));
-														const nftUrl = `https://sepolia.etherscan.io/nft/${(process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8'}/${tokenId}`;
-														window.open(nftUrl, '_blank');
-													}
-												}}
+													onClick={() => {
+														if (ensData.name) {
+															const tokenId = BigInt(namehash(ensData.name as string));
+															const nftUrl = `https://sepolia.etherscan.io/nft/${(process.env.NEXT_PUBLIC_ENS_IDENTITY_WRAPPER as `0x${string}`) || '0x0635513f179D50A207757E05759CbD106d7dFcE8'}/${tokenId}`;
+															window.open(nftUrl, '_blank');
+														}
+													}}
 												>
-													<img 
-														src="https://sepolia.etherscan.io/images/main/nft-placeholder.svg" 
-														alt="NFT" 
+													<img
+														src="https://sepolia.etherscan.io/images/main/nft-placeholder.svg"
+														alt="NFT"
 														className="nft-icon"
-														style={{ 
-															width: 24, 
+														style={{
+															width: 24,
 															height: 24,
 															transition: 'filter 0.2s ease'
-														}} 
+														}}
 													/>
 													<Typography variant="body2" sx={{ fontWeight: 500 }}>
 														View on Etherscan
@@ -3876,22 +3907,22 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											</Box>
 										</Stack>
 									</Paper>
-									
+
 									{ensData.avatar && (
 										<Box>
 											<Typography variant="subtitle2" color="primary" sx={{ fontWeight: 600, mb: 1 }}>
 												Avatar:
 											</Typography>
 											<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-												<img 
-													src={ensData.avatar} 
-													alt="ENS Avatar" 
+												<img
+													src={ensData.avatar}
+													alt="ENS Avatar"
 													style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
 													onError={(e) => {
 														e.currentTarget.style.display = 'none';
 													}}
 												/>
-												<Typography variant="body2" sx={{ 
+												<Typography variant="body2" sx={{
 													fontFamily: 'ui-monospace, monospace',
 													wordBreak: 'break-all'
 												}}>
@@ -3900,7 +3931,7 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											</Box>
 										</Box>
 									)}
-									
+
 									{(ensData.website || ensData.email || ensData.twitter || ensData.github || ensData.discord) && (
 										<Box>
 											<Typography variant="subtitle2" color="primary" sx={{ fontWeight: 600, mb: 1 }}>
@@ -3957,23 +3988,23 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 									<Paper sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
 										<Stack spacing={2}>
 											<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-												<Box sx={{ 
-													width: 8, 
-													height: 8, 
-													borderRadius: '50%', 
-													bgcolor: 'warning.main' 
+												<Box sx={{
+													width: 8,
+													height: 8,
+													borderRadius: '50%',
+													bgcolor: 'warning.main'
 												}} />
 												<Typography variant="h6" sx={{ fontWeight: 600 }}>
 													No ENS Domain Found
 												</Typography>
 											</Box>
-											
+
 											<Typography variant="body2" color="text.secondary">
 												This agent address doesn't have an ENS domain associated with it. You can create a subdomain if you own a parent ENS domain.
 											</Typography>
 										</Stack>
 									</Paper>
-									
+
 									{/* Create ENS Subdomain Section */}
 									<Paper sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
 										<Stack spacing={2}>
@@ -3983,34 +4014,34 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 											<Typography variant="body2" color="text.secondary">
 												Create a subdomain for this agent address using your parent ENS domain.
 											</Typography>
-											
+
 											<Stack spacing={2}>
-											<TextField
-												label="Parent Domain"
-												value={ensParentName}
-												placeholder="mydomain.eth"
-												size="small"
-												fullWidth
-												disabled
-												helperText="Parent domain from environment configuration"
-											/>
-											<TextField
-												label="Subdomain Name"
-												value={ensSubdomainName}
-												onChange={(e) => setEnsSubdomainName(e.target.value)}
-												placeholder="finder"
-												size="small"
-												fullWidth
-												helperText="Enter a single label (no dots). Example: 'finder' creates 'finder.orgtrust.eth'"
-												error={ensSubdomainName.includes('.')}
-											/>
+												<TextField
+													label="Parent Domain"
+													value={ensParentName}
+													placeholder="mydomain.eth"
+													size="small"
+													fullWidth
+													disabled
+													helperText="Parent domain from environment configuration"
+												/>
+												<TextField
+													label="Subdomain Name"
+													value={ensSubdomainName}
+													onChange={(e) => setEnsSubdomainName(e.target.value)}
+													placeholder="finder"
+													size="small"
+													fullWidth
+													helperText="Enter a single label (no dots). Example: 'finder' creates 'finder.orgtrust.eth'"
+													error={ensSubdomainName.includes('.')}
+												/>
 
 
-											{ensSubdomainName.includes('.') && (
-												<Typography variant="body2" color="error" sx={{ mt: 1 }}>
-													❌ Invalid subdomain name: Cannot contain dots. Use a single label like "finder" instead of "finder.airbnb.org"
-												</Typography>
-											)}
+												{ensSubdomainName.includes('.') && (
+													<Typography variant="body2" color="error" sx={{ mt: 1 }}>
+														❌ Invalid subdomain name: Cannot contain dots. Use a single label like "finder" instead of "finder.airbnb.org"
+													</Typography>
+												)}
 
 											</Stack>
 										</Stack>
@@ -4029,44 +4060,44 @@ export function AgentTable({ chainIdHex, addAgentOpen: externalAddAgentOpen, onA
 
 							<Paper sx={{ p: 3, border: '1px solid', borderColor: 'success.main', borderRadius: 2 }}>
 
-											<Box>
-												<Typography variant="body2" color="text.secondary">
-													Domain
-												</Typography>
-												<Typography 
-													variant="body1" 
-													sx={{ 
-														fontFamily: 'ui-monospace, monospace',
-														color: 'primary.main',
-														cursor: 'pointer',
-														'&:hover': {
-															textDecoration: 'underline'
-														}
-													}}
-													onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
-												>
-													{ensParentName}
-												</Typography>
-											</Box>
-											<Box>
-												<Typography variant="body2" color="text.secondary">
-													Owner
-												</Typography>
-												<Typography 
-													variant="body1" 
-													sx={{ 
-														fontFamily: 'ui-monospace, monospace',
-														color: 'primary.main',
-														cursor: 'pointer',
-														'&:hover': {
-															textDecoration: 'underline'
-														}
-													}}
-												onClick={() => window.open(`${getExplorerUrl(11155111)}/address/${orgOwner}`, '_blank')}
-												>
-													{orgOwner}
-												</Typography>
-											</Box>
+								<Box>
+									<Typography variant="body2" color="text.secondary">
+										Domain
+									</Typography>
+									<Typography
+										variant="body1"
+										sx={{
+											fontFamily: 'ui-monospace, monospace',
+											color: 'primary.main',
+											cursor: 'pointer',
+											'&:hover': {
+												textDecoration: 'underline'
+											}
+										}}
+										onClick={() => window.open(`https://sepolia.app.ens.domains/${ensParentName}`, '_blank')}
+									>
+										{ensParentName}
+									</Typography>
+								</Box>
+								<Box>
+									<Typography variant="body2" color="text.secondary">
+										Owner
+									</Typography>
+									<Typography
+										variant="body1"
+										sx={{
+											fontFamily: 'ui-monospace, monospace',
+											color: 'primary.main',
+											cursor: 'pointer',
+											'&:hover': {
+												textDecoration: 'underline'
+											}
+										}}
+										onClick={() => window.open(`${getExplorerUrl(11155111)}/address/${orgOwner}`, '_blank')}
+									>
+										{orgOwner}
+									</Typography>
+								</Box>
 
 							</Paper>
 

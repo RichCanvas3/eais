@@ -1,5 +1,6 @@
 'use client';
 import * as React from 'react';
+import { buildDid8004 } from '@agentic-trust/core';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Box, Paper, Stack } from '@mui/material';
 
 type GraphNode = {
@@ -384,7 +385,9 @@ export function TrustGraphModal({ open, onClose, agentId, agentName }: TrustGrap
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/agents/${agentId}`);
+        // Build did:8004 identifier (no chainId context here, so use default did:8004:<agentId>)
+        const did8004 = `did:8004:${agentId}`;
+        const res = await fetch(`/api/agents/${encodeURIComponent(did8004)}`);
         if (!res.ok) {
           throw new Error('Failed to fetch agent data');
         }

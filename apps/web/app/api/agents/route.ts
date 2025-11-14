@@ -18,7 +18,12 @@ function mapAgentsResponse(data: DiscoverResponse) {
   const { agents = [], total, page, pageSize, totalPages } = data;
 
   return {
-    rows: agents,
+    rows: agents.map((agent: any) => ({
+      // Ensure backward-compatible shape for frontend AgentTable
+      ...agent,
+      // Provide agentAddress for legacy UI, preferring agentAccount then agentOwner
+      agentAddress: agent.agentAccount || '',
+    })),
     total: total ?? agents.length,
     page: page ?? 1,
     pageSize: pageSize ?? agents.length,
@@ -84,6 +89,18 @@ export async function GET(request: NextRequest) {
         : [chainIdNum];
     }
 
+    // If there are no concrete filters and no explicit params, hint advanced discovery
+    // to use the GraphQL indexer with chains: 'all' so it does backend DESC pagination.
+    const hasConcreteFilters =
+      (id && id.length > 0) ||
+      (name && name.length > 0) ||
+      (address && String(address).length > 0) ||
+      chainIdNum != null ||
+      (query && query.length > 0);
+    if (!hasConcreteFilters && !params) {
+      mergedParams.chains = 'all';
+    }
+
     console.log('>>>>>>>>>>>>>>>>>>>>> mergedParams', mergedParams);
     const response = await discoverAgents(
       {
@@ -97,23 +114,6 @@ export async function GET(request: NextRequest) {
       getAdminClient
     );
     console.log('>>>>>>>>>>>>>>>>>>>>>>> response', response);
-
-    // Ensure default unfiltered listing is ordered by newest agentId first
-    const hasFilters =
-      !!(id && id.length > 0) ||
-      !!(name && name.length > 0) ||
-      !!(address && String(address).length > 0) ||
-      chainIdNum != null ||
-      !!(query && query.length > 0) ||
-      (params && Object.keys(params).length > 0);
-
-    if (!hasFilters && Array.isArray(response.agents)) {
-      response.agents.sort((a, b) => {
-        const idA = Number(a.agentId) || 0;
-        const idB = Number(b.agentId) || 0;
-        return idB - idA;
-      });
-    }
 
     return NextResponse.json(mapAgentsResponse(response));
   } catch (error: unknown) {
